@@ -225,14 +225,15 @@ namespace Gems
 	// the six sizes as a gem model names them, in Kind order
 	inline constexpr std::array<std::string_view, 6> kSizeWords{ "petty", "lesser", "common", "greater", "grand", "black" };
 
-	// Each family's color per size (petty, lesser, common, greater, grand, black): the gem's own glow is the light's color. Every
-	// gem model animates its glow through purple, teal and pink; Praedy's filled gems peak pink. Rustic's gems each wear their own
+	// Each family's color per size (petty, lesser, common, greater, grand, black): the color the gem shows is the light's color.
+	// Praedy's gems show their own textures' sky blue (the black gem purple); their glow's animated pink lights only where the gems
+	// light themselves (ENB, Community Shaders' particle lights), never under our light. Rustic's gems each wear their own
 	// texture color (the 1K and 2K downloads within 15° of each other). The game's own gems keep the colors Illuminated gave them;
 	// in game the game's family and Rustic read theirs off the model (ColorFromModel)
 	inline constexpr std::array<Rgb, 6> kGameRgb{ { { 120, 150, 255 }, { 120, 150, 255 }, { 120, 150, 255 }, { 120, 150, 255 },
 		{ 120, 150, 255 }, { 170, 90, 255 } } };
-	inline constexpr std::array<Rgb, 6> kPraedysRgb{ { { 230, 165, 255 }, { 230, 165, 255 }, { 230, 165, 255 }, { 230, 165, 255 },
-		{ 230, 165, 255 }, { 200, 30, 255 } } };
+	inline constexpr std::array<Rgb, 6> kPraedysRgb{ { { 42, 196, 255 }, { 50, 190, 255 }, { 44, 189, 255 }, { 40, 183, 255 },
+		{ 42, 183, 255 }, { 154, 44, 255 } } };
 	inline constexpr std::array<Rgb, 6> kRusticRgb{ { { 128, 179, 255 }, { 76, 193, 255 }, { 127, 93, 255 }, { 26, 181, 255 },
 		{ 25, 239, 255 }, { 155, 119, 255 } } };
 
@@ -367,8 +368,8 @@ namespace Gems
 		double                weight{ 0.0 };
 	};
 
-	// the families whose color is read off the gem's own model in game; Praedy's pink was settled by eye, and the stars, the
-	// named gems and the Soul Cairn keep their own rows
+	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the stars,
+	// the named gems and the Soul Cairn keep their own rows
 	[[nodiscard]] inline bool ColorFromModel(Family a_family) noexcept
 	{
 		return a_family == Family::kGame || a_family == Family::kRustic;
