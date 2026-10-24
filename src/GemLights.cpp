@@ -601,8 +601,7 @@ namespace Plugin
 		{
 			const auto& look = a_kept.gem->look;
 			const float pulse = a_s.pulse ? Gems::PulseAt(gClock + a_kept.phase) : 1.0f;
-			const auto  shown = Gems::ShownFor(Gems::kStrength[static_cast<std::size_t>(look.kind)], InverseSquare(),
-				Gems::BrightnessFor(a_s.brightness, LightingFound() == Lighting::kVanilla), a_s.reach / 100.0f, pulse);
+			const auto  shown = Gems::ShownAt(look.kind, InverseSquare(), LightingFound() == Lighting::kVanilla, a_s, pulse);
 			auto&       data = a_kept.light->GetLightRuntimeData();
 			// a gem whose color is its model's texture follows the glow it shows now; the colors settled by eye stay as they are
 			const auto rgb = Gems::ColorFromModel(look.family) && !look.seen && a_kept.root ? Gems::LiveColor(look.rgb, GlowsOf(a_kept.root.get())) : look.rgb;

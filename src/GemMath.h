@@ -686,6 +686,14 @@ namespace Gems
 		bool pulse{ true };      // the soft pulse
 	};
 
+	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
+	// Community Shaders' lights, a_vanilla = the game's own lighting without an ENB
+	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
+	{
+		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+			static_cast<float>(a_s.reach) / 100.0f, a_pulse);
+	}
+
 	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a number that does not read
 	// keeps the value it had; every number clamped to its slider. Returns the key lines read.
 	inline std::size_t ReadSettings(std::istream& a_in, Settings& a_out)
