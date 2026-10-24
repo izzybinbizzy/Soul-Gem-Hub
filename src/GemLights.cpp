@@ -267,44 +267,19 @@ namespace Plugin
 			return true;
 		}
 
-		[[nodiscard]] std::string ColorText(const std::optional<Gems::Rgb>& a_rgb)
+		// a name as a JSON string's text: quotes and backslashes escaped, control characters left out
+		[[nodiscard]] std::string JsonText(std::string_view a_text)
 		{
-			return a_rgb ? std::format("{},{},{}", (*a_rgb)[0], (*a_rgb)[1], (*a_rgb)[2]) : std::string("-");
-		}
-
-		[[nodiscard]] std::string TextureColorText(const char* a_path)
-		{
-			Gems::ColorSum sum;
-			return a_path && *a_path && AddTexturePixels(a_path, sum) ? std::format("{} {}", a_path, ColorText(sum.Result())) : std::string("-");
-		}
-
-		// every source a shape could take its shown color from, one log line per shape (the color check reads them against the
-		// gems' pictures): its diffuse, its emissive color and multiple, each other texture slot, an effect shader's texture and color
-		void LogColorSources(std::string_view a_model, RE::BSGeometry* a_geometry)
-		{
-			auto* property = a_geometry ? a_geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr;
-			if (auto* lit = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
-				auto*       material = static_cast<RE::BSLightingShaderMaterialBase*>(lit->material);
-				std::string slots;
-				for (std::uint32_t i = 1; material && material->textureSet && i < 8; ++i) {
-					const char* path = material->textureSet->GetTexturePath(static_cast<RE::BSTextureSet::Textures::Texture>(i));
-					if (path && *path) {
-						slots += std::format(" | slot{} {}", i, TextureColorText(path));
-					}
-				}
-				const auto* e = lit->emissiveColor;
-				SKSE::log::info("gems: COLORS {} | shape {} | lit | diffuse {} | emissive {:.3f},{:.3f},{:.3f} x{:.2f} | ownemit {} glowmap {}{}", a_model,
-					a_geometry->name.c_str(), TextureColorText(DiffuseOf(a_geometry)), e ? e->red : -1.0f, e ? e->green : -1.0f, e ? e->blue : -1.0f,
-					lit->emissiveMult, lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit),
-					lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kGlowMap), slots);
-			} else if (auto* effect = netimmerse_cast<RE::BSEffectShaderProperty*>(property)) {
-				auto* material = static_cast<RE::BSEffectShaderMaterial*>(effect->material);
-				if (material) {
-					const auto& c = material->baseColor;
-					SKSE::log::info("gems: COLORS {} | shape {} | effect | texture {} | base {:.3f},{:.3f},{:.3f},{:.3f} x{:.2f}", a_model, a_geometry->name.c_str(),
-						TextureColorText(material->sourceTexturePath.c_str()), c.red, c.green, c.blue, c.alpha, material->baseColorScale);
+			std::string out;
+			for (const char c : a_text) {
+				if (c == '"' || c == '\\') {
+					out += '\\';
+					out += c;
+				} else if (static_cast<unsigned char>(c) >= 0x20) {
+					out += c;
 				}
 			}
+			return out;
 		}
 
 		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that
@@ -329,7 +304,6 @@ namespace Plugin
 			Gems::ColorSum                  glowing, all;
 			std::unordered_set<std::string> textures;
 			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&](RE::BSGeometry* a_geometry) {
-				LogColorSources(a_model, a_geometry);
 				const char* diffuse = DiffuseOf(a_geometry);
 				if (!diffuse || !*diffuse || Gems::IsNormalMap(diffuse) || !textures.insert(Lower(diffuse)).second) {
 					return RE::BSVisit::BSVisitControl::kContinue;
@@ -1051,7 +1025,7 @@ namespace Plugin
 				if (lit && lit->emissiveColor) {
 					const auto& e = *lit->emissiveColor;
 					shapes += std::format(R"({}{{"shape":"{}","emissive":[{:.4f},{:.4f},{:.4f}],"mult":{:.3f},"ownEmit":{},"glowMap":{}}})",
-						shapes.empty() ? "" : ",", a_geometry->name.c_str(), e.red, e.green, e.blue, lit->emissiveMult,
+						shapes.empty() ? "" : ",", JsonText(a_geometry->name.c_str()), e.red, e.green, e.blue, lit->emissiveMult,
 						lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit),
 						lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kGlowMap));
 				}
