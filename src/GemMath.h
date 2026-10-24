@@ -12,6 +12,7 @@
 #pragma once
 
 #include "GemPermissions.h"
+#include "GemSeenColors.h"
 
 #include <algorithm>
 #include <array>
@@ -186,18 +187,18 @@ namespace Gems
 	{
 		float fade{ 0.0f }, cutoff{ 0.0f };
 	};
-	// Illuminated's soul gem rows at half reach, twice as bright and twice as far (a test at four times and three times lit the
-	// whole room): on Community Shaders a petty gem reaches about 45 units, a grand one about 95, a star about 120
+	// the sizes still step up, but half as far apart as Illuminated's rows were (his look: small gems lit too little, big ones too
+	// much): on Community Shaders a petty gem reaches about 56 units, a grand one about 81
 	inline constexpr std::array<Strength, kKinds> kStrength{ {
-		{ 0.246f, 0.4752f },   // petty
-		{ 0.3672f, 0.4751f },  // lesser
-		{ 0.5126f, 0.475f },   // common
-		{ 0.7762f, 0.475f },   // greater
-		{ 1.0944f, 0.475f },   // grand
-		{ 1.0944f, 0.475f },   // black
-		{ 1.0944f, 0.475f },   // a named quest gem
-		{ 1.7458f, 0.475f },   // Azura's Star, the Black Star
-		{ 1.7458f, 0.475f },   // the Soul Cairn's gem bowl and chunks
+		{ 0.382f, 0.4752f },  // petty
+		{ 0.466f, 0.4751f },  // lesser
+		{ 0.551f, 0.475f },   // common
+		{ 0.678f, 0.475f },   // greater
+		{ 0.805f, 0.475f },   // grand
+		{ 0.805f, 0.475f },   // black
+		{ 0.805f, 0.475f },   // a named quest gem
+		{ 1.285f, 0.475f },   // Azura's Star, the Black Star
+		{ 1.285f, 0.475f },   // the Soul Cairn's gem bowl and chunks
 	} };
 
 	// whose gem it is: what decides its color
@@ -218,6 +219,7 @@ namespace Gems
 		Family family{ Family::kGame };
 		Kind   kind{ Kind::kGrand };
 		Rgb    rgb{ 255, 255, 255 };
+		bool   seen{ false };  // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -338,6 +340,14 @@ namespace Gems
 			weight += w;
 		}
 
+		void Add(const ColorSum& a_other) noexcept
+		{
+			for (std::size_t i = 0; i < 3; ++i) {
+				sum[i] += a_other.sum[i];
+			}
+			weight += a_other.weight;
+		}
+
 		[[nodiscard]] std::optional<Rgb> Result() const noexcept
 		{
 			if (weight <= 0.0) {
@@ -362,6 +372,84 @@ namespace Gems
 	[[nodiscard]] inline bool ColorFromModel(Family a_family) noexcept
 	{
 		return a_family == Family::kGame || a_family == Family::kRustic;
+	}
+
+	// A texture that is a normal map, not a color (its file name ends _n, _msn or _normal, any case, before the extension). The
+	// game's own soul gem models and every replacer at their paths carry an inner shape whose color slot names one
+	// (soulgemcommon0_n.dds); read as a color it is a strong lavender blue that outweighed the gem's own texture.
+	[[nodiscard]] inline bool IsNormalMap(std::string_view a_path)
+	{
+		std::string name(a_path.substr(a_path.find_last_of("/\\") == std::string_view::npos ? 0 : a_path.find_last_of("/\\") + 1));
+		for (auto& c : name) {
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		}
+		if (const auto dot = name.rfind('.'); dot != std::string::npos) {
+			name.erase(dot);
+		}
+		return name.ends_with("_n") || name.ends_with("_msn") || name.ends_with("_normal");
+	}
+
+	// one lit shape's glow as the game shows it this frame: its emissive color and multiple
+	struct Glow
+	{
+		float red{ 0.0f }, green{ 0.0f }, blue{ 0.0f }, mult{ 0.0f };
+	};
+
+	// The color a gem shows now: its texture color (ColorSum) tinted by the glow its shapes show this frame - every glowing shape's
+	// emissive color weighed by its multiple, multiplied channel by channel with the texture color, scaled to a top channel of 255.
+	// Against close pictures of eleven gem mods this is about half as far off as the texture alone or the glow alone, and every gem
+	// model animates its glow, so the light follows it. Nothing glowing, or no color left after the tint: the texture color.
+	// A pale gem (the game's blue-white crystals, Morrowind-Style's pastels) wears a pale blue light, not its glow's pink or
+	// violet. Pale = its weakest channel at least kPaleShare of its strongest
+	inline constexpr double kPaleShare = 0.5;
+	inline constexpr Rgb    kPaleBlue{ 150, 190, 255 };
+	inline constexpr double kPaleBlueShare = 0.6;
+
+	[[nodiscard]] inline bool IsPale(const Rgb& a_rgb) noexcept
+	{
+		const int top = (std::max)({ a_rgb[0], a_rgb[1], a_rgb[2] }), bottom = (std::min)({ a_rgb[0], a_rgb[1], a_rgb[2] });
+		return top > 0 && bottom >= kPaleShare * top;
+	}
+
+	[[nodiscard]] inline Rgb PaleBlue(const Rgb& a_texture) noexcept
+	{
+		std::array<double, 3> mix{};
+		for (std::size_t i = 0; i < 3; ++i) {
+			mix[i] = a_texture[i] * (1.0 - kPaleBlueShare) + kPaleBlue[i] * kPaleBlueShare;
+		}
+		const double top = (std::max)({ mix[0], mix[1], mix[2] });
+		Rgb          out{};
+		for (std::size_t i = 0; i < 3; ++i) {
+			out[i] = static_cast<std::uint8_t>((std::min)(255.0, std::round(mix[i] * 255.0 / top)));
+		}
+		return out;
+	}
+
+	[[nodiscard]] inline Rgb LiveColor(const Rgb& a_texture, std::span<const Glow> a_glows) noexcept
+	{
+		if (IsPale(a_texture)) {
+			return PaleBlue(a_texture);
+		}
+		std::array<double, 3> mix{};
+		for (const auto& g : a_glows) {
+			const double w = (std::max)(0.0f, g.mult);
+			mix[0] += (std::max)(0.0f, g.red) * w;
+			mix[1] += (std::max)(0.0f, g.green) * w;
+			mix[2] += (std::max)(0.0f, g.blue) * w;
+		}
+		std::array<double, 3> tinted{};
+		for (std::size_t i = 0; i < 3; ++i) {
+			tinted[i] = a_texture[i] * mix[i];
+		}
+		const double top = (std::max)({ tinted[0], tinted[1], tinted[2] });
+		if (!(top > 0.0)) {
+			return a_texture;
+		}
+		Rgb out{};
+		for (std::size_t i = 0; i < 3; ++i) {
+			out[i] = static_cast<std::uint8_t>((std::min)(255.0, std::round(tinted[i] * 255.0 / top)));
+		}
+		return out;
 	}
 
 	// the game's own look for a gem of this size (a_black: it holds black souls)
@@ -525,6 +613,16 @@ namespace Gems
 			return std::nullopt;
 		}
 		return kBlockedMods[it->mod];
+	}
+
+	// the color a known gem file's picture shows (a color texture's or a model's fingerprint), or none
+	[[nodiscard]] inline std::optional<Rgb> SeenColorOf(std::uint64_t a_fingerprint) noexcept
+	{
+		const auto it = std::ranges::lower_bound(kSeenColors, a_fingerprint, {}, &SeenColor::hash);
+		if (it == kSeenColors.end() || it->hash != a_fingerprint) {
+			return std::nullopt;
+		}
+		return Rgb{ it->r, it->g, it->b };
 	}
 
 	[[nodiscard]] inline std::string_view FamilyName(Family a_family) noexcept
