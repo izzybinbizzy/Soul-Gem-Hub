@@ -669,6 +669,15 @@ namespace Gems
 	// ------------------------------------------------------------------ settings (SoulGemHub\Settings.ini, written by the menu)
 	inline constexpr int kBrightnessMin = 25, kBrightnessMax = 200, kReachMin = 50, kReachMax = 150;
 
+	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
+	inline constexpr float kVanillaBoost = 1.25f;
+
+	// the Brightness slider's percent as the factor a light is drawn with
+	[[nodiscard]] inline float BrightnessFor(int a_percent, bool a_vanilla) noexcept
+	{
+		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? kVanillaBoost : 1.0f);
+	}
+
 	struct Settings
 	{
 		bool on{ true };         // every soul gem light
