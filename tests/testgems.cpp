@@ -193,9 +193,15 @@ namespace
 		CHECK(!SizeOfName("azurastar.nif"));
 		// Praedy's filled gems (and Subtle's copies) by their 01Full models
 		auto p = LookOfModel("clutter\\soulgem\\soulgemgrand01Full.nif", false);
-		CHECK(p && p->family == Family::kPraedys && p->kind == Kind::kGrand && p->rgb == kPraedysRgb[4]);
+		// their colors are their own textures' (sky blue, the black gem purple), checked as values, not against the table
+		const Rgb praedyGrand{ 42, 183, 255 };
+		const Rgb praedyBlack{ 154, 44, 255 };
+		const Rgb praedyPetty{ 42, 196, 255 };
+		CHECK(p && p->family == Family::kPraedys && p->kind == Kind::kGrand && p->rgb == praedyGrand);
 		auto pb = LookOfModel("clutter\\soulgem\\soulgemblack01Full.nif", true);
-		CHECK(pb && pb->family == Family::kPraedys && pb->kind == Kind::kBlack);
+		CHECK(pb && pb->family == Family::kPraedys && pb->kind == Kind::kBlack && pb->rgb == praedyBlack);
+		auto pp = LookOfModel("clutter\\soulgem\\soulgempetty01Full.nif", false);
+		CHECK(pp && pp->kind == Kind::kPetty && pp->rgb == praedyPetty);
 		CHECK(LookOfModel("clutter\\soulgem\\soulgemgrand01fullcommon.nif", false)->family == Family::kPraedys);
 		// Rustic's _full models only with its plugin loaded (another mod ships the same names)
 		auto r = LookOfModel("Clutter\\SoulGem\\SoulGemLesser_full.nif", true);
