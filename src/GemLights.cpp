@@ -267,21 +267,6 @@ namespace Plugin
 			return true;
 		}
 
-		// a name as a JSON string's text: quotes and backslashes escaped, control characters left out
-		[[nodiscard]] std::string JsonText(std::string_view a_text)
-		{
-			std::string out;
-			for (const char c : a_text) {
-				if (c == '"' || c == '\\') {
-					out += '\\';
-					out += c;
-				} else if (static_cast<unsigned char>(c) >= 0x20) {
-					out += c;
-				}
-			}
-			return out;
-		}
-
 		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that
 		// does not glow, or an effect-shader glow shell, is left out; every lit shape when none glows), a normal map in a color
 		// slot never counted. Read through the game's own model loader, once per model; none on VR (the loader's address is SE /
@@ -301,27 +286,37 @@ namespace Plugin
 			if (RE::BSModelDB::Demand(path.c_str(), root, RE::BSModelDB::DBTraits::ArgsType{}) != RE::BSResource::ErrorCode::kNone || !root) {
 				return std::nullopt;
 			}
-			Gems::ColorSum                  glowing, all;
-			std::unordered_set<std::string> textures;
+			// each texture decoded once; it counts as glowing when ANY shape wearing it glows, whichever shape came first
+			struct Texture
+			{
+				Gems::ColorSum sum;
+				bool           read{ false }, glows{ false };
+			};
+			std::unordered_map<std::string, Texture> textures;
 			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&](RE::BSGeometry* a_geometry) {
 				const char* diffuse = DiffuseOf(a_geometry);
-				if (!diffuse || !*diffuse || Gems::IsNormalMap(diffuse) || !textures.insert(Lower(diffuse)).second) {
+				if (!diffuse || !*diffuse || Gems::IsNormalMap(diffuse)) {
 					return RE::BSVisit::BSVisitControl::kContinue;
 				}
-				auto*          lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get());
-				const auto*    e = lit ? lit->emissiveColor : nullptr;
-				const bool     glows = e && lit->emissiveMult > 0.0f && (std::max)({ e->red, e->green, e->blue }) > 0.0f;
-				Gems::ColorSum one;
-				if (!AddTexturePixels(diffuse, one)) {
+				auto*       lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get());
+				const auto* e = lit ? lit->emissiveColor : nullptr;
+				const bool  glows = e && lit->emissiveMult > 0.0f && (std::max)({ e->red, e->green, e->blue }) > 0.0f;
+				auto [tex, fresh] = textures.try_emplace(Lower(diffuse));
+				if (fresh && !(tex->second.read = AddTexturePixels(diffuse, tex->second.sum))) {
 					SKSE::log::info("gems: {} - its texture {} could not be read", a_model, diffuse);
-					return RE::BSVisit::BSVisitControl::kContinue;
 				}
-				all.Add(one);
-				if (glows) {
-					glowing.Add(one);
-				}
+				tex->second.glows = tex->second.glows || glows;
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
+			Gems::ColorSum glowing, all;
+			for (const auto& [name, tex] : textures) {
+				if (tex.read) {
+					all.Add(tex.sum);
+					if (tex.glows) {
+						glowing.Add(tex.sum);
+					}
+				}
+			}
 			it->second = glowing.Result() ? glowing.Result() : all.Result();
 			return it->second;
 		}
@@ -1016,23 +1011,24 @@ namespace Plugin
 
 	std::string GlowNow(RE::FormID a_ref)
 	{
-		auto*       ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_ref);
-		auto*       root = ref ? ref->Get3D() : nullptr;
-		std::string shapes;
+		auto*          ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_ref);
+		auto*          root = ref ? ref->Get3D() : nullptr;
+		nlohmann::json shapes = nlohmann::json::array();
 		if (root) {
 			RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geometry) {
 				auto* lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get());
 				if (lit && lit->emissiveColor) {
 					const auto& e = *lit->emissiveColor;
-					shapes += std::format(R"({}{{"shape":"{}","emissive":[{:.4f},{:.4f},{:.4f}],"mult":{:.3f},"ownEmit":{},"glowMap":{}}})",
-						shapes.empty() ? "" : ",", JsonText(a_geometry->name.c_str()), e.red, e.green, e.blue, lit->emissiveMult,
-						lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit),
-						lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kGlowMap));
+					shapes.push_back({ { "shape", a_geometry->name.c_str() }, { "emissive", { e.red, e.green, e.blue } }, { "mult", lit->emissiveMult },
+						{ "ownEmit", lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit) },
+						{ "glowMap", lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kGlowMap) } });
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
 		}
-		return std::format(R"({{"ref":"0x{:08X}","loaded":{},"shapes":[{}]}})", a_ref, root != nullptr, shapes);
+		// a shape name that is not valid UTF-8 is written with replacement characters, never thrown on
+		const nlohmann::json out{ { "ref", std::format("0x{:08X}", a_ref) }, { "loaded", root != nullptr }, { "shapes", shapes } };
+		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 	}
 
 	std::string GemsReport()

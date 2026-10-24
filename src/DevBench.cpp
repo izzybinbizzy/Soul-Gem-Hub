@@ -13,6 +13,8 @@
 
 #include "DevBenchGlue.h"
 
+#include <charconv>
+
 namespace Plugin
 {
 	namespace
@@ -60,11 +62,15 @@ namespace Plugin
 		{
 			const auto action = DevBenchGlue::Text(a_args, "action");
 			if (action == "glow") {
-				const auto ref = DevBenchGlue::Text(a_args, "ref");
+				// the whole text must be one 32-bit hex number (an optional 0x first): no sign, nothing after it
+				const auto       ref = DevBenchGlue::Text(a_args, "ref");
+				std::string_view hex = ref;
+				if (hex.starts_with("0x") || hex.starts_with("0X")) {
+					hex.remove_prefix(2);
+				}
 				RE::FormID id = 0;
-				try {
-					id = static_cast<RE::FormID>(std::stoul(ref, nullptr, 16));
-				} catch (...) {
+				const auto [end, error] = std::from_chars(hex.data(), hex.data() + hex.size(), id, 16);
+				if (hex.empty() || error != std::errc{} || end != hex.data() + hex.size()) {
 					return DevBenchGlue::Refusal("glow needs ref, a placed gem's form id in hex");
 				}
 				auto now = DevBenchGlue::OnMainThread([id]() { return json::parse(GlowNow(id), nullptr, false); });
