@@ -75,11 +75,12 @@ namespace Plugin
 	[[nodiscard]] std::size_t GemLightsMade();
 	// what the load order dresses its filled gems in, for the menu: family name -> count of filled gem records
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
-	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();         // mod -> gem records unlit until its author allows it
-	[[nodiscard]] std::string                                      RusticFound();         // "Sorted", "Unsorted", "both" or ""
-	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();          // gem records left to another light mod, by Gems::Owner
-	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();  // placed gems near the player whose own model's light shines here (left to it)
-	[[nodiscard]] std::string                                      GemsReport();          // for DevBench (JSON)
+	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();              // mod -> gem records unlit until its author allows it
+	[[nodiscard]] std::string                                      RusticFound();              // "Sorted", "Unsorted", "both" or ""
+	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();               // gem records left to another light mod, by Gems::Owner
+	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();       // placed gems near the player whose own model's light shines here (left to it)
+	[[nodiscard]] std::string                                      GemsReport();               // for DevBench (JSON)
+	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);  // main thread: the glow each lit shape of a placed gem shows now (JSON)
 
 	// ------------------------------------------------------------------ Menu.cpp / DevBench.cpp
 	void RegisterMenu();

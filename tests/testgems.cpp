@@ -29,7 +29,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 141;
+	constexpr int kFloor = 151;
 
 	using namespace Gems;
 
@@ -51,12 +51,12 @@ namespace
 
 	void Light()
 	{
-		// a grand gem on Community Shaders reaches about 95 units, twice the half-reach row (47.5)
+		// a grand gem on Community Shaders reaches about 81 units, a petty one about 56 - closer together than before (his look)
 		const auto& grand = kStrength[static_cast<std::size_t>(Kind::kGrand)];
-		CHECK(Near(IslReach(grand.fade, grand.cutoff), 95.0f, 0.5f));
+		CHECK(Near(IslReach(grand.fade, grand.cutoff), 81.0f, 1.5f));
 		CHECK(Near(IslReach(0.5472f, 0.95f), 47.5f, 0.5f));  // the half-reach row
 		const auto& petty = kStrength[static_cast<std::size_t>(Kind::kPetty)];
-		CHECK(Near(IslReach(petty.fade, petty.cutoff), 45.0f, 0.5f));
+		CHECK(Near(IslReach(petty.fade, petty.cutoff), 56.0f, 1.5f));
 		CHECK(IslReach(0.5f, 0.0f) == 0.0f);
 		CHECK(IslReach(0.0f, 0.5f) == 0.0f);
 		CHECK(Near(CutoffFor(grand.fade, IslReach(grand.fade, grand.cutoff)), grand.cutoff, 0.001f));
@@ -86,7 +86,7 @@ namespace
 		const auto& grand = kStrength[static_cast<std::size_t>(Kind::kGrand)];
 		// Community Shaders, as built: the record's numbers
 		auto s = ShownFor(grand, true, 1.0f, 1.0f);
-		CHECK(Near(s.fade, grand.fade) && Near(s.cutoff, grand.cutoff) && Near(s.radius, 95.0f, 0.5f));
+		CHECK(Near(s.fade, grand.fade) && Near(s.cutoff, grand.cutoff) && Near(s.radius, IslReach(grand.fade, grand.cutoff), 0.5f));
 		// Brightness changes how bright, not how far
 		auto b = ShownFor(grand, true, 2.0f, 1.0f);
 		CHECK(Near(b.fade, grand.fade * 2.0f));
@@ -98,7 +98,7 @@ namespace
 		CHECK(r.radius > s.radius * 1.4f);
 		// on ENB / Vanilla the same light drawn plain: a longer radius, a little more fade, no cutoff
 		auto plain = ShownFor(grand, false, 1.0f, 1.0f);
-		CHECK(Near(plain.fade, grand.fade * 1.14f) && Near(plain.radius, 95.0f * 178.0f / 133.0f, 1.0f) && plain.cutoff == 0.0f);
+		CHECK(Near(plain.fade, grand.fade * 1.14f) && Near(plain.radius, s.radius * 178.0f / 133.0f, 1.0f) && plain.cutoff == 0.0f);
 		auto plainReach = ShownFor(grand, false, 1.0f, 0.5f);
 		CHECK(Near(plainReach.radius, plain.radius / 2.0f, 1.0f));
 		CHECK(ShownFor(grand, false, 0.0f, 1.0f).fade == 0.0f);
@@ -147,6 +147,41 @@ namespace
 		// the families read off the model, and the ones that keep their own rows
 		CHECK(ColorFromModel(Family::kGame) && ColorFromModel(Family::kRustic));
 		CHECK(!ColorFromModel(Family::kPraedys) && !ColorFromModel(Family::kStar) && !ColorFromModel(Family::kNamed) && !ColorFromModel(Family::kSoulCairn));
+		// a normal map in a color slot never counts as a color; real textures do
+		CHECK(IsNormalMap("textures\\clutter\\soulgem\\soulgemcommon0_n.dds") && IsNormalMap("Textures/X/Gem_MSN.DDS") && IsNormalMap("gem_normal.dds"));
+		CHECK(!IsNormalMap("textures\\clutter\\soulgem\\soulgemlesser0.dds") && !IsNormalMap("textures\\n.dds") && !IsNormalMap("gem_nice.dds"));
+		// two sums merged weigh as one sum of every pixel
+		ColorSum merged, redSum, blueSum;
+		redSum.Add(255, 0, 0);
+		blueSum.Add(0, 0, 255);
+		merged.Add(redSum);
+		merged.Add(blueSum);
+		CHECK(merged.Result() == (Rgb{ 255, 0, 255 }));
+		// the live color: the texture color tinted by the glow, channel by channel, back to a top of 255
+		const Rgb  cyan{ 0, 242, 255 };
+		const Glow pink[] = { { 1.0f, 0.37f, 0.96f, 1.0f } };
+		CHECK(LiveColor(cyan, pink) == (Rgb{ 0, 93, 255 }));  // a saturated texture takes its glow's tint: 0,242,255 x 255,94,245
+		// nothing glowing (or a glow of no color): the texture color as it is
+		CHECK(LiveColor(cyan, {}) == cyan);
+		const Glow dark[] = { { 0.0f, 0.0f, 0.0f, 3.0f } };
+		CHECK(LiveColor(cyan, dark) == cyan);
+		const Glow off[] = { { 1.0f, 0.0f, 0.0f, 0.0f } };  // a shape with no multiple adds nothing
+		CHECK(LiveColor(cyan, off) == cyan);
+		// a pale gem (the color run's Petty gem, 155,242,255) wears a pale blue whatever its glow does (his "more paler blue")
+		const Rgb paleCyan{ 155, 242, 255 };
+		CHECK(IsPale(paleCyan) && !IsPale(Rgb{ 255, 38, 25 }) && !IsPale(Rgb{ 0, 0, 0 }));
+		CHECK(LiveColor(paleCyan, pink) == (Rgb{ 152, 211, 255 }));
+		CHECK(LiveColor(Rgb{ 255, 200, 230 }, pink)[2] == 255);  // a pale pink pastel turns blue-white, blue on top
+		// shapes weigh by their multiple: a strong blue beside a faint red reads blue
+		const Glow two[] = { { 1.0f, 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f, 2.0f } };
+		const auto both = LiveColor(Rgb{ 255, 0, 255 }, two);  // a saturated texture (a white one is pale: pale blue)
+		CHECK(both[2] == 255 && both[0] < 20 && both[1] == 0);
+		// a texture with no blue cannot be turned blue by the glow: no color left, so the texture stays
+		const Glow blue[] = { { 0.0f, 0.0f, 1.0f, 1.0f } };
+		CHECK(LiveColor(Rgb{ 255, 128, 0 }, blue) == (Rgb{ 255, 128, 0 }));
+		// a negative number from a broken file counts as none
+		const Glow bad[] = { { -1.0f, 0.5f, 0.5f, -2.0f } };
+		CHECK(LiveColor(cyan, bad) == cyan);
 	}
 
 	void Looks()
@@ -276,6 +311,12 @@ namespace
 		CHECK(BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
 		CHECK(BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
 		CHECK(!BlockedModOf(Fingerprint(a)));
+		// the picture colors: sorted, every one found by its own fingerprint, a stranger file not
+		CHECK(std::ranges::is_sorted(kSeenColors, {}, &SeenColor::hash));
+		CHECK(SeenColorOf(kSeenColors.front().hash) == (Rgb{ kSeenColors.front().r, kSeenColors.front().g, kSeenColors.front().b }));
+		CHECK(SeenColorOf(kSeenColors.back().hash) == (Rgb{ kSeenColors.back().r, kSeenColors.back().g, kSeenColors.back().b }));
+		CHECK(!SeenColorOf(Fingerprint(a)));
+		CHECK(std::ranges::none_of(kSeenColors, [](const SeenColor& s) { return BlockedModOf(s.hash).has_value(); }));
 		FingerprintSum pieces;
 		pieces.Add(std::span(big).first(40000));
 		pieces.Add(std::span(big).subspan(40000));

@@ -25,7 +25,7 @@ namespace Plugin
 			R"json({"description":"Soul Gem Hub - the lighting found (automatic), the settings, the soul gems this plugin lights (by look: the game's own, Praedy's, Rustic, named, stars, Soul Cairn) and those it leaves to another light mod (Emissive Soul Gems on Light Placer, other Light Placer configs, RE::Light, and the gems near the player whose own model's light shines here - ENB particle lights, or a particle-light config on Community Shaders), and every gem light near the player now with its color, fade, radius and place. Read only.","inputSchema":{"type":"object","properties":{}},"readOnly":true})json";
 
 		constexpr const char* kTool =
-			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), pulse (0/1, the soft pulse). action=rescan looks for the gems around the player again at once. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan"]},"setting":{"type":"string","enum":["lights","brightness","reach","pulse"]},"value":{"type":"number"}},"required":["action"]}})json";
+			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), pulse (0/1, the soft pulse). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","pulse"]},"value":{"type":"number"}},"required":["action"]}})json";
 
 		json SettingsJson(const Gems::Settings& a_s)
 		{
@@ -59,6 +59,17 @@ namespace Plugin
 		json Act(const json& a_args)
 		{
 			const auto action = DevBenchGlue::Text(a_args, "action");
+			if (action == "glow") {
+				const auto ref = DevBenchGlue::Text(a_args, "ref");
+				RE::FormID id = 0;
+				try {
+					id = static_cast<RE::FormID>(std::stoul(ref, nullptr, 16));
+				} catch (...) {
+					return DevBenchGlue::Refusal("glow needs ref, a placed gem's form id in hex");
+				}
+				auto now = DevBenchGlue::OnMainThread([id]() { return json::parse(GlowNow(id), nullptr, false); });
+				return now ? *now : DevBenchGlue::NotRunYet();
+			}
 			if (action == "rescan") {
 				if (!Later("devbench rescan", []() { ApplyNow(); })) {
 					return DevBenchGlue::NotQueued();
