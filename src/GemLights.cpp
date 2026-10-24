@@ -267,9 +267,10 @@ namespace Plugin
 			return true;
 		}
 
-		// the color a gem model shows: the diffuse textures of its lit shapes (the gem itself; an effect-shader glow shell is
-		// left out). Read through the game's own model loader, once per model; none on VR (the loader's address is SE / AE only)
-		// or when nothing in it carries a color - the caller keeps the table's color then
+		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that
+		// does not glow, or an effect-shader glow shell, is left out; every lit shape when none glows), a normal map in a color
+		// slot never counted. Read through the game's own model loader, once per model; none on VR (the loader's address is SE /
+		// AE only) or when nothing in it carries a color - the caller keeps the table's color then
 		std::optional<Gems::Rgb> ModelColor(std::string_view a_model)
 		{
 			static std::unordered_map<std::string, std::optional<Gems::Rgb>> read;
@@ -285,16 +286,38 @@ namespace Plugin
 			if (RE::BSModelDB::Demand(path.c_str(), root, RE::BSModelDB::DBTraits::ArgsType{}) != RE::BSResource::ErrorCode::kNone || !root) {
 				return std::nullopt;
 			}
-			Gems::ColorSum                  sum;
-			std::unordered_set<std::string> textures;
+			// each texture decoded once; it counts as glowing when ANY shape wearing it glows, whichever shape came first
+			struct Texture
+			{
+				Gems::ColorSum sum;
+				bool           read{ false }, glows{ false };
+			};
+			std::unordered_map<std::string, Texture> textures;
 			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&](RE::BSGeometry* a_geometry) {
 				const char* diffuse = DiffuseOf(a_geometry);
-				if (diffuse && *diffuse && textures.insert(Lower(diffuse)).second && !AddTexturePixels(diffuse, sum)) {
+				if (!diffuse || !*diffuse || Gems::IsNormalMap(diffuse)) {
+					return RE::BSVisit::BSVisitControl::kContinue;
+				}
+				auto*       lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get());
+				const auto* e = lit ? lit->emissiveColor : nullptr;
+				const bool  glows = e && lit->emissiveMult > 0.0f && (std::max)({ e->red, e->green, e->blue }) > 0.0f;
+				auto [tex, fresh] = textures.try_emplace(Lower(diffuse));
+				if (fresh && !(tex->second.read = AddTexturePixels(diffuse, tex->second.sum))) {
 					SKSE::log::info("gems: {} - its texture {} could not be read", a_model, diffuse);
 				}
+				tex->second.glows = tex->second.glows || glows;
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			it->second = sum.Result();
+			Gems::ColorSum glowing, all;
+			for (const auto& [name, tex] : textures) {
+				if (tex.read) {
+					all.Add(tex.sum);
+					if (tex.glows) {
+						glowing.Add(tex.sum);
+					}
+				}
+			}
+			it->second = glowing.Result() ? glowing.Result() : all.Result();
 			return it->second;
 		}
 
@@ -328,6 +351,34 @@ namespace Plugin
 				}
 			}
 			return found;
+		}
+
+		// the color a gem's picture shows, when one of its color textures (the winning files) or its model is a file a close
+		// picture of that gem has read (GemSeenColors.h); once per model
+		std::optional<Gems::Rgb> SeenColor(std::string_view a_model)
+		{
+			static std::unordered_map<std::string, std::optional<Gems::Rgb>> read;
+			if (a_model.empty()) {
+				return std::nullopt;
+			}
+			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
+			if (!added) {
+				return it->second;
+			}
+			std::vector<std::uint8_t> nif;
+			if (!ReadGameFile(a_model, "meshes", [&](std::span<const std::uint8_t> a_piece) { nif.insert(nif.end(), a_piece.begin(), a_piece.end()); }) || nif.empty()) {
+				return it->second;
+			}
+			for (const auto& texture : Gems::TexturesNamed(nif)) {
+				Gems::FingerprintSum sum;
+				if (Gems::ColorTexture(texture) && ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
+					if ((it->second = Gems::SeenColorOf(sum.Result()))) {
+						return it->second;
+					}
+				}
+			}
+			it->second = Gems::SeenColorOf(Gems::Fingerprint(nif));
+			return it->second;
 		}
 
 		// one more of a_name in a name -> count list (kept in the order first seen)
@@ -529,6 +580,22 @@ namespace Plugin
 			gCount = 0;
 		}
 
+		// the glow each lit shape of a placed gem shows this frame (the game animates it); main thread
+		[[nodiscard]] std::span<const Gems::Glow> GlowsOf(RE::NiAVObject* a_root)
+		{
+			static std::vector<Gems::Glow> glows;
+			glows.clear();
+			RE::BSVisit::TraverseScenegraphGeometries(a_root, [](RE::BSGeometry* a_geometry) {
+				auto* lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry ? a_geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr);
+				if (lit && lit->emissiveColor) {
+					const auto& e = *lit->emissiveColor;
+					glows.push_back({ e.red, e.green, e.blue, lit->emissiveMult });
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+			return glows;
+		}
+
 		// this frame's numbers onto the light
 		void Follow(Kept& a_kept, const Gems::Settings& a_s)
 		{
@@ -537,7 +604,9 @@ namespace Plugin
 			const auto  shown = Gems::ShownFor(Gems::kStrength[static_cast<std::size_t>(look.kind)], InverseSquare(),
 				a_s.brightness / 100.0f, a_s.reach / 100.0f, pulse);
 			auto&       data = a_kept.light->GetLightRuntimeData();
-			data.diffuse = { look.rgb[0] / 255.0f, look.rgb[1] / 255.0f, look.rgb[2] / 255.0f };
+			// a gem whose color is its model's texture follows the glow it shows now; the colors settled by eye stay as they are
+			const auto rgb = Gems::ColorFromModel(look.family) && !look.seen && a_kept.root ? Gems::LiveColor(look.rgb, GlowsOf(a_kept.root.get())) : look.rgb;
+			data.diffuse = { rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f };
 			data.fade = shown.fade;
 			if (data.radius.x != shown.radius) {
 				data.radius = { shown.radius, shown.radius, Gems::kGemSize };
@@ -833,7 +902,7 @@ namespace Plugin
 		}
 		const auto* azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto* blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
-		std::size_t records = 0, lit = 0, fromModel = 0;
+		std::size_t records = 0, lit = 0, fromModel = 0, fromPicture = 0;
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {
 			if (!gem) {
 				continue;
@@ -851,7 +920,11 @@ namespace Plugin
 			}
 			// a gem left unlit for want of its author's permission never needs its color read
 			if (Gems::ColorFromModel(look->family) && !BlockedBy(model)) {
-				if (const auto own = ModelColor(model)) {
+				if (const auto seen = SeenColor(model)) {
+					look->rgb = *seen;
+					look->seen = true;
+					++fromPicture;
+				} else if (const auto own = ModelColor(model)) {
 					look->rgb = *own;
 					++fromModel;
 				}
@@ -882,7 +955,7 @@ namespace Plugin
 			gLeftTo[static_cast<std::size_t>(kEmissive)], gLeftTo[static_cast<std::size_t>(kLightPlacer)],
 			gLeftTo[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded", others.reLight ? "loaded" : "not loaded",
 			gParticleTextures.size());
-		SKSE::log::info("gems: {} soul gem record(s) wear the color read off their own model", fromModel);
+		SKSE::log::info("gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model", fromPicture, fromModel);
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
@@ -935,6 +1008,28 @@ namespace Plugin
 	std::array<std::size_t, 4>                       GemsLeftTo() { return gLeftTo; }
 	std::size_t                                      GemsLeftToOwnLight() { return gOwnLightNow.load(); }
 	std::string                                      RusticFound() { return gRustic; }
+
+	std::string GlowNow(RE::FormID a_ref)
+	{
+		auto*          ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_ref);
+		auto*          root = ref ? ref->Get3D() : nullptr;
+		nlohmann::json shapes = nlohmann::json::array();
+		if (root) {
+			RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geometry) {
+				auto* lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get());
+				if (lit && lit->emissiveColor) {
+					const auto& e = *lit->emissiveColor;
+					shapes.push_back({ { "shape", a_geometry->name.c_str() }, { "emissive", { e.red, e.green, e.blue } }, { "mult", lit->emissiveMult },
+						{ "ownEmit", lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit) },
+						{ "glowMap", lit->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kGlowMap) } });
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+		}
+		// a shape name that is not valid UTF-8 is written with replacement characters, never thrown on
+		const nlohmann::json out{ { "ref", std::format("0x{:08X}", a_ref) }, { "loaded", root != nullptr }, { "shapes", shapes } };
+		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+	}
 
 	std::string GemsReport()
 	{
