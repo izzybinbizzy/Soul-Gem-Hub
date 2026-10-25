@@ -228,10 +228,11 @@ namespace Gems
 	// Each family's color per size (petty, lesser, common, greater, grand, black): the color the gem shows is the light's color.
 	// Praedy's gems show their own textures' sky blue (the black gem purple); their glow's animated pink lights only where the gems
 	// light themselves (ENB, Community Shaders' particle lights), never under our light. Rustic's gems each wear their own
-	// texture color (the 1K and 2K downloads within 15° of each other). The game's own gems keep the colors Illuminated gave them;
-	// in game the game's family and Rustic read theirs off the model (ColorFromModel)
-	inline constexpr std::array<Rgb, 6> kGameRgb{ { { 120, 150, 255 }, { 120, 150, 255 }, { 120, 150, 255 }, { 120, 150, 255 },
-		{ 120, 150, 255 }, { 170, 90, 255 } } };
+	// texture color (the 1K and 2K downloads within 15° of each other). The game's own gems: their textures as the model read gives
+	// them (soulgemcommon pale -> pale blue, soulgemgrand teal, soulgemblack purple); in game the game's family, Rustic and the stars
+	// read theirs off the model (ColorFromModel) and these rows stand only when nothing reads
+	inline constexpr std::array<Rgb, 6> kGameRgb{ { { 152, 210, 255 }, { 152, 210, 255 }, { 152, 210, 255 }, { 83, 255, 234 },
+		{ 83, 255, 234 }, { 184, 132, 255 } } };
 	inline constexpr std::array<Rgb, 6> kPraedysRgb{ { { 42, 196, 255 }, { 50, 190, 255 }, { 44, 189, 255 }, { 40, 183, 255 },
 		{ 42, 183, 255 }, { 154, 44, 255 } } };
 	inline constexpr std::array<Rgb, 6> kRusticRgb{ { { 128, 179, 255 }, { 76, 193, 255 }, { 127, 93, 255 }, { 26, 181, 255 },
@@ -244,19 +245,23 @@ namespace Gems
 		Kind             kind;
 		Rgb              rgb;
 	};
-	// the gems and pieces known by their own model (their colors are Illuminated's rows for them)
+	// the gems and pieces known by their own model, each in its own textures' color: the named gems' models are Praedy's Soul Gems'
+	// files (soulgemdb = the full Soul Essence Gem), sky blue like its filled gems; the Soul Cairn's bowl and chunk wear the game's
+	// soulgemcommon texture (pale blue)
 	inline constexpr std::array<NamedModel, 7> kNamedModels{ {
-		{ "clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, Kind::kNamed, { 185, 255, 255 } },     // Arniel's warped gems
-		{ "clutter\\soulgem\\soulgemmalyn.nif", Family::kNamed, Kind::kNamed, { 255, 131, 250 } },      // Malyn's Black Soul Gem
-		{ "clutter\\soulgem\\soulgemwylandriah.nif", Family::kNamed, Kind::kNamed, { 170, 90, 255 } },  // Wylandriah's Soul Gem
-		{ "clutter\\soulgem\\soulgemdb.nif", Family::kNamed, Kind::kNamed, { 188, 255, 255 } },         // the Soul Essence Gem (full)
-		{ "dlc01\\clutter\\dlc01soulgembowlfull.nif", Family::kSoulCairn, Kind::kCairn, { 170, 90, 255 } },
-		{ "dlc01\\clutter\\dlc01soulgemchunk01.nif", Family::kSoulCairn, Kind::kCairn, { 170, 90, 255 } },
+		{ "clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, Kind::kNamed, { 133, 194, 255 } },      // Arniel's warped gems
+		{ "clutter\\soulgem\\soulgemmalyn.nif", Family::kNamed, Kind::kNamed, { 131, 200, 255 } },       // Malyn's Black Soul Gem
+		{ "clutter\\soulgem\\soulgemwylandriah.nif", Family::kNamed, Kind::kNamed, { 134, 201, 255 } },  // Wylandriah's Soul Gem
+		{ "clutter\\soulgem\\soulgemdb.nif", Family::kNamed, Kind::kNamed, { 136, 136, 255 } },
+		{ "dlc01\\clutter\\dlc01soulgembowlfull.nif", Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } },
+		{ "dlc01\\clutter\\dlc01soulgemchunk01.nif", Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } },
 		{ "dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", Family::kSoulCairn, Kind::kNamed, { 170, 90, 255 } },  // the portal's bowl
 	} };
 
-	inline constexpr Rgb kAzurasStarRgb{ 111, 217, 255 };  // the teal of its texture's colored panels, as it shows in game
-	inline constexpr Rgb kBlackStarRgb{ 150, 70, 255 };    // its art is a dark purple
+	// the stars' own textures (Azura's Star wears azurastarlite.dds, the Black Star the dark azurastar.dds); a replacer's star is
+	// read off its own model in game
+	inline constexpr Rgb kAzurasStarRgb{ 157, 255, 252 };
+	inline constexpr Rgb kBlackStarRgb{ 192, 203, 255 };
 
 	[[nodiscard]] inline const Rgb& SizeRgb(const std::array<Rgb, 6>& a_family, Kind a_kind) noexcept
 	{
@@ -368,11 +373,11 @@ namespace Gems
 		double                weight{ 0.0 };
 	};
 
-	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the stars,
-	// the named gems and the Soul Cairn keep their own rows
+	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the named
+	// gems and the Soul Cairn keep their own rows
 	[[nodiscard]] inline bool ColorFromModel(Family a_family) noexcept
 	{
-		return a_family == Family::kGame || a_family == Family::kRustic;
+		return a_family == Family::kGame || a_family == Family::kRustic || a_family == Family::kStar;
 	}
 
 	// A texture that is a normal map, not a color (its file name ends _n, _msn or _normal, any case, before the extension). The
@@ -390,18 +395,10 @@ namespace Gems
 		return name.ends_with("_n") || name.ends_with("_msn") || name.ends_with("_normal");
 	}
 
-	// one lit shape's glow as the game shows it this frame: its emissive color and multiple
-	struct Glow
-	{
-		float red{ 0.0f }, green{ 0.0f }, blue{ 0.0f }, mult{ 0.0f };
-	};
-
-	// The color a gem shows now: its texture color (ColorSum) tinted by the glow its shapes show this frame - every glowing shape's
-	// emissive color weighed by its multiple, multiplied channel by channel with the texture color, scaled to a top channel of 255.
-	// Against close pictures of eleven gem mods this is about half as far off as the texture alone or the glow alone, and every gem
-	// model animates its glow, so the light follows it. Nothing glowing, or no color left after the tint: the texture color.
-	// A pale gem (the game's blue-white crystals, Morrowind-Style's pastels) wears a pale blue light, not its glow's pink or
-	// violet. Pale = its weakest channel at least kPaleShare of its strongest
+	// The light a gem read off its model wears: its textures' color (ColorSum), steady - never its glow's animated tint, which swung
+	// the game's crystals violet (his "more paler blue") and Praedy's pink. A pale gem (the game's blue-white crystals, Morrowind-
+	// Style's pastels) wears a pale blue; a black-soul gem and a star keep their own color whatever it is (a purple gem keeps a
+	// purple light). Pale = its weakest channel at least kPaleShare of its strongest
 	inline constexpr double kPaleShare = 0.5;
 	inline constexpr Rgb    kPaleBlue{ 150, 190, 255 };
 	inline constexpr double kPaleBlueShare = 0.6;
@@ -426,31 +423,9 @@ namespace Gems
 		return out;
 	}
 
-	[[nodiscard]] inline Rgb LiveColor(const Rgb& a_texture, std::span<const Glow> a_glows) noexcept
+	[[nodiscard]] inline Rgb ShownColor(const Rgb& a_texture, Kind a_kind) noexcept
 	{
-		if (IsPale(a_texture)) {
-			return PaleBlue(a_texture);
-		}
-		std::array<double, 3> mix{};
-		for (const auto& g : a_glows) {
-			const double w = (std::max)(0.0f, g.mult);
-			mix[0] += (std::max)(0.0f, g.red) * w;
-			mix[1] += (std::max)(0.0f, g.green) * w;
-			mix[2] += (std::max)(0.0f, g.blue) * w;
-		}
-		std::array<double, 3> tinted{};
-		for (std::size_t i = 0; i < 3; ++i) {
-			tinted[i] = a_texture[i] * mix[i];
-		}
-		const double top = (std::max)({ tinted[0], tinted[1], tinted[2] });
-		if (!(top > 0.0)) {
-			return a_texture;
-		}
-		Rgb out{};
-		for (std::size_t i = 0; i < 3; ++i) {
-			out[i] = static_cast<std::uint8_t>((std::min)(255.0, std::round(tinted[i] * 255.0 / top)));
-		}
-		return out;
+		return a_kind != Kind::kBlack && a_kind != Kind::kStar && IsPale(a_texture) ? PaleBlue(a_texture) : a_texture;
 	}
 
 	// the game's own look for a gem of this size (a_black: it holds black souls)
