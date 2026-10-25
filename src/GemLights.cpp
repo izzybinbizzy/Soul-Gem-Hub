@@ -956,7 +956,11 @@ namespace Plugin
 				continue;
 			}
 			if (const auto it = gGems.find(bound); it != gGems.end()) {
-				it->second.needsSoul = false;
+				if (it->second.needsSoul) {
+					it->second.needsSoul = false;
+					++lit;
+					CountName(gFamilies, Gems::FamilyName(it->second.look.family));
+				}
 				continue;
 			}
 			if (form->Is(RE::FormType::SoulGem)) {
