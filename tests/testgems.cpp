@@ -328,9 +328,8 @@ namespace
 		// never reaching them
 		const auto namedKey = [](const NamedSeenColor& n) { return std::pair{ n.form, n.hash }; };
 		CHECK(!kNamedSeenColors.empty() && std::ranges::is_sorted(kNamedSeenColors, {}, namedKey));
-		CHECK(std::ranges::all_of(kNamedSeenColors, [](const NamedSeenColor& n) {
-			return n.form == 0x028AD9 || n.form == 0x06A106 || n.form == 0x043E26 || n.form == 0x00EA6A;
-		}));
+		CHECK(std::ranges::all_of(kNamedSeenColors,
+			[](const NamedSeenColor& n) { return std::ranges::find(kNamedGems, n.form, &NamedGem::id) != kNamedGems.end(); }));
 		const auto& n0 = kNamedSeenColors.front();
 		CHECK(NamedSeenColorOf(n0.form, n0.hash) == (Rgb{ n0.r, n0.g, n0.b }));
 		CHECK(NamedSeenColorOf(kNamedSeenColors.back().form, kNamedSeenColors.back().hash).has_value());

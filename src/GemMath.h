@@ -601,6 +601,16 @@ namespace Gems
 		return Rgb{ it->r, it->g, it->b };
 	}
 
+	struct NamedGem
+	{
+		std::uint32_t    id;  // the record's id in its own plugin
+		std::string_view plugin;
+		Kind             kind;  // the plain gem it wears when no mod gives it a model of its own
+	};
+	// Malyn's Black Soul Gem, Arniel's gem, Wylandriah's gem (an empty record), the Soul Essence Gem
+	inline constexpr std::array<NamedGem, 4> kNamedGems{ { { 0x028AD9, "Skyrim.esm", Kind::kBlack },
+		{ 0x06A106, "Skyrim.esm", Kind::kGrand }, { 0x043E26, "Skyrim.esm", Kind::kGrand }, { 0x00EA6A, "Dawnguard.esm", Kind::kBlack } } };
+
 	// the color a named quest gem's picture shows on a look that gives it no model of its own (a_form: its record's id in its
 	// own plugin), by the same fingerprints as SeenColorOf, or none
 	[[nodiscard]] inline std::optional<Rgb> NamedSeenColorOf(std::uint32_t a_form, std::uint64_t a_fingerprint) noexcept

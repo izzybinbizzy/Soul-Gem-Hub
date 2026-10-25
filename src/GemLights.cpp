@@ -45,16 +45,7 @@ namespace Plugin
 		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches under 100 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
-		struct NamedForm
-		{
-			RE::FormID       id;
-			std::string_view plugin;
-			Gems::Kind       kind;  // the plain gem it wears when no mod gives it a model of its own
-		};
-		// Malyn's Black Soul Gem, Arniel's gem, Wylandriah's gem (an empty record), the Soul Essence Gem
-		constexpr std::array<NamedForm, 4> kNamedForms{ { { 0x028AD9, "Skyrim.esm", Gems::Kind::kBlack },
-			{ 0x06A106, "Skyrim.esm", Gems::Kind::kGrand }, { 0x043E26, "Skyrim.esm", Gems::Kind::kGrand },
-			{ 0x00EA6A, "Dawnguard.esm", Gems::Kind::kBlack } } };
+		constexpr const auto& kNamedForms = Gems::kNamedGems;
 
 		// ---------------------------------------------------------- the light, as Illuminated's LightKit.h makes it
 		// Community Shaders' inverse-square lighting reads a flag and the cutoff from the first eight bytes of a light's runtime data
