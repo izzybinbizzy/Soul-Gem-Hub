@@ -45,6 +45,17 @@ namespace Plugin
 		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches under 100 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
+		struct NamedForm
+		{
+			RE::FormID       id;
+			std::string_view plugin;
+			Gems::Kind       kind;  // the plain gem it wears when no mod gives it a model of its own
+		};
+		// Malyn's Black Soul Gem, Arniel's gem, Wylandriah's gem (an empty record), the Soul Essence Gem
+		constexpr std::array<NamedForm, 4> kNamedForms{ { { 0x028AD9, "Skyrim.esm", Gems::Kind::kBlack },
+			{ 0x06A106, "Skyrim.esm", Gems::Kind::kGrand }, { 0x043E26, "Skyrim.esm", Gems::Kind::kGrand },
+			{ 0x00EA6A, "Dawnguard.esm", Gems::Kind::kBlack } } };
+
 		// ---------------------------------------------------------- the light, as Illuminated's LightKit.h makes it
 		// Community Shaders' inverse-square lighting reads a flag and the cutoff from the first eight bytes of a light's runtime data
 		// (as the game lays it out, its ambient color's red and green); read and written as bytes, always after SetLightAttenuation
@@ -452,9 +463,13 @@ namespace Plugin
 				auto*       bound = form ? form->template As<RE::TESBoundObject>() : nullptr;
 				const auto* model = bound ? form->template As<RE::TESModel>() : nullptr;
 				const char* path = model ? model->GetModel() : nullptr;
-				const auto  look = path && *path ? Gems::LookOfModel(path, false) : std::nullopt;
+				auto        look = path && *path ? Gems::LookOfModel(path, false) : std::nullopt;
 				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && look->family == Gems::Family::kNamed))) {
 					continue;
+				}
+				if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
+					look->rgb = *seen;
+					look->seen = true;
 				}
 				added += Take(bound, path, Gem{ *look, false }, a_others) ? 1 : 0;
 			}
@@ -885,6 +900,23 @@ namespace Plugin
 		const auto* azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto* blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
 		std::size_t records = 0, lit = 0, fromModel = 0, fromPicture = 0;
+		// a gem wears the color its lit-room picture shows (stars keep their own), else a look its model colors the one read off the
+		// model; a blocked mod's is never read
+		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star) {
+			if (BlockedBy(a_model)) {
+				return;
+			}
+			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model)) {
+				a_look.rgb = *seen;
+				a_look.seen = true;
+				++fromPicture;
+			} else if (!Gems::ColorFromModel(a_look.family)) {
+				return;
+			} else if (const auto own = ModelColor(a_model)) {
+				a_look.rgb = Gems::ShownColor(*own, a_look.kind);
+				++fromModel;
+			}
+		};
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {
 			if (!gem) {
 				continue;
@@ -901,16 +933,10 @@ namespace Plugin
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
 			// a gem left unlit for want of its author's permission never needs its color read
-			// a star's picture rows were keyed by the other star's model, so a star always reads its own textures
-			if (Gems::ColorFromModel(look->family) && !BlockedBy(model)) {
-				if (const auto seen = star ? std::nullopt : SeenColor(model)) {
-					look->rgb = *seen;
-					look->seen = true;
-					++fromPicture;
-				} else if (const auto own = ModelColor(model)) {
-					look->rgb = Gems::ShownColor(*own, look->kind);
-					++fromModel;
-				}
+			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
+			// keeps its purple
+			if (gem != blackStar) {
+				readColor(*look, model, star);
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always }, others) && always) {
@@ -918,8 +944,28 @@ namespace Plugin
 				CountName(gFamilies, Gems::FamilyName(look->family));
 			}
 		}
-		const std::size_t pieces = AddByModel<RE::TESObjectMISC>(true, others) + AddByModel<RE::IngredientItem>(true, others) +
-		                           AddByModel<RE::TESObjectACTI>(false, others) + AddByModel<RE::TESFurniture>(false, others);
+		std::size_t pieces = AddByModel<RE::TESObjectMISC>(true, others) + AddByModel<RE::IngredientItem>(true, others) +
+		                     AddByModel<RE::TESObjectACTI>(false, others) + AddByModel<RE::TESFurniture>(false, others);
+		// the named quest gems are lit always, on any look: with no model of their own they wear a plain gem's, in its color
+		for (const auto& n : kNamedForms) {
+			auto*       form = dh->LookupForm(n.id, n.plugin);
+			auto*       bound = form ? form->As<RE::TESBoundObject>() : nullptr;
+			const auto* has = bound ? form->As<RE::TESModel>() : nullptr;
+			const char* path = has ? has->GetModel() : nullptr;
+			if (!path || !*path) {
+				continue;
+			}
+			if (const auto it = gGems.find(bound); it != gGems.end()) {
+				it->second.needsSoul = false;
+				continue;
+			}
+			if (form->Is(RE::FormType::SoulGem)) {
+				continue;  // left to another light mod by the soul gem pass
+			}
+			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
+			readColor(look, path, false);
+			pieces += Take(bound, path, Gem{ look, false }, others) ? 1 : 0;
+		}
 		gDisplays.clear();
 		if (others.reLight) {
 			const auto displays = AddDisplays<RE::TESObjectSTAT>() + AddDisplays<RE::BGSMovableStatic>();
