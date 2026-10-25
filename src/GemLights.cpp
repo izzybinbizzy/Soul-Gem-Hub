@@ -580,22 +580,6 @@ namespace Plugin
 			gCount = 0;
 		}
 
-		// the glow each lit shape of a placed gem shows this frame (the game animates it); main thread
-		[[nodiscard]] std::span<const Gems::Glow> GlowsOf(RE::NiAVObject* a_root)
-		{
-			static std::vector<Gems::Glow> glows;
-			glows.clear();
-			RE::BSVisit::TraverseScenegraphGeometries(a_root, [](RE::BSGeometry* a_geometry) {
-				auto* lit = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geometry ? a_geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr);
-				if (lit && lit->emissiveColor) {
-					const auto& e = *lit->emissiveColor;
-					glows.push_back({ e.red, e.green, e.blue, lit->emissiveMult });
-				}
-				return RE::BSVisit::BSVisitControl::kContinue;
-			});
-			return glows;
-		}
-
 		// this frame's numbers onto the light
 		void Follow(Kept& a_kept, const Gems::Settings& a_s)
 		{
@@ -603,8 +587,7 @@ namespace Plugin
 			const float pulse = a_s.pulse ? Gems::PulseAt(gClock + a_kept.phase) : 1.0f;
 			const auto  shown = Gems::ShownAt(look.kind, InverseSquare(), LightingFound() == Lighting::kVanilla, a_s, pulse);
 			auto&       data = a_kept.light->GetLightRuntimeData();
-			// a gem whose color is its model's texture follows the glow it shows now; the colors settled by eye stay as they are
-			const auto rgb = Gems::ColorFromModel(look.family) && !look.seen && a_kept.root ? Gems::LiveColor(look.rgb, GlowsOf(a_kept.root.get())) : look.rgb;
+			const auto& rgb = look.rgb;
 			data.diffuse = { rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f };
 			data.fade = shown.fade;
 			if (data.radius.x != shown.radius) {
@@ -918,13 +901,14 @@ namespace Plugin
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
 			// a gem left unlit for want of its author's permission never needs its color read
+			// a star's picture rows were keyed by the other star's model, so a star always reads its own textures
 			if (Gems::ColorFromModel(look->family) && !BlockedBy(model)) {
-				if (const auto seen = SeenColor(model)) {
+				if (const auto seen = star ? std::nullopt : SeenColor(model)) {
 					look->rgb = *seen;
 					look->seen = true;
 					++fromPicture;
 				} else if (const auto own = ModelColor(model)) {
-					look->rgb = *own;
+					look->rgb = Gems::ShownColor(*own, look->kind);
 					++fromModel;
 				}
 			}

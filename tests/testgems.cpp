@@ -155,8 +155,8 @@ namespace
 		const auto a = alpha.Result();
 		CHECK(a && (*a)[2] == 255 && (*a)[1] > 120 && (*a)[1] < 135);
 		// the families read off the model, and the ones that keep their own rows
-		CHECK(ColorFromModel(Family::kGame) && ColorFromModel(Family::kRustic));
-		CHECK(!ColorFromModel(Family::kPraedys) && !ColorFromModel(Family::kStar) && !ColorFromModel(Family::kNamed) && !ColorFromModel(Family::kSoulCairn));
+		CHECK(ColorFromModel(Family::kGame) && ColorFromModel(Family::kRustic) && ColorFromModel(Family::kStar));
+		CHECK(!ColorFromModel(Family::kPraedys) && !ColorFromModel(Family::kNamed) && !ColorFromModel(Family::kSoulCairn));
 		// a normal map in a color slot never counts as a color; real textures do
 		CHECK(IsNormalMap("textures\\clutter\\soulgem\\soulgemcommon0_n.dds") && IsNormalMap("Textures/X/Gem_MSN.DDS") && IsNormalMap("gem_normal.dds"));
 		CHECK(!IsNormalMap("textures\\clutter\\soulgem\\soulgemlesser0.dds") && !IsNormalMap("textures\\n.dds") && !IsNormalMap("gem_nice.dds"));
@@ -167,31 +167,19 @@ namespace
 		merged.Add(redSum);
 		merged.Add(blueSum);
 		CHECK(merged.Result() == (Rgb{ 255, 0, 255 }));
-		// the live color: the texture color tinted by the glow, channel by channel, back to a top of 255
-		const Rgb  cyan{ 0, 242, 255 };
-		const Glow pink[] = { { 1.0f, 0.37f, 0.96f, 1.0f } };
-		CHECK(LiveColor(cyan, pink) == (Rgb{ 0, 93, 255 }));  // a saturated texture takes its glow's tint: 0,242,255 x 255,94,245
-		// nothing glowing (or a glow of no color): the texture color as it is
-		CHECK(LiveColor(cyan, {}) == cyan);
-		const Glow dark[] = { { 0.0f, 0.0f, 0.0f, 3.0f } };
-		CHECK(LiveColor(cyan, dark) == cyan);
-		const Glow off[] = { { 1.0f, 0.0f, 0.0f, 0.0f } };  // a shape with no multiple adds nothing
-		CHECK(LiveColor(cyan, off) == cyan);
-		// a pale gem (the color run's Petty gem, 155,242,255) wears a pale blue whatever its glow does (his "more paler blue")
-		const Rgb paleCyan{ 155, 242, 255 };
+		// the light a model read gives: a colored texture as it is (the game's grand crystal's teal, never its glow's violet)
+		const Rgb teal{ 83, 255, 234 };
+		CHECK(ShownColor(teal, Kind::kGrand) == teal);
+		// a pale gem (the game's soulgemcommon texture, 154,241,255) wears a pale blue (his "more paler blue")
+		const Rgb paleCyan{ 154, 241, 255 };
 		CHECK(IsPale(paleCyan) && !IsPale(Rgb{ 255, 38, 25 }) && !IsPale(Rgb{ 0, 0, 0 }));
-		CHECK(LiveColor(paleCyan, pink) == (Rgb{ 152, 211, 255 }));
-		CHECK(LiveColor(Rgb{ 255, 200, 230 }, pink)[2] == 255);  // a pale pink pastel turns blue-white, blue on top
-		// shapes weigh by their multiple: a strong blue beside a faint red reads blue
-		const Glow two[] = { { 1.0f, 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f, 2.0f } };
-		const auto both = LiveColor(Rgb{ 255, 0, 255 }, two);  // a saturated texture (a white one is pale: pale blue)
-		CHECK(both[2] == 255 && both[0] < 20 && both[1] == 0);
-		// a texture with no blue cannot be turned blue by the glow: no color left, so the texture stays
-		const Glow blue[] = { { 0.0f, 0.0f, 1.0f, 1.0f } };
-		CHECK(LiveColor(Rgb{ 255, 128, 0 }, blue) == (Rgb{ 255, 128, 0 }));
-		// a negative number from a broken file counts as none
-		const Glow bad[] = { { -1.0f, 0.5f, 0.5f, -2.0f } };
-		CHECK(LiveColor(cyan, bad) == cyan);
+		CHECK(ShownColor(paleCyan, Kind::kCommon) == (Rgb{ 152, 210, 255 }));
+		CHECK(ShownColor(Rgb{ 255, 200, 230 }, Kind::kPetty)[2] == 255);  // a pale pink pastel turns blue-white, blue on top
+		// a black-soul gem keeps its own purple, a star its own texture's color, pale or not
+		const Rgb lilac{ 184, 132, 255 };
+		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
+		const Rgb starPale{ 157, 255, 252 };
+		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
 	}
 
 	void Looks()
@@ -224,7 +212,7 @@ namespace
 		auto a = LookOfModel("clutter\\soulgem\\SoulgemArniel.nif", false);
 		CHECK(a && a->family == Family::kNamed && a->kind == Kind::kNamed);
 		auto m = LookOfModel("clutter\\soulgem\\SoulgemMalyn.nif", false);
-		CHECK((m && m->rgb == Rgb{ 255, 131, 250 }));
+		CHECK((m && m->rgb == Rgb{ 131, 200, 255 }));  // Praedy's Malyn.dds sky blue, no longer Illuminated's old pink row
 		auto bowl = LookOfModel("DLC01\\Clutter\\DLC01SoulGemBowlFull.nif", false);
 		CHECK(bowl && bowl->family == Family::kSoulCairn && bowl->kind == Kind::kCairn);
 		CHECK(LookOfModel("dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", false)->kind == Kind::kNamed);
