@@ -601,6 +601,18 @@ namespace Gems
 		return Rgb{ it->r, it->g, it->b };
 	}
 
+	// the color a named quest gem's picture shows on a look that gives it no model of its own (a_form: its record's id in its
+	// own plugin), by the same fingerprints as SeenColorOf, or none
+	[[nodiscard]] inline std::optional<Rgb> NamedSeenColorOf(std::uint32_t a_form, std::uint64_t a_fingerprint) noexcept
+	{
+		const auto key = [](const NamedSeenColor& a_row) { return std::pair{ a_row.form, a_row.hash }; };
+		const auto it = std::ranges::lower_bound(kNamedSeenColors, std::pair{ a_form, a_fingerprint }, {}, key);
+		if (it == kNamedSeenColors.end() || key(*it) != std::pair{ a_form, a_fingerprint }) {
+			return std::nullopt;
+		}
+		return Rgb{ it->r, it->g, it->b };
+	}
+
 	[[nodiscard]] inline std::string_view FamilyName(Family a_family) noexcept
 	{
 		switch (a_family) {

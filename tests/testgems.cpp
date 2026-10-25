@@ -324,6 +324,18 @@ namespace
 		CHECK(SeenColorOf(kSeenColors.back().hash) == (Rgb{ kSeenColors.back().r, kSeenColors.back().g, kSeenColors.back().b }));
 		CHECK(!SeenColorOf(Fingerprint(a)));
 		CHECK(std::ranges::none_of(kSeenColors, [](const SeenColor& s) { return BlockedModOf(s.hash).has_value(); }));
+		// the named quest gems' own rows: sorted by record then file, found by both, only the four named records, a plain lookup
+		// never reaching them
+		const auto namedKey = [](const NamedSeenColor& n) { return std::pair{ n.form, n.hash }; };
+		CHECK(!kNamedSeenColors.empty() && std::ranges::is_sorted(kNamedSeenColors, {}, namedKey));
+		CHECK(std::ranges::all_of(kNamedSeenColors, [](const NamedSeenColor& n) {
+			return n.form == 0x028AD9 || n.form == 0x06A106 || n.form == 0x043E26 || n.form == 0x00EA6A;
+		}));
+		const auto& n0 = kNamedSeenColors.front();
+		CHECK(NamedSeenColorOf(n0.form, n0.hash) == (Rgb{ n0.r, n0.g, n0.b }));
+		CHECK(NamedSeenColorOf(kNamedSeenColors.back().form, kNamedSeenColors.back().hash).has_value());
+		CHECK(!NamedSeenColorOf(0x012345, n0.hash) && !NamedSeenColorOf(n0.form, Fingerprint(a)));
+		CHECK(std::ranges::none_of(kNamedSeenColors, [](const NamedSeenColor& n) { return BlockedModOf(n.hash).has_value(); }));
 		FingerprintSum pieces;
 		pieces.Add(std::span(big).first(40000));
 		pieces.Add(std::span(big).subspan(40000));

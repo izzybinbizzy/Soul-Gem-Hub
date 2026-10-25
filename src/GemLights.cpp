@@ -364,14 +364,11 @@ namespace Plugin
 			return found;
 		}
 
-		// the color a gem's picture shows, when one of its color textures (the winning files) or its model is a file a close
-		// picture of that gem has read (GemSeenColors.h); once per model
-		std::optional<Gems::Rgb> SeenColor(std::string_view a_model)
+		// the fingerprints of a model's color textures (the winning files, in the order it names them), then of the model itself;
+		// once per model
+		const std::vector<std::uint64_t>& PrintsOf(std::string_view a_model)
 		{
-			static std::unordered_map<std::string, std::optional<Gems::Rgb>> read;
-			if (a_model.empty()) {
-				return std::nullopt;
-			}
+			static std::unordered_map<std::string, std::vector<std::uint64_t>> read;
 			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
 			if (!added) {
 				return it->second;
@@ -383,13 +380,34 @@ namespace Plugin
 			for (const auto& texture : Gems::TexturesNamed(nif)) {
 				Gems::FingerprintSum sum;
 				if (Gems::ColorTexture(texture) && ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
-					if ((it->second = Gems::SeenColorOf(sum.Result()))) {
-						return it->second;
+					it->second.push_back(sum.Result());
+				}
+			}
+			it->second.push_back(Gems::Fingerprint(nif));
+			return it->second;
+		}
+
+		// the color a gem's picture shows, when one of its model's files is one a close picture of that gem has read
+		// (GemSeenColors.h) - for a named quest gem (a_named: its record's id) its own row first, then the plain gem's
+		std::optional<Gems::Rgb> SeenColor(std::string_view a_model, std::uint32_t a_named = 0)
+		{
+			if (a_model.empty()) {
+				return std::nullopt;
+			}
+			const auto& prints = PrintsOf(a_model);
+			if (a_named) {
+				for (const auto print : prints) {
+					if (const auto seen = Gems::NamedSeenColorOf(a_named, print)) {
+						return seen;
 					}
 				}
 			}
-			it->second = Gems::SeenColorOf(Gems::Fingerprint(nif));
-			return it->second;
+			for (const auto print : prints) {
+				if (const auto seen = Gems::SeenColorOf(print)) {
+					return seen;
+				}
+			}
+			return std::nullopt;
 		}
 
 		// one more of a_name in a name -> count list (kept in the order first seen)
@@ -897,16 +915,26 @@ namespace Plugin
 		if (others.lightPlacer) {
 			others.claims = ReadLightPlacerClaims();
 		}
-		const auto* azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
-		const auto* blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
-		std::size_t records = 0, lit = 0, fromModel = 0, fromPicture = 0;
-		// a gem wears the color its lit-room picture shows (stars keep their own), else a look its model colors the one read off the
-		// model; a blocked mod's is never read
-		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star) {
+		const auto*                                               azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
+		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
+		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0;
+		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
+		for (const auto& n : kNamedForms) {
+			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
+				named.emplace_back(form, n.id);
+			}
+		}
+		const auto namedId = [&](const RE::TESForm* a_form) {
+			const auto it = std::ranges::find(named, a_form, &std::pair<const RE::TESForm*, std::uint32_t>::first);
+			return it == named.end() ? 0u : it->second;
+		};
+		// a gem wears the color its lit-room picture shows (stars keep their own; a named quest gem its own row), else a look its
+		// model colors the one read off the model; a blocked mod's is never read
+		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star, std::uint32_t a_named) {
 			if (BlockedBy(a_model)) {
 				return;
 			}
-			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model)) {
+			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
 				a_look.seen = true;
 				++fromPicture;
@@ -936,7 +964,7 @@ namespace Plugin
 			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
 			// keeps its purple
 			if (gem != blackStar) {
-				readColor(*look, model, star);
+				readColor(*look, model, star, namedId(gem));
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always }, others) && always) {
@@ -946,7 +974,8 @@ namespace Plugin
 		}
 		std::size_t pieces = AddByModel<RE::TESObjectMISC>(true, others) + AddByModel<RE::IngredientItem>(true, others) +
 		                     AddByModel<RE::TESObjectACTI>(false, others) + AddByModel<RE::TESFurniture>(false, others);
-		// the named quest gems are lit always, on any look: with no model of their own they wear a plain gem's, in its color
+		// the named quest gems are lit always, on any look: with no model of their own they wear a plain gem's, in their own
+		// lit-room color where a picture read it (kNamedSeenColors), else the plain gem's
 		for (const auto& n : kNamedForms) {
 			auto*       form = dh->LookupForm(n.id, n.plugin);
 			auto*       bound = form ? form->As<RE::TESBoundObject>() : nullptr;
@@ -967,7 +996,7 @@ namespace Plugin
 				continue;  // left to another light mod by the soul gem pass
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
-			readColor(look, path, false);
+			readColor(look, path, false, n.id);
 			pieces += Take(bound, path, Gem{ look, false }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
