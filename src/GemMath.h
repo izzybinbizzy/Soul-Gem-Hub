@@ -258,10 +258,10 @@ namespace Gems
 		{ "dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", Family::kSoulCairn, Kind::kNamed, { 170, 90, 255 } },  // the portal's bowl
 	} };
 
-	// the stars' own textures (Azura's Star wears azurastarlite.dds, the Black Star the dark azurastar.dds); a replacer's star is
-	// read off its own model in game
+	// Azura's Star wears its own texture's teal (azurastarlite.dds; a replacer's star is read off its own model in game); the
+	// Black Star is purple by his eye - its dark azurastar.dds reads a near-white blue
 	inline constexpr Rgb kAzurasStarRgb{ 157, 255, 252 };
-	inline constexpr Rgb kBlackStarRgb{ 192, 203, 255 };
+	inline constexpr Rgb kBlackStarRgb{ 170, 90, 255 };
 
 	[[nodiscard]] inline const Rgb& SizeRgb(const std::array<Rgb, 6>& a_family, Kind a_kind) noexcept
 	{

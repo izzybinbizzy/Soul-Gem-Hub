@@ -180,6 +180,9 @@ namespace
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
 		const Rgb starPale{ 157, 255, 252 };
 		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
+		// the Black Star is purple (blue on top, red over green), Azura's Star teal (green and blue over red)
+		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > kBlackStarRgb[1]);
+		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0]);
 	}
 
 	void Looks()
