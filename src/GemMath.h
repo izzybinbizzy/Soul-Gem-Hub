@@ -669,6 +669,15 @@ namespace Gems
 	// ------------------------------------------------------------------ settings (SoulGemHub\Settings.ini, written by the menu)
 	inline constexpr int kBrightnessMin = 25, kBrightnessMax = 200, kReachMin = 50, kReachMax = 150;
 
+	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
+	inline constexpr float kVanillaBoost = 1.25f;
+
+	// the Brightness slider's percent as the factor a light is drawn with
+	[[nodiscard]] inline float BrightnessFor(int a_percent, bool a_vanilla) noexcept
+	{
+		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? kVanillaBoost : 1.0f);
+	}
+
 	struct Settings
 	{
 		bool on{ true };         // every soul gem light
@@ -676,6 +685,14 @@ namespace Gems
 		int  reach{ 100 };       // percent
 		bool pulse{ true };      // the soft pulse
 	};
+
+	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
+	// Community Shaders' lights, a_vanilla = the game's own lighting without an ENB
+	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
+	{
+		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+			static_cast<float>(a_s.reach) / 100.0f, a_pulse);
+	}
 
 	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a number that does not read
 	// keeps the value it had; every number clamped to its slider. Returns the key lines read.

@@ -84,6 +84,16 @@ namespace
 	void Strengths()
 	{
 		const auto& grand = kStrength[static_cast<std::size_t>(Kind::kGrand)];
+		// the slider's percent as a factor: Vanilla a quarter brighter at every setting, the other lightings as set
+		CHECK(Near(BrightnessFor(100, false), 1.0f) && Near(BrightnessFor(100, true), 1.25f) && Near(BrightnessFor(200, true), 2.5f));
+		CHECK(Near(BrightnessFor(25, false), 0.25f));
+		// the light's numbers as the light code asks for them: Vanilla a quarter brighter than ENB at the same settings, the reach the same
+		Settings   set;
+		const auto vanilla = ShownAt(Kind::kGrand, false, true, set), enb = ShownAt(Kind::kGrand, false, false, set);
+		CHECK(Near(vanilla.fade, enb.fade * 1.25f) && Near(vanilla.radius, enb.radius, 0.5f));
+		CHECK(Near(ShownAt(Kind::kGrand, true, false, set).fade, grand.fade));  // Community Shaders as built
+		set.brightness = 200;
+		CHECK(Near(ShownAt(Kind::kGrand, false, true, set).fade, enb.fade * 2.5f));
 		// Community Shaders, as built: the record's numbers
 		auto s = ShownFor(grand, true, 1.0f, 1.0f);
 		CHECK(Near(s.fade, grand.fade) && Near(s.cutoff, grand.cutoff) && Near(s.radius, IslReach(grand.fade, grand.cutoff), 0.5f));
