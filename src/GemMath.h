@@ -100,7 +100,8 @@ namespace Gems
 	// ------------------------------------------------------------------ light (Illuminated's LightMath.h, the same numbers)
 	inline constexpr float kK = 3918.88f;  // the cutoff constant every config of ours is written with (0.8 * 69.99²)
 	inline constexpr float kGemSize = 1.0f;
-	inline constexpr float kLowestCutoff = 0.01f, kHighestCutoff = 1.0f;
+	// never 1: Community Shaders reads a cutoff of exactly 1 as "use the default" (0.05) and draws the light ~8x farther
+	inline constexpr float kLowestCutoff = 0.01f, kHighestCutoff = 0.99f;
 
 	// cutoff = K * fade / (reach² + size²)
 	[[nodiscard]] inline float CutoffFor(float a_fade, float a_reach, float a_size = kGemSize) noexcept
@@ -655,8 +656,10 @@ namespace Gems
 	{
 		const float b = (std::max)(a_brightness, 0.0f), r = (std::max)(a_reach, 0.05f), p = (std::max)(a_pulse, 0.0f);
 		if (a_inverseSquare) {
-			const float cutoff = std::clamp(a_s.cutoff * b / (r * r), kLowestCutoff, kHighestCutoff);
-			const float fade = a_s.fade * b;
+			const float wanted = a_s.cutoff * b / (r * r);
+			const float cutoff = std::clamp(wanted, kLowestCutoff, kHighestCutoff);
+			// past the highest cutoff a shorter reach is kept by a dimmer fade (reach² goes with fade / cutoff)
+			const float fade = a_s.fade * b * (wanted > kHighestCutoff ? kHighestCutoff / wanted : 1.0f);
 			return { fade * p, (std::max)(IslReach(fade, cutoff), 1.0f), cutoff };
 		}
 		const auto plain = PlainAt(a_s.fade * b * p, 0.0f, IslReach(a_s.fade, a_s.cutoff) * r);
@@ -681,7 +684,11 @@ namespace Gems
 		int  brightness{ 100 };  // percent
 		int  reach{ 100 };       // percent
 		bool pulse{ true };      // the soft pulse
+		bool shadows{ false };   // the nearest gems' lights cast shadows (kShadowGems)
 	};
+
+	// with Shadow-casting lights on, this many of the nearest lit gems cast shadows: each one is a whole shadow map a frame
+	inline constexpr std::size_t kShadowGems = 4;
 
 	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
 	// Community Shaders' lights, a_vanilla = the game's own lighting without an ENB
@@ -722,6 +729,8 @@ namespace Gems
 				a_out.reach = std::clamp(v, kReachMin, kReachMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
+			} else if (SameText(key, "Shadows")) {
+				a_out.shadows = v != 0;
 			} else {
 				--lines;  // a key this version does not know
 			}
@@ -733,6 +742,6 @@ namespace Gems
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
-			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\n";
+			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nShadows=" << (a_s.shadows ? 1 : 0) << "\n";
 	}
 }

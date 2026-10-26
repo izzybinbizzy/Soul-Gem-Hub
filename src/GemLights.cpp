@@ -84,20 +84,20 @@ namespace Plugin
 			return netimmerse_cast<RE::NiPointLight*>(master->Clone());
 		}
 
-		// a light already attached and updated once, registered as ReLight registers its own: dynamic, no shadow, kept inside its
-		// cell (portal strict), lighting land and water too
-		[[nodiscard]] RE::BSLight* AddToScene(RE::ShadowSceneNode* a_scene, RE::NiPointLight* a_light)
+		// a light already attached and updated once, registered as ReLight registers its own: dynamic, kept inside its cell (portal
+		// strict), lighting land and water too; a_shadow: an omni shadow caster, as Illuminated's LightKit.h AddToScene makes one
+		[[nodiscard]] RE::BSLight* AddToScene(RE::ShadowSceneNode* a_scene, RE::NiPointLight* a_light, bool a_shadow)
 		{
 			RE::ShadowSceneNode::LIGHT_CREATE_PARAMS params{};
 			params.dynamic = true;
-			params.shadowLight = false;
+			params.shadowLight = a_shadow;
 			params.portalStrict = true;
 			params.affectLand = true;
 			params.affectWater = true;
 			params.neverFades = true;
-			params.fov = 90.0f;
+			params.fov = a_shadow ? RE::NI_TWO_PI : 90.0f;
 			params.falloff = 1.0f;
-			params.nearDistance = 5.0f;
+			params.nearDistance = a_shadow ? 10.0f : 5.0f;  // past the gem's own crystal, so it never shadows its own light
 			params.depthBias = 1.0f;
 			params.sceneGraphIndex = 0;
 			params.restrictedNode = nullptr;
@@ -440,7 +440,8 @@ namespace Plugin
 			Claims claims;
 		};
 
-		// a gem this plugin lights is kept; one another light mod lights is counted and left to it (Gems::OwnerOf)
+		// a gem this plugin lights is kept. One a Light Placer file lights is counted and lit by us all the same, so our sliders rule
+		// it (the other light is put out at the scan); one this mod's own RE::Light files light is left to RE::Light (Gems::OwnerOf)
 		bool Take(const RE::TESBoundObject* a_form, std::string_view a_model, const Gem& a_gem, const Others& a_others)
 		{
 			if (const auto mod = BlockedBy(a_model)) {
@@ -451,6 +452,8 @@ namespace Plugin
 			const auto owner = Gems::OwnerOf(a_model, a_gem.look.family, a_others.lightPlacer, claimed, a_others.reLight);
 			if (owner != Gems::Owner::kThisMod) {
 				++gLeftTo[static_cast<std::size_t>(owner)];
+			}
+			if (owner == Gems::Owner::kReLight) {
 				return false;
 			}
 			gGems.insert_or_assign(a_form, a_gem);
@@ -563,14 +566,14 @@ namespace Plugin
 			RE::NiPointer<RE::NiPointLight> light;
 			RE::NiPointer<RE::BSLight>      bs;
 			const Gem*                      gem{ nullptr };
-			float                           phase{ 0.0f };  // where its pulse starts, so gems side by side do not breathe as one
+			float                           phase{ 0.0f };         // where its pulse starts, so gems side by side do not breathe as one
+			float                           wroteRadius{ -1.0f };  // Community Shaders rewrites the light's radius every frame
 			bool                            seen{ false };
+			bool                            shadow{ false };
+			// the other lights on this gem, put out while ours is on it and given back when ours goes (his "Ours on every gem")
+			std::vector<RE::NiPointer<RE::NiAVObject>> putOut;
 		};
 		std::unordered_map<RE::FormID, Kept> gKept;  // by the placed gem's form id
-		// a gem's model carries a light that shines here - looked at once per gem RECORD (its model is the record's): never by a placed
-		// gem's form id, which the game hands to the next gem placed after one is deleted (a gem would take the verdict of the one
-		// placed before it under the same id)
-		std::unordered_map<const RE::TESBoundObject*, bool> gOwnLight;
 		// a gem whose light could not be made or registered is tried again only after kRetryAfter, never four times a second -
 		// by the placed gem AND its model, so a new gem that gets the same form id or a model at the same address (both are
 		// reused) is never held back by another gem's failure
@@ -586,6 +589,9 @@ namespace Plugin
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
 		{
+			for (const auto& other : a_kept.putOut) {
+				other->SetAppCulled(false);
+			}
 			if (a_scene && a_kept.bs) {
 				a_scene->RemoveLight(a_kept.bs);
 			}
@@ -614,7 +620,8 @@ namespace Plugin
 			const auto& rgb = look.rgb;
 			data.diffuse = { rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f };
 			data.fade = shown.fade;
-			if (data.radius.x != shown.radius) {
+			if (a_kept.wroteRadius != shown.radius) {
+				a_kept.wroteRadius = shown.radius;
 				data.radius = { shown.radius, shown.radius, Gems::kGemSize };
 				a_kept.light->SetLightAttenuation(shown.radius);
 			}
@@ -638,10 +645,11 @@ namespace Plugin
 			Follow(a_kept, a_s);
 			RE::NiUpdateData update{};
 			light->Update(update);
-			auto* bs = AddToScene(a_scene, light);
+			auto* bs = AddToScene(a_scene, light, a_kept.shadow);
 			if (!bs) {
 				a_root->DetachChild(light);
-				a_kept = {};
+				a_kept.light.reset();
+				a_kept.root.reset();
 				return false;
 			}
 			a_kept.bs.reset(bs);
@@ -669,40 +677,31 @@ namespace Plugin
 			return name;
 		}
 
-		// does this placed gem's model already hold a light that is not ours (one Light Placer or RE::Light hung on it, or one inside
-		// the mesh): looked at every scan, so a light another mod adds later still wins - ours is let go the same quarter second
-		[[nodiscard]] bool HoldsOtherLight(RE::NiAVObject* a_root)
+		// every other light on this placed gem: one another mod hung under it (Light Placer's, RE::Light's) and a shape whose texture
+		// makes a light in this game - on ENB an ENB light texture (fxglowENB, glowsoft01_enbl ...; a shape only NAMED
+		// "EnbParticleLight..." over a plain texture lights nothing there), on Community Shaders a texture a particle-light config
+		// names. Looked at every scan, so a light another mod adds later is found the same quarter second
+		[[nodiscard]] std::vector<RE::NiPointer<RE::NiAVObject>> OtherLights(RE::NiAVObject* a_root, Lighting a_lighting, bool a_ownLights)
 		{
-			bool found = false;
+			std::vector<RE::NiPointer<RE::NiAVObject>> out;
 			RE::BSVisit::TraverseScenegraphObjects(a_root, [&](RE::NiAVObject* a_object) {
-				if (netimmerse_cast<RE::NiLight*>(a_object) && a_object->name != kName) {
-					found = true;
-					return RE::BSVisit::BSVisitControl::kStop;
+				if (netimmerse_cast<RE::NiLight*>(a_object)) {
+					if (a_object->name != kName) {
+						out.emplace_back(a_object);
+					}
+					return RE::BSVisit::BSVisitControl::kContinue;
 				}
-				return RE::BSVisit::BSVisitControl::kContinue;
-			});
-			return found;
-		}
-
-		// does this placed gem's model carry a light of its own that shines in this game: on ENB a shape drawing an ENB light texture
-		// (fxglowENB, glowsoft01_enbl ...) - a shape only NAMED "EnbParticleLight..." over a plain texture lights nothing there; on
-		// Community Shaders a shape whose texture a particle-light config names. The game's own lighting draws neither
-		[[nodiscard]] bool CarriesOwnLight(const RE::TESBoundObject* a_base, RE::NiAVObject* a_root, Lighting a_lighting)
-		{
-			const auto [it, added] = gOwnLight.try_emplace(a_base, false);
-			if (added) {
-				RE::BSVisit::TraverseScenegraphObjects(a_root, [&](RE::NiAVObject* a_object) {
+				if (a_ownLights) {
 					const auto texture = EffectTexture(a_object);
 					const bool particle = !texture.empty() && gParticleTextures.contains(texture);
 					const bool enb = a_lighting == Lighting::kEnb && (particle || std::ranges::find(kEnbLightTextures, texture) != kEnbLightTextures.end());
 					if (enb || (a_lighting == Lighting::kShaders && particle)) {
-						it->second = true;
-						return RE::BSVisit::BSVisitControl::kStop;
+						out.emplace_back(a_object);
 					}
-					return RE::BSVisit::BSVisitControl::kContinue;
-				});
-			}
-			return it->second;
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+			return out;
 		}
 
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
@@ -726,14 +725,25 @@ namespace Plugin
 			});
 		}
 
-		void Keep(RE::FormID a_id, RE::NiNode* a_root, const Gem& a_gem, RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s)
+		void Keep(RE::FormID a_id, RE::NiNode* a_root, const Gem& a_gem, RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s,
+			std::vector<RE::NiPointer<RE::NiAVObject>>&& a_others, bool a_shadow)
 		{
 			auto& kept = gKept[a_id];
-			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root)) {
-				Drop(kept, a_scene);  // the gem's model was rebuilt: a new light
+			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root || kept.shadow != a_shadow)) {
+				Drop(kept, a_scene);  // the gem's model was rebuilt, or the light changes kind (no light becomes a shadow caster): a new one
 			}
 			kept.gem = &a_gem;
+			for (const auto& other : a_others) {
+				other->SetAppCulled(true);
+			}
+			for (const auto& old : kept.putOut) {
+				if (std::ranges::find(a_others, old) == a_others.end()) {
+					old->SetAppCulled(false);  // gone from the gem, or another mod's light that left it
+				}
+			}
+			kept.putOut = std::move(a_others);
 			if (!kept.light) {
+				kept.shadow = a_shadow;
 				const auto now = std::chrono::steady_clock::now();
 				if (const auto retry = gRetryAt.find(a_id); retry != gRetryAt.end() && retry->second.root == a_root && now < retry->second.at) {
 					return;  // not seen: let go below
@@ -768,7 +778,7 @@ namespace Plugin
 			const auto lighting = LightingFound();
 			// an ENB's own particle lights shine only while an ENB runs - settings files left behind light nothing
 			const bool  ownLights = (lighting == Lighting::kEnb && EnbRunningFound()) || (lighting == Lighting::kShaders && !gParticleTextures.empty());
-			std::size_t leftToOwn = 0, onShow = 0;
+			std::size_t onShow = 0;
 			struct Candidate
 			{
 				RE::FormID  id;
@@ -797,10 +807,6 @@ namespace Plugin
 				if (!root) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
-				if ((ownLights && CarriesOwnLight(base, root, lighting)) || HoldsOtherLight(root)) {
-					++leftToOwn;  // another light shines on it here: left to that light, never a second one
-					return RE::BSContainer::ForEachResult::kContinue;
-				}
 				// a gem that holds our light already counts as a fifth nearer, so two gems at the kMaxLights edge do not swap lights
 				// four times a second as she walks
 				const auto held = gKept.find(id);
@@ -808,17 +814,22 @@ namespace Plugin
 				candidates.push_back({ id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
-			gOwnLightNow = leftToOwn;
 			gOnShowNow = onShow;
 			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem in reach;
-			// a farther gem is let go below and takes a light again when it is among the nearest
+			// a farther gem is let go below and takes a light again when it is among the nearest. The nearest kShadowGems of them cast
+			// shadows when that switch is on
+			std::ranges::sort(candidates, {}, &Candidate::distance);
 			if (candidates.size() > kMaxLights) {
-				std::ranges::nth_element(candidates, candidates.begin() + kMaxLights, {}, &Candidate::distance);
 				candidates.resize(kMaxLights);
 			}
-			for (const auto& c : candidates) {
-				Keep(c.id, c.root, *c.gem, a_scene, a_s);
+			std::size_t putOut = 0;
+			for (std::size_t i = 0; i < candidates.size(); ++i) {
+				const auto& c = candidates[i];
+				auto        others = OtherLights(c.root, lighting, ownLights);
+				putOut += others.empty() ? 0 : 1;
+				Keep(c.id, c.root, *c.gem, a_scene, a_s, std::move(others), a_s.shadows && i < Gems::kShadowGems);
 			}
+			gOwnLightNow = putOut;
 			std::erase_if(gKept, [&](auto& a_entry) {
 				if (!a_entry.second.seen) {
 					Drop(a_entry.second, a_scene);
@@ -853,6 +864,9 @@ namespace Plugin
 				if (!kept.light || !kept.root || !kept.root->parent) {  // picked up or unloaded since the last look
 					Drop(kept, scene);
 					return true;
+				}
+				for (const auto& other : kept.putOut) {
+					other->SetAppCulled(true);  // a Light Placer light's own conditions may show it again
 				}
 				Follow(kept, s);
 				return false;
@@ -1030,7 +1044,6 @@ namespace Plugin
 	void DropGemLights()
 	{
 		DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
-		gOwnLight.clear();  // looked at again in the next game
 		gRetryAt.clear();
 		gDarkened.clear();
 		gSinceScan = kScanEvery;  // look around at once in the next game

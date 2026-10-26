@@ -119,6 +119,24 @@ namespace
 		auto hot = ShownFor(grand, true, 2.0f, 1.0f, 1.1f), hotFlat = ShownFor(grand, true, 2.0f, 1.0f);
 		CHECK(hot.radius == hotFlat.radius && hot.cutoff == hotFlat.cutoff);
 		CHECK(ShownFor(grand, false, 1.0f, 1.0f, 1.1f).radius == plain.radius);
+		// his report: at Brightness 200 % the Reach slider jumped - the cutoff never reaches 1 (Community Shaders' "default"), and
+		// on every lighting, kind and Brightness a higher Reach never draws a shorter light
+		CHECK(kHighestCutoff < 1.0f && ShownFor(grand, true, 2.0f, 0.75f).cutoff < 1.0f);
+		CHECK(ShownFor(grand, true, 2.0f, 0.75f).radius < ShownFor(grand, true, 2.0f, 1.0f).radius);
+		bool steady = true;
+		for (const auto& strength : kStrength) {
+			for (int brightness = kBrightnessMin; brightness <= kBrightnessMax; brightness += 25) {
+				for (const bool isl : { true, false }) {
+					float last = 0.0f;
+					for (int reach = kReachMin; reach <= kReachMax; reach += 5) {
+						const auto shown = ShownFor(strength, isl, brightness / 100.0f, reach / 100.0f);
+						steady = steady && shown.radius >= last - 0.01f && shown.cutoff < 1.0f;
+						last = shown.radius;
+					}
+				}
+			}
+		}
+		CHECK(steady);
 		// every strength steps up from petty to grand, the stars and the Soul Cairn the strongest
 		for (std::size_t i = 1; i <= static_cast<std::size_t>(Kind::kGrand); ++i) {
 			CHECK(kStrength[i].fade > kStrength[i - 1].fade);
@@ -286,19 +304,19 @@ namespace
 		Settings s;
 		// ENBParticleGems: the first test build's switch (gone 2026-10-19 - a gem's own light is always left to it); an old file's
 		// line is a key this version does not know
-		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
-		CHECK(ReadSettings(in, s) == 4);
-		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
+		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
+		CHECK(ReadSettings(in, s) == 5);
+		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse && s.shadows);
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 4);
-		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
+		CHECK(ReadSettings(again, back) == 5);
+		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse && back.shadows);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && !d.shadows);
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}
