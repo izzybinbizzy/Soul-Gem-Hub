@@ -348,9 +348,10 @@ namespace
 		CHECK(!kNamedSeenColors.empty() && std::ranges::is_sorted(kNamedSeenColors, {}, namedKey));
 		CHECK(std::ranges::all_of(kNamedSeenColors,
 			[](const NamedSeenColor& n) { return std::ranges::find(kNamedGems, n.form, &NamedGem::id) != kNamedGems.end(); }));
+		// every row gives back its own color, so two records that share one file each keep theirs
+		CHECK(std::ranges::all_of(kNamedSeenColors,
+			[](const NamedSeenColor& n) { return NamedSeenColorOf(n.form, n.hash) == (Rgb{ n.r, n.g, n.b }); }));
 		const auto& n0 = kNamedSeenColors.front();
-		CHECK(NamedSeenColorOf(n0.form, n0.hash) == (Rgb{ n0.r, n0.g, n0.b }));
-		CHECK(NamedSeenColorOf(kNamedSeenColors.back().form, kNamedSeenColors.back().hash).has_value());
 		CHECK(!NamedSeenColorOf(0x012345, n0.hash) && !NamedSeenColorOf(n0.form, Fingerprint(a)));
 		CHECK(std::ranges::none_of(kNamedSeenColors, [](const NamedSeenColor& n) { return BlockedModOf(n.hash).has_value(); }));
 		FingerprintSum pieces;
