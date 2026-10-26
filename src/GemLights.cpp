@@ -569,9 +569,10 @@ namespace Plugin
 			float                           phase{ 0.0f };         // where its pulse starts, so gems side by side do not breathe as one
 			float                           wroteRadius{ -1.0f };  // Community Shaders rewrites the light's radius every frame
 			bool                            seen{ false };
-			bool                            shadow{ false };
-			// the other lights on this gem, put out while ours is on it and given back when ours goes (his "Ours on every gem")
-			std::vector<RE::NiPointer<RE::NiAVObject>> putOut;
+			bool                            shadowWanted{ false };  // asked to cast shadows (the scene may have refused: then plain)
+			// the other lights on this gem, put out while ours is on it and given back as they were when ours goes (his "Ours on
+			// every gem"); each with whether it was already out
+			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
 		};
 		std::unordered_map<RE::FormID, Kept> gKept;  // by the placed gem's form id
 		// a gem whose light could not be made or registered is tried again only after kRetryAfter, never four times a second -
@@ -589,8 +590,8 @@ namespace Plugin
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
 		{
-			for (const auto& other : a_kept.putOut) {
-				other->SetAppCulled(false);
+			for (const auto& [other, wasOut] : a_kept.putOut) {
+				other->SetAppCulled(wasOut);
 			}
 			if (a_scene && a_kept.bs) {
 				a_scene->RemoveLight(a_kept.bs);
@@ -645,7 +646,10 @@ namespace Plugin
 			Follow(a_kept, a_s);
 			RE::NiUpdateData update{};
 			light->Update(update);
-			auto* bs = AddToScene(a_scene, light, a_kept.shadow);
+			auto* bs = AddToScene(a_scene, light, a_kept.shadowWanted);
+			if (!bs && a_kept.shadowWanted) {
+				bs = AddToScene(a_scene, light, false);  // the scene holds no more shadow lights: a plain one rather than none
+			}
 			if (!bs) {
 				a_root->DetachChild(light);
 				a_kept.light.reset();
@@ -729,21 +733,25 @@ namespace Plugin
 			std::vector<RE::NiPointer<RE::NiAVObject>>&& a_others, bool a_shadow)
 		{
 			auto& kept = gKept[a_id];
-			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root || kept.shadow != a_shadow)) {
+			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root || kept.shadowWanted != a_shadow)) {
 				Drop(kept, a_scene);  // the gem's model was rebuilt, or the light changes kind (no light becomes a shadow caster): a new one
 			}
 			kept.gem = &a_gem;
-			for (const auto& other : a_others) {
+			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
+			for (auto& other : a_others) {
+				const auto had = std::ranges::find(kept.putOut, other, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first);
+				const bool wasOut = had != kept.putOut.end() ? had->second : other->GetAppCulled();
 				other->SetAppCulled(true);
+				putOut.emplace_back(std::move(other), wasOut);
 			}
-			for (const auto& old : kept.putOut) {
-				if (std::ranges::find(a_others, old) == a_others.end()) {
-					old->SetAppCulled(false);  // gone from the gem, or another mod's light that left it
+			for (const auto& [old, wasOut] : kept.putOut) {
+				if (std::ranges::find(putOut, old, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first) == putOut.end()) {
+					old->SetAppCulled(wasOut);  // gone from the gem, or another mod's light that left it
 				}
 			}
-			kept.putOut = std::move(a_others);
+			kept.putOut = std::move(putOut);
 			if (!kept.light) {
-				kept.shadow = a_shadow;
+				kept.shadowWanted = a_shadow;
 				const auto now = std::chrono::steady_clock::now();
 				if (const auto retry = gRetryAt.find(a_id); retry != gRetryAt.end() && retry->second.root == a_root && now < retry->second.at) {
 					return;  // not seen: let go below
@@ -822,12 +830,24 @@ namespace Plugin
 			if (candidates.size() > kMaxLights) {
 				candidates.resize(kMaxLights);
 			}
+			// the shadow casters: the nearest kShadowGems, one that casts already counting a fifth nearer so two gems at the edge do not
+			// swap kinds (a light is made again to change kind) four times a second as she moves
+			std::vector<std::pair<float, RE::FormID>> byShadow;
+			if (a_s.shadows) {
+				for (const auto& c : candidates) {
+					const auto held = gKept.find(c.id);
+					const bool casts = held != gKept.end() && held->second.light && held->second.shadowWanted;
+					byShadow.emplace_back(c.distance * (casts ? 0.64f : 1.0f), c.id);
+				}
+				std::ranges::sort(byShadow);
+				byShadow.resize((std::min)(byShadow.size(), Gems::kShadowGems));
+			}
 			std::size_t putOut = 0;
-			for (std::size_t i = 0; i < candidates.size(); ++i) {
-				const auto& c = candidates[i];
-				auto        others = OtherLights(c.root, lighting, ownLights);
+			for (const auto& c : candidates) {
+				auto       others = OtherLights(c.root, lighting, ownLights);
+				const bool shadow = std::ranges::find(byShadow, c.id, &std::pair<float, RE::FormID>::second) != byShadow.end();
 				putOut += others.empty() ? 0 : 1;
-				Keep(c.id, c.root, *c.gem, a_scene, a_s, std::move(others), a_s.shadows && i < Gems::kShadowGems);
+				Keep(c.id, c.root, *c.gem, a_scene, a_s, std::move(others), shadow);
 			}
 			gOwnLightNow = putOut;
 			std::erase_if(gKept, [&](auto& a_entry) {
@@ -865,8 +885,10 @@ namespace Plugin
 					Drop(kept, scene);
 					return true;
 				}
-				for (const auto& other : kept.putOut) {
-					other->SetAppCulled(true);  // a Light Placer light's own conditions may show it again
+				for (const auto& [other, wasOut] : kept.putOut) {
+					if (netimmerse_cast<RE::NiLight*>(other.get())) {
+						other->SetAppCulled(true);  // a Light Placer light's own conditions may show it again
+					}
 				}
 				Follow(kept, s);
 				return false;
@@ -1118,7 +1140,7 @@ namespace Plugin
 			blocked += std::format(R"({}"{}":{})", blocked.empty() ? "" : ",", name, n);
 		}
 		return std::format(
-			R"({{"gemForms":{},"litByLook":{{{}}},"waitingOnPermission":{{{}}},"rustic":"{}","leftTo":{{"emissiveSoulGems":{},"lightPlacer":{},"reLight":{},"ownLightNearYou":{}}},"onShowNearYou":{},"particleLightConfigs":{},"displays":{},"displaysDark":{},"lightsNow":{},"lightsMade":{},"lights":[{}]}})",
+			R"({{"gemForms":{},"litByLook":{{{}}},"waitingOnPermission":{{{}}},"rustic":"{}","takenOver":{{"emissiveSoulGems":{},"lightPlacer":{}}},"leftTo":{{"reLight":{}}},"otherLightsPutOutNearYou":{},"onShowNearYou":{},"particleLightConfigs":{},"displays":{},"displaysDark":{},"lightsNow":{},"lightsMade":{},"lights":[{}]}})",
 			gGems.size(), families, blocked, gRustic, gLeftTo[1], gLeftTo[2], gLeftTo[3], gOwnLightNow.load(), gOnShowNow.load(), gParticleTextures.size(),
 			gDisplays.size(), gDisplaysDark.load(), gKept.size(), gMade.load(), lights);
 	}

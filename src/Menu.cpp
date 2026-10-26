@@ -128,7 +128,7 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Not lit until its author allows it - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsLeftToOwnLight(); own) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you whose own glow light is put out for ours: {}"), std::to_string(own)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
@@ -137,7 +137,7 @@ namespace Plugin
 			BeginDisabled(!on);
 			Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 				T("How bright the gems' light is. 100% is as built."));
-			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built."));
+			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach at a high brightness also dims the light a little."));
 			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 			Switch(T("Shadow-casting lights"), &Gems::Settings::shadows,
 				T("The four nearest lit gems cast shadows. Each one draws a shadow map every frame, so it costs frame rate."));
