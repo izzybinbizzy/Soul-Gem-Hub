@@ -684,7 +684,6 @@ namespace Gems
 		int  brightness{ 100 };  // percent
 		int  reach{ 100 };       // percent
 		bool pulse{ true };      // the soft pulse
-		bool shadows{ false };   // the nearest gems' lights cast shadows (kShadowGems)
 		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
 		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
 		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
@@ -698,9 +697,6 @@ namespace Gems
 		return (a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer) ||
 		       (a_meshLight && a_s.theirsMesh);
 	}
-
-	// with Shadow-casting lights on, this many of the nearest lit gems cast shadows: each one is a whole shadow map a frame
-	inline constexpr std::size_t kShadowGems = 4;
 
 	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
 	// Community Shaders' lights, a_vanilla = the game's own lighting without an ENB
@@ -741,8 +737,6 @@ namespace Gems
 				a_out.reach = std::clamp(v, kReachMin, kReachMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
-			} else if (SameText(key, "Shadows")) {
-				a_out.shadows = v != 0;
 			} else if (SameText(key, "TheirsEmissive")) {
 				a_out.theirsEmissive = v != 0;
 			} else if (SameText(key, "TheirsLightPlacer")) {
@@ -760,7 +754,7 @@ namespace Gems
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
-			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nShadows=" << (a_s.shadows ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
+			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\n";
 	}
 }
