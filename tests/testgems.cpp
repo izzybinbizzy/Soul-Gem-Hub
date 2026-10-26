@@ -303,22 +303,23 @@ namespace
 	{
 		Settings s;
 		// ENBParticleGems: the first test build's switch (gone 2026-10-19 - a gem's own light is always left to it); an old file's
-		// line is a key this version does not know
+		// line is a key this version does not know, and so is Shadows (the shadow switch is gone - shadows are the shader mod's job)
 		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nTheirsLightPlacer=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
-		CHECK(ReadSettings(in, s) == 6);
-		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse && s.shadows);
+		CHECK(ReadSettings(in, s) == 5);
+		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
 		CHECK(!s.theirsEmissive && s.theirsLightPlacer && !s.theirsMesh);
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 8);
-		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse && back.shadows);
+		CHECK(ReadSettings(again, back) == 7);
+		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
+		CHECK(out.str().find("Shadows") == std::string::npos);
 		CHECK(!back.theirsEmissive && back.theirsLightPlacer && !back.theirsMesh);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && !d.shadows);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse);
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;

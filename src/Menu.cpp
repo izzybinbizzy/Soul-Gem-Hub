@@ -139,11 +139,6 @@ namespace Plugin
 				T("How bright the gems' light is. 100% is as built."));
 			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
-			Switch(T("Shadow-casting lights"), &Gems::Settings::shadows,
-				T("The four nearest lit gems cast shadows. Each one draws a shadow map every frame, so it costs frame rate."));
-			if (SettingsNow().shadows) {
-				TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "%s", T("This will probably drop your frame rate."));
-			}
 			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
 			const auto lighting = LightingFound();
 			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {

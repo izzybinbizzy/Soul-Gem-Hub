@@ -85,20 +85,19 @@ namespace Plugin
 		}
 
 		// a light already attached and updated once, registered as ReLight registers its own: dynamic, kept inside its cell (portal
-		// strict), lighting land and water too; a_shadow: an omni shadow caster, as Illuminated's LightKit.h AddToScene makes one, its
-		// shadow starting a_near out
-		[[nodiscard]] RE::BSLight* AddToScene(RE::ShadowSceneNode* a_scene, RE::NiPointLight* a_light, bool a_shadow, float a_near)
+		// strict), lighting land and water too, never a shadow caster (shadows from lights are the shader mod's job)
+		[[nodiscard]] RE::BSLight* AddToScene(RE::ShadowSceneNode* a_scene, RE::NiPointLight* a_light)
 		{
 			RE::ShadowSceneNode::LIGHT_CREATE_PARAMS params{};
 			params.dynamic = true;
-			params.shadowLight = a_shadow;
+			params.shadowLight = false;
 			params.portalStrict = true;
 			params.affectLand = true;
 			params.affectWater = true;
 			params.neverFades = true;
-			params.fov = a_shadow ? RE::NI_TWO_PI : 90.0f;
+			params.fov = 90.0f;
 			params.falloff = 1.0f;
-			params.nearDistance = a_shadow ? a_near : 5.0f;
+			params.nearDistance = 5.0f;
 			params.depthBias = 1.0f;
 			params.sceneGraphIndex = 0;
 			params.restrictedNode = nullptr;
@@ -573,7 +572,6 @@ namespace Plugin
 			float                           phase{ 0.0f };         // where its pulse starts, so gems side by side do not breathe as one
 			float                           wroteRadius{ -1.0f };  // Community Shaders rewrites the light's radius every frame
 			bool                            seen{ false };
-			bool                            shadowWanted{ false };  // asked to cast shadows (the scene may have refused: then plain)
 			// the other lights on this gem, put out while ours is on it and given back as they were when ours goes (his "Ours on
 			// every gem"); each with whether it was already out
 			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
@@ -650,15 +648,7 @@ namespace Plugin
 			Follow(a_kept, a_s);
 			RE::NiUpdateData update{};
 			light->Update(update);
-			// the shadow starts past the gem's own model, so the gem never shadows its own light (Azura's Star's points threw a
-			// star of shadow round it at a fixed 10)
-			const auto& bound = a_root->worldBound;
-			const float past = bound.center.GetDistance(a_root->world.translate) + bound.radius + 1.0f;
-			const float shadowNear = std::clamp(std::isfinite(past) ? past : 10.0f, 10.0f, 64.0f);
-			auto*       bs = AddToScene(a_scene, light, a_kept.shadowWanted, shadowNear);
-			if (!bs && a_kept.shadowWanted) {
-				bs = AddToScene(a_scene, light, false, shadowNear);  // the scene holds no more shadow lights: a plain one rather than none
-			}
+			auto* bs = AddToScene(a_scene, light);
 			if (!bs) {
 				a_root->DetachChild(light);
 				a_kept.light.reset();
@@ -739,11 +729,11 @@ namespace Plugin
 		}
 
 		void Keep(RE::FormID a_id, RE::NiNode* a_root, const Gem& a_gem, RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s,
-			std::vector<RE::NiPointer<RE::NiAVObject>>&& a_others, bool a_shadow)
+			std::vector<RE::NiPointer<RE::NiAVObject>>&& a_others)
 		{
 			auto& kept = gKept[a_id];
-			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root || kept.shadowWanted != a_shadow)) {
-				Drop(kept, a_scene);  // the gem's model was rebuilt, or the light changes kind (no light becomes a shadow caster): a new one
+			if (kept.light && (kept.root.get() != a_root || kept.light->parent != a_root)) {
+				Drop(kept, a_scene);  // the gem's model was rebuilt: a new one
 			}
 			kept.gem = &a_gem;
 			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
@@ -760,7 +750,6 @@ namespace Plugin
 			}
 			kept.putOut = std::move(putOut);
 			if (!kept.light) {
-				kept.shadowWanted = a_shadow;
 				const auto now = std::chrono::steady_clock::now();
 				if (const auto retry = gRetryAt.find(a_id); retry != gRetryAt.end() && retry->second.root == a_root && now < retry->second.at) {
 					return;  // not seen: let go below
@@ -833,8 +822,7 @@ namespace Plugin
 			});
 			gOnShowNow = onShow;
 			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem in reach;
-			// a farther gem is let go below and takes a light again when it is among the nearest. The nearest kShadowGems of them cast
-			// shadows when that switch is on
+			// a farther gem is let go below and takes a light again when it is among the nearest
 			std::ranges::sort(candidates, {}, &Candidate::distance);
 			// a gem whose other light the menu keeps ("Use their light") gets none of ours: not seen, so a light of ours on it is let
 			// go below and the lights it put out come back
@@ -854,23 +842,10 @@ namespace Plugin
 					lit.push_back({ &c, std::move(others) });
 				}
 			}
-			// the shadow casters: the nearest kShadowGems, one that casts already counting a fifth nearer so two gems at the edge do not
-			// swap kinds (a light is made again to change kind) four times a second as she moves
-			std::vector<std::pair<float, RE::FormID>> byShadow;
-			if (a_s.shadows) {
-				for (const auto& l : lit) {
-					const auto held = gKept.find(l.c->id);
-					const bool casts = held != gKept.end() && held->second.light && held->second.shadowWanted;
-					byShadow.emplace_back(l.c->distance * (casts ? 0.64f : 1.0f), l.c->id);
-				}
-				std::ranges::sort(byShadow);
-				byShadow.resize((std::min)(byShadow.size(), Gems::kShadowGems));
-			}
 			std::size_t putOut = 0;
 			for (auto& l : lit) {
-				const bool shadow = std::ranges::find(byShadow, l.c->id, &std::pair<float, RE::FormID>::second) != byShadow.end();
 				putOut += l.others.empty() ? 0 : 1;
-				Keep(l.c->id, l.c->root, *l.c->gem, a_scene, a_s, std::move(l.others), shadow);
+				Keep(l.c->id, l.c->root, *l.c->gem, a_scene, a_s, std::move(l.others));
 			}
 			gOwnLightNow = putOut;
 			std::erase_if(gKept, [&](auto& a_entry) {
