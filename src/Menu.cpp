@@ -144,6 +144,23 @@ namespace Plugin
 			if (SettingsNow().shadows) {
 				TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "%s", T("This will probably drop your frame rate."));
 			}
+			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
+			const auto lighting = LightingFound();
+			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+				Header(Icon::kGem, T("Their Own Lights"));
+				if (left[1]) {
+					Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
+						T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
+				}
+				if (left[2]) {
+					Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
+						T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
+				}
+				if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+					Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
+						T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+				}
+			}
 			EndDisabled();
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}

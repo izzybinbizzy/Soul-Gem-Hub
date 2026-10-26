@@ -685,7 +685,19 @@ namespace Gems
 		int  reach{ 100 };       // percent
 		bool pulse{ true };      // the soft pulse
 		bool shadows{ false };   // the nearest gems' lights cast shadows (kShadowGems)
+		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
+		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
+		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
+		bool theirsMesh{ false };         // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
 	};
+
+	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays. a_meshLight: its model carries a light
+	// that shines in this game (GemLights.cpp OtherLights)
+	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_meshLight, const Settings& a_s) noexcept
+	{
+		return (a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer) ||
+		       (a_meshLight && a_s.theirsMesh);
+	}
 
 	// with Shadow-casting lights on, this many of the nearest lit gems cast shadows: each one is a whole shadow map a frame
 	inline constexpr std::size_t kShadowGems = 4;
@@ -731,6 +743,12 @@ namespace Gems
 				a_out.pulse = v != 0;
 			} else if (SameText(key, "Shadows")) {
 				a_out.shadows = v != 0;
+			} else if (SameText(key, "TheirsEmissive")) {
+				a_out.theirsEmissive = v != 0;
+			} else if (SameText(key, "TheirsLightPlacer")) {
+				a_out.theirsLightPlacer = v != 0;
+			} else if (SameText(key, "TheirsMesh")) {
+				a_out.theirsMesh = v != 0;
 			} else {
 				--lines;  // a key this version does not know
 			}
@@ -742,6 +760,7 @@ namespace Gems
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
-			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nShadows=" << (a_s.shadows ? 1 : 0) << "\n";
+			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nShadows=" << (a_s.shadows ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
+			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\n";
 	}
 }
