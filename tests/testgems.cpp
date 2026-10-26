@@ -119,6 +119,24 @@ namespace
 		auto hot = ShownFor(grand, true, 2.0f, 1.0f, 1.1f), hotFlat = ShownFor(grand, true, 2.0f, 1.0f);
 		CHECK(hot.radius == hotFlat.radius && hot.cutoff == hotFlat.cutoff);
 		CHECK(ShownFor(grand, false, 1.0f, 1.0f, 1.1f).radius == plain.radius);
+		// his report: at Brightness 200 % the Reach slider jumped - the cutoff never reaches 1 (Community Shaders' "default"), and
+		// on every lighting, kind and Brightness a higher Reach never draws a shorter light
+		CHECK(kHighestCutoff < 1.0f && ShownFor(grand, true, 2.0f, 0.75f).cutoff < 1.0f);
+		CHECK(ShownFor(grand, true, 2.0f, 0.75f).radius < ShownFor(grand, true, 2.0f, 1.0f).radius);
+		bool steady = true;
+		for (const auto& strength : kStrength) {
+			for (int brightness = kBrightnessMin; brightness <= kBrightnessMax; brightness += 25) {
+				for (const bool isl : { true, false }) {
+					float last = 0.0f;
+					for (int reach = kReachMin; reach <= kReachMax; reach += 5) {
+						const auto shown = ShownFor(strength, isl, brightness / 100.0f, reach / 100.0f);
+						steady = steady && shown.radius >= last - 0.01f && shown.cutoff < 1.0f;
+						last = shown.radius;
+					}
+				}
+			}
+		}
+		CHECK(steady);
 		// every strength steps up from petty to grand, the stars and the Soul Cairn the strongest
 		for (std::size_t i = 1; i <= static_cast<std::size_t>(Kind::kGrand); ++i) {
 			CHECK(kStrength[i].fade > kStrength[i - 1].fade);
@@ -286,19 +304,33 @@ namespace
 		Settings s;
 		// ENBParticleGems: the first test build's switch (gone 2026-10-19 - a gem's own light is always left to it); an old file's
 		// line is a key this version does not know
-		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
-		CHECK(ReadSettings(in, s) == 4);
-		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
+		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nTheirsLightPlacer=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
+		CHECK(ReadSettings(in, s) == 6);
+		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse && s.shadows);
+		CHECK(!s.theirsEmissive && s.theirsLightPlacer && !s.theirsMesh);
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 4);
-		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
+		CHECK(ReadSettings(again, back) == 8);
+		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse && back.shadows);
+		CHECK(!back.theirsEmissive && back.theirsLightPlacer && !back.theirsMesh);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && !d.shadows);
+		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
+		// "Use their light": each switch keeps only its own kind of other light
+		Settings t;
+		CHECK(!TheirsKept(Owner::kEmissive, true, t) && !TheirsKept(Owner::kLightPlacer, false, t));
+		t.theirsEmissive = true;
+		CHECK(TheirsKept(Owner::kEmissive, false, t) && !TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kThisMod, false, t));
+		t = {};
+		t.theirsLightPlacer = true;
+		CHECK(TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kEmissive, false, t));
+		t = {};
+		t.theirsMesh = true;
+		CHECK(TheirsKept(Owner::kThisMod, true, t) && !TheirsKept(Owner::kThisMod, false, t) && !TheirsKept(Owner::kEmissive, false, t));
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}
@@ -324,6 +356,18 @@ namespace
 		CHECK(SeenColorOf(kSeenColors.back().hash) == (Rgb{ kSeenColors.back().r, kSeenColors.back().g, kSeenColors.back().b }));
 		CHECK(!SeenColorOf(Fingerprint(a)));
 		CHECK(std::ranges::none_of(kSeenColors, [](const SeenColor& s) { return BlockedModOf(s.hash).has_value(); }));
+		// the named quest gems' own rows: sorted by record then file, found by both, only the four named records, a plain lookup
+		// never reaching them
+		const auto namedKey = [](const NamedSeenColor& n) { return std::pair{ n.form, n.hash }; };
+		CHECK(!kNamedSeenColors.empty() && std::ranges::is_sorted(kNamedSeenColors, {}, namedKey));
+		CHECK(std::ranges::all_of(kNamedSeenColors,
+			[](const NamedSeenColor& n) { return std::ranges::find(kNamedGems, n.form, &NamedGem::id) != kNamedGems.end(); }));
+		// every row gives back its own color, so two records that share one file each keep theirs
+		CHECK(std::ranges::all_of(kNamedSeenColors,
+			[](const NamedSeenColor& n) { return NamedSeenColorOf(n.form, n.hash) == (Rgb{ n.r, n.g, n.b }); }));
+		const auto& n0 = kNamedSeenColors.front();
+		CHECK(!NamedSeenColorOf(0x012345, n0.hash) && !NamedSeenColorOf(n0.form, Fingerprint(a)));
+		CHECK(std::ranges::none_of(kNamedSeenColors, [](const NamedSeenColor& n) { return BlockedModOf(n.hash).has_value(); }));
 		FingerprintSum pieces;
 		pieces.Add(std::span(big).first(40000));
 		pieces.Add(std::span(big).subspan(40000));

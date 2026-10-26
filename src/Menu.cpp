@@ -115,10 +115,10 @@ namespace Plugin
 			if (const auto rustic = RusticFound(); !rustic.empty()) {
 				TextColored(kMuted, "%s", Fill(T("Rustic Soul Gems found ({})"), T(rustic.c_str())).c_str());
 			}
-			// the gems another light mod lights, which this mod leaves to it (never two lights on one gem)
+			// the gems another light mod would light: lit by this mod instead, its light put out (RE::Light keeps this mod's own files)
 			const auto  left = GemsLeftTo();
-			const char* leftTo[] = { nullptr, TR_MARK("Left to Emissive Soul Gems (Light Placer): {}"), TR_MARK("Left to other Light Placer lights: {}"),
-				TR_MARK("Left to RE::Light (this mod's RE::Light files): {}") };
+			const char* leftTo[] = { nullptr, TR_MARK("Taken over from Emissive Soul Gems (Light Placer): {}"),
+				TR_MARK("Taken over from other Light Placer lights: {}"), TR_MARK("Left to RE::Light (this mod's RE::Light files): {}") };
 			for (std::size_t i = 1; i < left.size(); ++i) {
 				if (left[i]) {
 					TextColored(kMuted, "%s", Fill(T(leftTo[i]), std::to_string(left[i])).c_str());
@@ -128,7 +128,7 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Not lit until its author allows it - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsLeftToOwnLight(); own) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you left to their own light: {}"), std::to_string(own)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
@@ -137,8 +137,30 @@ namespace Plugin
 			BeginDisabled(!on);
 			Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 				T("How bright the gems' light is. 100% is as built."));
-			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built."));
+			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+			Switch(T("Shadow-casting lights"), &Gems::Settings::shadows,
+				T("The four nearest lit gems cast shadows. Each one draws a shadow map every frame, so it costs frame rate."));
+			if (SettingsNow().shadows) {
+				TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "%s", T("This will probably drop your frame rate."));
+			}
+			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
+			const auto lighting = LightingFound();
+			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+				Header(Icon::kGem, T("Their Own Lights"));
+				if (left[1]) {
+					Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
+						T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
+				}
+				if (left[2]) {
+					Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
+						T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
+				}
+				if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+					Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
+						T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+				}
+			}
 			EndDisabled();
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}
