@@ -498,9 +498,7 @@ namespace Plugin
 		std::atomic<std::size_t>                      gDisplaysDark{ 0 };
 		constexpr const char*                         kReLightName = "RL";  // the name RE::Light gives every light it hangs
 		constexpr float                               kDisplayEvery = 1.0f;
-		// the displays whose RE::Light light is out, by the model it was put out on - a model rebuilt is looked at again
-		std::unordered_map<RE::FormID, const RE::NiAVObject*> gDarkened;
-		float                                                 gSinceDisplays = kDisplayEvery;
+		float                                         gSinceDisplays = kDisplayEvery;
 
 		template <class T>
 		std::size_t AddDisplays()
@@ -535,26 +533,19 @@ namespace Plugin
 			return dark;
 		}
 
-		// every loaded display, whatever the lights switch says or how far she is (RE::Light lights every loaded reference)
+		// every loaded display, whatever the lights switch says or how far she is (RE::Light lights every loaded reference). Each
+		// model is walked every time: a remembered model pointer can be a new model at a freed one's address after a cell reload
 		void DarkenDisplays()
 		{
 			auto* tes = RE::TES::GetSingleton();
 			if (gDisplays.empty() || !tes) {
 				return;
 			}
-			if (gDarkened.size() > 4096) {
-				gDarkened.clear();  // references long unloaded
-			}
 			std::size_t dark = 0;
 			tes->ForEachReference([&](RE::TESObjectREFR* a_ref) {
 				const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr;
 				auto*       shown = base && gDisplays.contains(base) && a_ref->Is3DLoaded() ? a_ref->Get3D() : nullptr;
-				if (!shown) {
-					return RE::BSContainer::ForEachResult::kContinue;
-				}
-				auto& done = gDarkened[a_ref->GetFormID()];
-				if (done == shown || DarkenDisplay(shown)) {
-					done = shown;
+				if (shown && DarkenDisplay(shown)) {
 					++dark;
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
@@ -1065,7 +1056,6 @@ namespace Plugin
 	{
 		DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
 		gRetryAt.clear();
-		gDarkened.clear();
 		gSinceScan = kScanEvery;  // look around at once in the next game
 		gSinceDisplays = kDisplayEvery;
 	}
