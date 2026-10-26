@@ -137,7 +137,7 @@ namespace Plugin
 			BeginDisabled(!on);
 			Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 				T("How bright the gems' light is. 100% is as built."));
-			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach at a high brightness also dims the light a little."));
+			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 			Switch(T("Shadow-casting lights"), &Gems::Settings::shadows,
 				T("The four nearest lit gems cast shadows. Each one draws a shadow map every frame, so it costs frame rate."));
