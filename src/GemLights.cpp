@@ -847,10 +847,11 @@ namespace Plugin
 			std::size_t onShow = 0;
 			struct Candidate
 			{
-				RE::FormID  id;
-				RE::NiNode* root;
-				const Gem*  gem;
-				float       distance;  // squared, to the player
+				RE::TESObjectREFR* ref;  // read this frame only, on the main thread
+				RE::FormID         id;
+				RE::NiNode*        root;
+				const Gem*         gem;
+				float              distance;  // squared, to the player
 			};
 			std::vector<Candidate> candidates;
 			const auto             here = player->GetPosition();
@@ -863,10 +864,6 @@ namespace Plugin
 				if (it->second.needsSoul && a_ref->extraList.GetSoulLevel() == RE::SOUL_LEVEL::kNone) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
-				if (OnShow(a_ref)) {
-					++onShow;
-					return RE::BSContainer::ForEachResult::kContinue;
-				}
 				auto*      model = a_ref->Get3D();
 				auto*      root = model ? model->AsNode() : nullptr;
 				const auto id = a_ref->GetFormID();
@@ -877,10 +874,9 @@ namespace Plugin
 				// four times a second as she walks
 				const auto held = gKept.find(id);
 				const bool lit = held != gKept.end() && held->second.light && held->second.root.get() == root;
-				candidates.push_back({ id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
+				candidates.push_back({ a_ref, id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
-			gOnShowNow = onShow;
 			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem in reach;
 			// a farther gem is let go below and takes a light again when it is among the nearest
 			std::ranges::sort(candidates, {}, &Candidate::distance);
@@ -896,6 +892,11 @@ namespace Plugin
 				if (lit.size() == kMaxLights) {
 					break;
 				}
+				// asked only of the nearest gems, outside the reference walk: it takes the Papyrus VM's lock
+				if (OnShow(c.ref)) {
+					++onShow;
+					continue;
+				}
 				auto       others = OtherLights(c.root, lighting, ownLights);
 				const bool placedLight = std::ranges::any_of(others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
 				const bool meshLight = std::ranges::any_of(others, [](const auto& a_other) { return !netimmerse_cast<RE::NiLight*>(a_other.get()); });
@@ -903,6 +904,7 @@ namespace Plugin
 					lit.push_back({ &c, std::move(others) });
 				}
 			}
+			gOnShowNow = onShow;
 			std::size_t putOut = 0;
 			for (auto& l : lit) {
 				putOut += l.others.empty() ? 0 : 1;
