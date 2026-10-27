@@ -64,13 +64,28 @@ namespace Plugin
 		return gS;
 	}
 
+	namespace
+	{
+		// clamped, in steps of 5 (the menu's steps), whoever set it - the menu, DevBench or the file; under gLock
+		void Clamp(Gems::Settings& a_s)
+		{
+			a_s.brightness = std::clamp((std::clamp(a_s.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
+			a_s.reach = std::clamp((std::clamp(a_s.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+			a_s.gemMod = Gems::GemModAt(a_s.gemMod) ? a_s.gemMod : 0;
+		}
+	}
+
 	void SetSettings(const Gems::Settings& a_settings)
 	{
 		std::scoped_lock l{ gLock };
 		gS = a_settings;
-		// clamped, in steps of 5 (the menu's steps), whoever set it - the menu, DevBench or the file
-		gS.brightness = std::clamp((std::clamp(gS.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
-		gS.reach = std::clamp((std::clamp(gS.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
-		gS.gemMod = Gems::GemModAt(gS.gemMod) ? gS.gemMod : 0;
+		Clamp(gS);
+	}
+
+	void UpdateSettings(const std::function<void(Gems::Settings&)>& a_change)
+	{
+		std::scoped_lock l{ gLock };
+		a_change(gS);
+		Clamp(gS);
 	}
 }

@@ -79,8 +79,7 @@ namespace Plugin
 			if (SliderInt(a_label, &v, a_min, a_max, "%d%%")) {
 				v = std::clamp((v + 2) / 5 * 5, a_min, a_max);  // in steps of 5, rounded only when moved
 				if (v != s.*a_field) {
-					s.*a_field = v;
-					SetSettings(s);
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.*a_field = v; });
 					Live();
 				}
 			}
@@ -95,8 +94,7 @@ namespace Plugin
 			auto s = SettingsNow();
 			bool v = s.*a_field;
 			if (Checkbox(a_label, &v)) {
-				s.*a_field = v;
-				SetSettings(s);
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.*a_field = v; });
 				Changed();
 			}
 			MenuStyle::Tip(a_tip);
@@ -113,8 +111,7 @@ namespace Plugin
 			}
 			SetNextItemWidth(260.0f);
 			if (Combo(T("Gem colors"), &v, items.data(), static_cast<int>(items.size())) && v != s.gemMod) {
-				s.gemMod = v;
-				SetSettings(s);
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.gemMod = v; });
 				Changed();
 			}
 			MenuStyle::Tip(T(

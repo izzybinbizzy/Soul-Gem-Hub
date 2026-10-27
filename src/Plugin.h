@@ -70,6 +70,8 @@ namespace Plugin
 	void                         SaveSettings();  // any thread
 	[[nodiscard]] Gems::Settings SettingsNow();
 	void                         SetSettings(const Gems::Settings& a_settings);  // clamped; the caller saves and applies
+	// one change made under the lock, so a menu change and a DevBench change at the same moment both land; clamped
+	void UpdateSettings(const std::function<void(Gems::Settings&)>& a_change);
 
 	// ------------------------------------------------------------------ GemLights.cpp: the gems and their lights
 	void                      FindGems();       // data load: which forms are soul gems we light, and how each looks

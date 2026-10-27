@@ -95,32 +95,33 @@ namespace Plugin
 			if (!value) {
 				return DevBenchGlue::Refusal("set needs a number value");
 			}
-			auto      s = SettingsNow();
 			const int v = static_cast<int>(std::clamp(*value, -100000.0, 100000.0));  // finite (Number); in range before the cast
+			// the one field, changed under the settings lock - a menu change at the same moment is kept
+			std::function<void(Gems::Settings&)> change;
 			if (key == "lights") {
-				s.on = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.on = v != 0; };
 			} else if (key == "brightness") {
-				s.brightness = v;
+				change = [v](Gems::Settings& a_s) { a_s.brightness = v; };
 			} else if (key == "reach") {
-				s.reach = v;
+				change = [v](Gems::Settings& a_s) { a_s.reach = v; };
 			} else if (key == "pulse") {
-				s.pulse = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.pulse = v != 0; };
 			} else if (key == "theirsEmissive") {
-				s.theirsEmissive = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsEmissive = v != 0; };
 			} else if (key == "theirsLightPlacer") {
-				s.theirsLightPlacer = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsLightPlacer = v != 0; };
 			} else if (key == "theirsMesh") {
-				s.theirsMesh = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsMesh = v != 0; };
 			} else if (key == "gemMod") {
 				if (v != 0 && !Gems::GemModAt(v)) {
 					return DevBenchGlue::Refusal(std::format("gemMod is 0 (Automatic) to {}", Gems::kGemModPicks.size()));
 				}
-				s.gemMod = v;
+				change = [v](Gems::Settings& a_s) { a_s.gemMod = v; };
 			} else {
 				return DevBenchGlue::Refusal("unknown setting '" + key + "'",
 					json::array({ "lights", "brightness", "reach", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh", "gemMod" }));
 			}
-			SetSettings(s);
+			UpdateSettings(change);
 			SaveSettings();
 			auto now = DevBenchGlue::OnMainThread([]() {
 				ApplyNow();

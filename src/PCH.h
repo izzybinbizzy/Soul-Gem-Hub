@@ -20,6 +20,8 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <sstream>

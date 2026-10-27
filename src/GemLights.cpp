@@ -31,7 +31,6 @@
 #include "Plugin.h"
 
 #include <DirectXTex.h>
-#include <map>
 #include <nlohmann/json.hpp>
 
 namespace Plugin
@@ -1203,8 +1202,9 @@ namespace Plugin
 
 	std::string GemsReport()
 	{
-		std::string lights;
-		const auto  s = SettingsNow();
+		// built as JSON, not by text: a mod or family name holding a quote or a non-UTF-8 byte stays a valid reply
+		const auto     s = SettingsNow();
+		nlohmann::json lights = nlohmann::json::array();
 		for (const auto& [id, kept] : gKept) {
 			if (!kept.light || !kept.gem) {
 				continue;
@@ -1212,20 +1212,22 @@ namespace Plugin
 			const auto& d = kept.light->GetLightRuntimeData();
 			const auto& p = kept.light->world.translate;
 			const auto  rgb = Gems::ColorAt(kept.gem->look, s);  // the color it wears now (the menu's "Gem colors" pick)
-			lights += std::format(R"({}{{"ref":"0x{:08X}","family":"{}","kind":{},"rgb":[{},{},{}],"fade":{:.4f},"radius":{:.1f},"at":[{:.0f},{:.0f},{:.0f}]}})",
-				lights.empty() ? "" : ",", id, Gems::FamilyName(kept.gem->look.family), static_cast<int>(kept.gem->look.kind), rgb[0], rgb[1],
-				rgb[2], d.fade, d.radius.x, p.x, p.y, p.z);
+			lights.push_back({ { "ref", std::format("0x{:08X}", id) }, { "family", std::string(Gems::FamilyName(kept.gem->look.family)) },
+				{ "kind", static_cast<int>(kept.gem->look.kind) }, { "rgb", { rgb[0], rgb[1], rgb[2] } }, { "fade", d.fade }, { "radius", d.radius.x },
+				{ "at", { std::round(p.x), std::round(p.y), std::round(p.z) } } });
 		}
-		std::string families, blocked;
+		nlohmann::json families = nlohmann::json::object(), blocked = nlohmann::json::object();
 		for (const auto& [name, n] : gFamilies) {
-			families += std::format(R"({}"{}":{})", families.empty() ? "" : ",", name, n);
+			families[name] = n;
 		}
 		for (const auto& [name, n] : gBlocked) {
-			blocked += std::format(R"({}"{}":{})", blocked.empty() ? "" : ",", name, n);
+			blocked[std::string(name)] = n;
 		}
-		return std::format(
-			R"({{"gemForms":{},"litByLook":{{{}}},"waitingOnPermission":{{{}}},"rustic":"{}","takenOver":{{"emissiveSoulGems":{},"lightPlacer":{}}},"leftTo":{{"reLight":{}}},"otherLightsPutOutNearYou":{},"onShowNearYou":{},"particleLightConfigs":{},"displays":{},"displaysDark":{},"lightsNow":{},"lightsMade":{},"lights":[{}]}})",
-			gGems.size(), families, blocked, gRustic, gLeftTo[1], gLeftTo[2], gLeftTo[3], gOwnLightNow.load(), gOnShowNow.load(), gParticleTextures.size(),
-			gDisplays.size(), gDisplaysDark.load(), gKept.size(), gMade.load(), lights);
+		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
+			{ "takenOver", { { "emissiveSoulGems", gLeftTo[1] }, { "lightPlacer", gLeftTo[2] } } }, { "leftTo", { { "reLight", gLeftTo[3] } } },
+			{ "otherLightsPutOutNearYou", gOwnLightNow.load() }, { "onShowNearYou", gOnShowNow.load() },
+			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
+			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "lights", lights } };
+		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 	}
 }
