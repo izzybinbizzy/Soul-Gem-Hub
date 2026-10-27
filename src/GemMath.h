@@ -456,8 +456,8 @@ namespace Gems
 	}
 
 	// Emissive Soul Gems (iamzachhunter, Nexus 191137): the models its Light Placer file lights. The two mods work together: with
-	// Light Placer loaded these models are his, whether or not his mod is installed; without Light Placer (which his mod needs)
-	// this mod lights them.
+	// Light Placer loaded these models count as his, installed or not (his light is put out while ours is on the gem, unless the
+	// menu's Their Own Lights keeps it).
 	// Whole paths, as Light Placer matches them: a replacer's copy in another folder (MLP's and Vayura's "full\", Spherical's
 	// "Filled\") is not his - its own Light Placer file, if any, claims it
 	inline constexpr std::array<std::string_view, 14> kEmissiveModels{ "clutter\\soulgem\\soulgempetty01.nif",

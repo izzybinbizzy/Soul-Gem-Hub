@@ -42,7 +42,7 @@ namespace Plugin
 		constexpr float       kScanEvery = 0.25f;  // seconds between looks around the player
 		constexpr std::size_t kMaxLights = 24;     // the most gem lights at once - the nearest gems
 		constexpr auto        kRetryAfter = std::chrono::seconds(15);
-		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches under 100 units)
+		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches about 100-160 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
 		constexpr const auto& kNamedForms = Gems::kNamedGems;
@@ -1000,7 +1000,7 @@ namespace Plugin
 			return it == named.end() ? 0u : it->second;
 		};
 		// a gem wears the color its lit-room picture shows (stars keep their own; a named quest gem its own row), else a look its
-		// model colors the one read off the model; a blocked mod's is never read
+		// model colors the one read off the model; a blocked mod's model is never read here
 		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star, std::uint32_t a_named) {
 			if (BlockedBy(a_model)) {
 				return;
@@ -1098,8 +1098,8 @@ namespace Plugin
 		using enum Gems::Owner;
 		SKSE::log::info(
 			"gems: {} soul gem record(s), {} lit always ({}), the rest when a placed gem holds a soul; {} other piece(s) by their "
-			"model; Rustic Soul Gems {}; left to Emissive Soul Gems' models {}, to other Light Placer configs {}, to RE::Light {} "
-			"(Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem whose own model's light shines here is left to it",
+			"model; Rustic Soul Gems {}; taken over from Emissive Soul Gems' models {}, from other Light Placer configs {}, left to "
+			"RE::Light {} (Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem's own model light is put out under ours",
 			records, lit, list.empty() ? "none" : list, pieces, gRustic.empty() ? "not loaded" : gRustic,
 			gLeftTo[static_cast<std::size_t>(kEmissive)], gLeftTo[static_cast<std::size_t>(kLightPlacer)],
 			gLeftTo[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded", others.reLight ? "loaded" : "not loaded",

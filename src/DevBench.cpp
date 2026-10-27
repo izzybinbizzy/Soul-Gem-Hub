@@ -56,7 +56,10 @@ namespace Plugin
 			try {
 				DevBenchGlue::Reply(a_sink, a_write, StateNow());
 			} catch (...) {
-				DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("the soul gem report could not be made"));
+				try {  // the refusal is JSON too and may throw (low memory) - never out of a noexcept function
+					DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("the soul gem report could not be made"));
+				} catch (...) {
+				}
 			}
 		}
 
@@ -137,7 +140,10 @@ namespace Plugin
 			try {
 				DevBenchGlue::Reply(a_sink, a_write, Act(DevBenchGlue::Args(a_args)));
 			} catch (...) {
-				DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("Soul Gem Hub could not handle that"));
+				try {
+					DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("Soul Gem Hub could not handle that"));
+				} catch (...) {
+				}
 			}
 		}
 	}

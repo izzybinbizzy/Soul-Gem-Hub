@@ -9,8 +9,8 @@
 // Every soul gem in the world glows in its own color - the game's own gems, Praedy's Soul Gems, Rustic Soul Gems, Azura's
 // Star, the Black Star, the named quest gems and the Soul Cairn's gem bowl and chunks - with lights made in memory, on
 // Community Shaders (with or without Light Placer), ENB and Vanilla, the lighting found by itself. No plugin file, nothing in
-// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). A gem another light mod already
-// lights (Emissive Soul Gems on Light Placer, any other Light Placer config, this mod's own RE::Light files) is left to it.
+// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). Another mod's light on a gem we light
+// is put out while ours is on it (its menu's Their Own Lights gives a kind back); this mod's own RE::Light files light their gems.
 //
 // THE FILES, AND WHAT EACH ONE IS FOR (laid out as Illuminated's and Dynamic Wards')
 //   main.cpp        this file - the order of the data-load work, and the SKSE messages

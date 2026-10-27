@@ -122,7 +122,15 @@ namespace Plugin
 				"gem mod: every soul gem then wears that mod's colors."));
 		}
 
+		void RenderPage();
+
+		// SKSE Menu Framework calls this from its own DLL on the render thread: nothing may be thrown back across
 		void __stdcall RenderSettings()
+		{
+			Guarded("menu page", RenderPage);
+		}
+
+		void RenderPage()
 		{
 			MenuStyle::Page page;
 
