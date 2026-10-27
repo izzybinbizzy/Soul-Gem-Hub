@@ -193,7 +193,9 @@ namespace Plugin
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemColors();
-				LightColor();
+				if (GemsWithOwnGlow() > 0) {  // with none, both choices light every gem the same
+					LightColor();
+				}
 				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
 				const auto lighting = LightingFound();
 				// a gem's own model light shines on an ENB, or on Community Shaders when a particle-light config names its texture

@@ -149,7 +149,8 @@ namespace Plugin
 			std::error_code ec;
 			const auto      root = std::filesystem::current_path() / "Data" / "LightPlacer";
 			std::size_t     files = 0;
-			for (std::filesystem::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+			using enum std::filesystem::directory_options;
+			for (std::filesystem::recursive_directory_iterator it(root, skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
 				std::error_code fileEc;  // one file that cannot be looked at must not end the walk
 				if (!it->is_regular_file(fileEc) || LowerExtension(it->path()) != L".json") {
 					continue;
@@ -473,6 +474,22 @@ namespace Plugin
 			return it->second;
 		}
 
+		// the fingerprints of swapped textures, once per set (the picture row and the glow row are both looked up by them)
+		const std::vector<std::uint64_t>& SwapPrints(const std::vector<std::string>& a_textures)
+		{
+			static std::map<std::vector<std::string>, std::vector<std::uint64_t>> read;
+			const auto [it, added] = read.try_emplace(a_textures);
+			if (added) {
+				for (const auto& texture : a_textures) {
+					Gems::FingerprintSum sum;
+					if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
+						it->second.push_back(sum.Result());
+					}
+				}
+			}
+			return it->second;
+		}
+
 		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind);
 
 		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule);
@@ -489,12 +506,9 @@ namespace Plugin
 
 		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
 		{
-			for (const auto& texture : a_textures) {
-				Gems::FingerprintSum sum;
-				if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
-					if (const auto seen = Gems::SeenColorOf(sum.Result())) {
-						return seen;
-					}
+			for (const auto print : SwapPrints(a_textures)) {
+				if (const auto seen = Gems::SeenColorOf(print)) {
+					return seen;
 				}
 			}
 			Gems::ColorSum all;
@@ -508,21 +522,15 @@ namespace Plugin
 			return rgb ? std::optional(Gems::ShownColor(*rgb, a_kind)) : std::nullopt;
 		}
 
-		// the own glow swapped textures show, when the glow table lists one of them; once per set of textures
+		// the own glow swapped textures show, when the glow table lists one of them
 		const Gems::GlowColor* SwapGlow(const std::vector<std::string>& a_textures)
 		{
-			static std::map<std::vector<std::string>, const Gems::GlowColor*> read;
-			const auto [it, added] = read.try_emplace(a_textures, nullptr);
-			if (added) {
-				for (const auto& texture : a_textures) {
-					Gems::FingerprintSum sum;
-					if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size() &&
-						(it->second = Gems::GlowColorOf(sum.Result()))) {
-						break;
-					}
+			for (const auto print : SwapPrints(a_textures)) {
+				if (const auto* glow = Gems::GlowColorOf(print)) {
+					return glow;
 				}
 			}
-			return it->second;
+			return nullptr;
 		}
 
 		// one more of a_name in a name -> count list (kept in the order first seen)
@@ -702,7 +710,7 @@ namespace Plugin
 		};
 		std::unordered_map<RE::FormID, Retry> gRetryAt;
 		std::unordered_set<std::string>       gParticleTextures;  // the textures Data\ParticleLights\*.ini name (lower case, no extension)
-		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gOwnLightNow{ 0 };
+		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gOwnLightNow{ 0 }, gWithGlow{ 0 };
 		float                                 gClock = 0.0f, gSinceScan = kScanEvery;
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
@@ -1080,7 +1088,7 @@ namespace Plugin
 			if (BlockedBy(a_model)) {
 				return;
 			}
-			if (!a_star) {
+			if (!a_star && (!a_named || a_look.family == Gems::Family::kNamed)) {
 				SetGlow(a_look, GlowOf(a_model));
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
@@ -1189,6 +1197,7 @@ namespace Plugin
 			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
 			"their own swapped textures; {} have an own glow of another color (the Light color default)",
 			fromPicture, fromModel, fromSwap, withGlow);
+		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [](const auto& a_entry) { return a_entry.second.look.glow.has_value(); }));
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
@@ -1242,6 +1251,7 @@ namespace Plugin
 	std::array<std::size_t, 4>                       GemsLeftTo() { return gLeftTo; }
 	std::size_t                                      GemsLeftToOwnLight() { return gOwnLightNow.load(); }
 	std::size_t                                      GemParticleConfigs() { return gParticleTextures.size(); }
+	std::size_t                                      GemsWithOwnGlow() { return gWithGlow.load(); }
 	std::string                                      RusticFound() { return gRustic; }
 
 	std::string GlowNow(RE::FormID a_ref)
