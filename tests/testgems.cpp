@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 171;
+	constexpr int kFloor = 172;
 
 	using namespace Gems;
 
@@ -382,8 +382,11 @@ namespace
 		// a named quest gem on a plain model (FindGems builds it as the game's look for its size) keeps its own color too
 		Look plainNamed = GameLook(Kind::kPetty, true);
 		plainNamed.rgb = { 10, 20, 30 };
-		plainNamed.named = true;
+		plainNamed.ownColor = true;
 		CHECK(ColorAt(plainNamed, a) == plainNamed.rgb);
+		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
+		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
+			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);
 		// GemMod as DevBench numbers it reads too; a number past the last gem mod is Automatic
 		std::stringstream number(std::format("GemMod={}\nGemMod={}\n", praedy, kGemModPicks.size() + 1));
 		Settings          n;

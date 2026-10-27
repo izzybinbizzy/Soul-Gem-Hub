@@ -222,8 +222,8 @@ namespace Gems
 		Family family{ Family::kGame };
 		Kind   kind{ Kind::kGrand };
 		Rgb    rgb{ 255, 255, 255 };
-		bool   seen{ false };   // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
-		bool   named{ false };  // a named quest gem, whatever model it wears: keeps its own color under the "Gem colors" pick
+		bool   seen{ false };      // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool   ownColor{ false };  // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -266,6 +266,22 @@ namespace Gems
 	// Black Star is purple by his eye - its dark azurastar.dds reads a near-white blue
 	inline constexpr Rgb kAzurasStarRgb{ 157, 255, 252 };
 	inline constexpr Rgb kBlackStarRgb{ 170, 90, 255 };
+
+	// which star a model is: Azura's Star wears azurastarlite.nif, the Black Star azurastar.nif - so a gem mod's own star records
+	// (Andrealletius Soul Gem Overhaul's Drained ... Flawless stars) are stars too, not only the game's two records
+	enum class StarModel : std::uint8_t
+	{
+		kNone,
+		kAzura,
+		kBlack,
+	};
+	[[nodiscard]] inline StarModel StarOf(std::string_view a_model)
+	{
+		const auto path = NormalPath(a_model);
+		return path == "clutter\\daedric\\azurastarlite.nif" ? StarModel::kAzura :
+		       path == "clutter\\daedric\\azurastar.nif"     ? StarModel::kBlack :
+		                                                       StarModel::kNone;
+	}
 
 	[[nodiscard]] inline const Rgb& SizeRgb(const std::array<Rgb, 6>& a_family, Kind a_kind) noexcept
 	{
@@ -729,7 +745,7 @@ namespace Gems
 	{
 		const auto* pick = GemModAt(a_s.gemMod);
 		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
-		if (!pick || !sized || a_look.named || a_look.kind > Kind::kBlack) {
+		if (!pick || !sized || a_look.ownColor || a_look.kind > Kind::kBlack) {
 			return a_look.rgb;
 		}
 		return pick->rgb[static_cast<std::size_t>(a_look.kind)];

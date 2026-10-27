@@ -402,6 +402,57 @@ namespace Plugin
 			return std::nullopt;
 		}
 
+		// the diffuse textures a record's own texture swaps (MODS) put on its model: Andrealletius Soul Gem Overhaul's Solar and
+		// Astral gems wear the game's models in textures of their own, so a color read off the model alone would be the game's
+		[[nodiscard]] std::vector<std::string> SwappedDiffuses(const RE::TESForm* a_form)
+		{
+			std::vector<std::string> out;
+			const auto*              swap = a_form ? a_form->As<RE::TESModelTextureSwap>() : nullptr;
+			if (!swap || !swap->alternateTextures) {
+				return out;
+			}
+			for (const auto& alt : std::span(swap->alternateTextures, swap->numAlternateTextures)) {
+				const char* diffuse = alt.textureSet ? alt.textureSet->GetTexturePath(RE::BSTextureSet::Textures::kDiffuse) : nullptr;
+				if (diffuse && *diffuse && !Gems::IsNormalMap(diffuse)) {
+					out.emplace_back(diffuse);
+				}
+			}
+			return out;
+		}
+
+		// the gem mod waiting on its author's permission whose texture a record swaps onto its model, if any
+		std::optional<std::string_view> BlockedSwap(const std::vector<std::string>& a_textures)
+		{
+			for (const auto& texture : a_textures) {
+				if (const auto mod = BlockedTexture(texture)) {
+					return mod;
+				}
+			}
+			return std::nullopt;
+		}
+
+		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule)
+		std::optional<Gems::Rgb> SwapColor(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		{
+			for (const auto& texture : a_textures) {
+				Gems::FingerprintSum sum;
+				if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
+					if (const auto seen = Gems::SeenColorOf(sum.Result())) {
+						return seen;
+					}
+				}
+			}
+			Gems::ColorSum all;
+			for (const auto& texture : a_textures) {
+				Gems::ColorSum one;
+				if (AddTexturePixels(texture, one)) {
+					all.Add(one);
+				}
+			}
+			const auto rgb = all.Result();
+			return rgb ? std::optional(Gems::ShownColor(*rgb, a_kind)) : std::nullopt;
+		}
+
 		// one more of a_name in a name -> count list (kept in the order first seen)
 		void CountName(std::vector<std::pair<std::string, std::size_t>>& a_list, std::string_view a_name)
 		{
@@ -937,7 +988,7 @@ namespace Plugin
 		}
 		const auto*                                               azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
-		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0;
+		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0;
 		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
 		for (const auto& n : kNamedForms) {
 			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
@@ -970,23 +1021,37 @@ namespace Plugin
 				continue;
 			}
 			++records;
-			const bool  star = gem == azurasStar || gem == blackStar;
 			const bool  holds = gem->GetContainedSoul() != RE::SOUL_LEVEL::kNone;
 			const char* path = gem->GetModel();
 			const auto  model = std::string_view(path ? path : "");
-			auto        look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
+			// a star by its record, or by the star model it wears (a gem mod's own star records)
+			const auto starModel = Gems::StarOf(model);
+			const bool black = gem == blackStar || (gem != azurasStar && starModel == Gems::StarModel::kBlack);
+			const bool star = black || gem == azurasStar || starModel == Gems::StarModel::kAzura;
+			auto       look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
 			if (star) {
-				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, gem == azurasStar ? Gems::kAzurasStarRgb : Gems::kBlackStarRgb };
+				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, black ? Gems::kBlackStarRgb : Gems::kAzurasStarRgb };
 			} else if (!look || look->family == Gems::Family::kSoulCairn) {
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
-			// a gem left unlit for want of its author's permission never needs its color read
 			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
 			// keeps its purple
-			if (gem != blackStar) {
+			if (!black) {
 				readColor(*look, model, star, namedId(gem));
 			}
-			look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
+			look->ownColor = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
+			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
+			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
+				if (const auto mod = BlockedSwap(swapped)) {
+					CountName(gBlocked, *mod);
+					continue;
+				}
+				if (const auto own = SwapColor(swapped, look->kind)) {
+					look->rgb = *own;
+					look->ownColor = true;
+					++fromSwap;
+				}
+			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others) && always) {
 				++lit;
@@ -1018,7 +1083,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
-			look.named = true;
+			look.ownColor = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
@@ -1039,7 +1104,10 @@ namespace Plugin
 			gLeftTo[static_cast<std::size_t>(kEmissive)], gLeftTo[static_cast<std::size_t>(kLightPlacer)],
 			gLeftTo[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded", others.reLight ? "loaded" : "not loaded",
 			gParticleTextures.size());
-		SKSE::log::info("gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model", fromPicture, fromModel);
+		SKSE::log::info(
+			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
+			"their own swapped textures",
+			fromPicture, fromModel, fromSwap);
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
