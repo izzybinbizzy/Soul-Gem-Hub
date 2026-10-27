@@ -23,9 +23,10 @@ namespace Plugin
 		Gems::Settings read;
 		const auto     lines = Gems::ReadSettings(in, read);
 		SetSettings(read);  // in the menu's steps of 5, as every other way in (the code review 2026-10-19)
-		const auto s = SettingsNow();
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {} ({} line(s) read)", s.on ? "on" : "off",
-			s.brightness, s.reach, s.pulse ? "on" : "off", lines);
+		const auto  s = SettingsNow();
+		const auto* pick = Gems::GemModAt(s.gemMod);
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {}, gem colors {} ({} line(s) read)", s.on ? "on" : "off",
+			s.brightness, s.reach, s.pulse ? "on" : "off", pick ? pick->name : std::string_view("Automatic"), lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write
@@ -71,5 +72,6 @@ namespace Plugin
 		// clamped, in steps of 5 (the menu's steps), whoever set it - the menu, DevBench or the file
 		gS.brightness = std::clamp((std::clamp(gS.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
 		gS.reach = std::clamp((std::clamp(gS.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+		gS.gemMod = Gems::GemModAt(gS.gemMod) ? gS.gemMod : 0;
 	}
 }

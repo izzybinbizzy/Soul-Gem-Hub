@@ -611,7 +611,7 @@ namespace Plugin
 			const float pulse = a_s.pulse ? Gems::PulseAt(gClock + a_kept.phase) : 1.0f;
 			const auto  shown = Gems::ShownAt(look.kind, InverseSquare(), LightingFound() == Lighting::kVanilla, a_s, pulse);
 			auto&       data = a_kept.light->GetLightRuntimeData();
-			const auto& rgb = look.rgb;
+			const auto  rgb = Gems::ColorAt(look, a_s);
 			data.diffuse = { rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f };
 			data.fade = shown.fade;
 			if (a_kept.wroteRadius != shown.radius) {
@@ -1110,15 +1110,17 @@ namespace Plugin
 	std::string GemsReport()
 	{
 		std::string lights;
+		const auto  s = SettingsNow();
 		for (const auto& [id, kept] : gKept) {
 			if (!kept.light || !kept.gem) {
 				continue;
 			}
 			const auto& d = kept.light->GetLightRuntimeData();
 			const auto& p = kept.light->world.translate;
+			const auto  rgb = Gems::ColorAt(kept.gem->look, s);  // the color it wears now (the menu's "Gem colors" pick)
 			lights += std::format(R"({}{{"ref":"0x{:08X}","family":"{}","kind":{},"rgb":[{},{},{}],"fade":{:.4f},"radius":{:.1f},"at":[{:.0f},{:.0f},{:.0f}]}})",
-				lights.empty() ? "" : ",", id, Gems::FamilyName(kept.gem->look.family), static_cast<int>(kept.gem->look.kind),
-				kept.gem->look.rgb[0], kept.gem->look.rgb[1], kept.gem->look.rgb[2], d.fade, d.radius.x, p.x, p.y, p.z);
+				lights.empty() ? "" : ",", id, Gems::FamilyName(kept.gem->look.family), static_cast<int>(kept.gem->look.kind), rgb[0], rgb[1],
+				rgb[2], d.fade, d.radius.x, p.x, p.y, p.z);
 		}
 		std::string families, blocked;
 		for (const auto& [name, n] : gFamilies) {

@@ -6,11 +6,12 @@
 //   text      Lower, SameText, Trim, BareName - a model path as the plugin compares it
 //   light     CutoffFor, IslReach, PlainAt - Illuminated's LightMath.h, the same numbers; KeyAt - Truman's KeyframeSequence maths
 //   gems      which gem a model is, its color (ColorSum: off its texture pixels) and its strength
-//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer
+//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's "Gem colors" pick
 //   permits   Fingerprint, BlockedModOf - the gem mods not lit until their authors allow it (GemPermissions.h)
 
 #pragma once
 
+#include "GemModPicks.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
 
@@ -688,7 +689,38 @@ namespace Gems
 		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
 		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
 		bool theirsMesh{ false };         // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		int  gemMod{ 0 };                 // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
 	};
+
+	// the "Gem colors" pick a Settings.ini value names (a kGemModPicks key, any case); 0 = Automatic, also for a value this
+	// version does not know
+	[[nodiscard]] inline int GemModIndex(std::string_view a_key) noexcept
+	{
+		for (std::size_t i = 0; i < kGemModPicks.size(); ++i) {
+			if (SameText(a_key, kGemModPicks[i].key)) {
+				return static_cast<int>(i) + 1;
+			}
+		}
+		return 0;
+	}
+
+	[[nodiscard]] inline const GemModPick* GemModAt(int a_index) noexcept
+	{
+		return a_index >= 1 && static_cast<std::size_t>(a_index) <= kGemModPicks.size() ? &kGemModPicks[static_cast<std::size_t>(a_index) - 1] : nullptr;
+	}
+
+	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
+	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems and the Soul Cairn keep their own - else
+	// the color found for it at data load
+	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
+	{
+		const auto* pick = GemModAt(a_s.gemMod);
+		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
+		if (!pick || !sized || a_look.kind > Kind::kBlack) {
+			return a_look.rgb;
+		}
+		return pick->rgb[static_cast<std::size_t>(a_look.kind)];
+	}
 
 	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays. a_meshLight: its model carries a light
 	// that shines in this game (GemLights.cpp OtherLights)
@@ -723,7 +755,12 @@ namespace Gems
 			}
 			const auto key = Trim(text.substr(0, eq));
 			const auto val = Trim(text.substr(eq + 1));
-			int        v = 0;
+			if (SameText(key, "GemMod")) {  // a gem mod's key, not a number
+				a_out.gemMod = GemModIndex(val);
+				++lines;
+				continue;
+			}
+			int v = 0;
 			const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), v);
 			if (ec != std::errc{} || end != val.data() + val.size()) {
 				continue;
@@ -755,6 +792,7 @@ namespace Gems
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
-			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\n";
+			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
+			  << (GemModAt(a_s.gemMod) ? GemModAt(a_s.gemMod)->key : std::string_view("auto")) << "\n";
 	}
 }

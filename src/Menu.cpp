@@ -3,8 +3,8 @@
 // GPL-3.0-or-later; see LICENSE.txt and the notice at the top of main.cpp.
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
-// found (the lighting, the gem looks, the gems left to another mod's light), then the lights' switch, Brightness, Reach and the
-// soft pulse. A change is saved and applied on the game's main thread when it is let go.
+// found (the lighting, the gem looks, the gems left to another mod's light), then the lights' switch, Brightness, Reach, the
+// soft pulse and the gem colors pick. A change is saved and applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
@@ -102,6 +102,26 @@ namespace Plugin
 			MenuStyle::Tip(a_tip);
 		}
 
+		// "Gem colors": Automatic, or one gem mod's colors on every soul gem - for a gem mod the automatic reading misses
+		void GemColors()
+		{
+			auto                     s = SettingsNow();
+			int                      v = s.gemMod;
+			std::vector<const char*> items{ T("Automatic") };
+			for (const auto& pick : Gems::kGemModPicks) {
+				items.push_back(pick.name.data());  // a string literal: ends in a zero
+			}
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Gem colors"), &v, items.data(), static_cast<int>(items.size())) && v != s.gemMod) {
+				s.gemMod = v;
+				SetSettings(s);
+				Changed();
+			}
+			MenuStyle::Tip(T(
+				"Automatic finds each gem's color from the mod that dresses it. If your gems glow in the wrong color, pick your "
+				"gem mod: every soul gem then wears that mod's colors."));
+		}
+
 		void __stdcall RenderSettings()
 		{
 			MenuStyle::Page page;
@@ -139,6 +159,7 @@ namespace Plugin
 				T("How bright the gems' light is. 100% is as built."));
 			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+			GemColors();
 			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
 			const auto lighting = LightingFound();
 			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
