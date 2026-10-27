@@ -24,8 +24,9 @@ namespace Plugin
 		const auto     lines = Gems::ReadSettings(in, read);
 		SetSettings(read);  // in the menu's steps of 5, as every other way in (the code review 2026-10-19)
 		const auto s = SettingsNow();
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {}, gem colors {} ({} line(s) read)", s.on ? "on" : "off",
-			s.brightness, s.reach, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod), lines);
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {}, gem colors {}, light color {} ({} line(s) read)",
+			s.on ? "on" : "off", s.brightness, s.reach, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
+			s.authorPick ? "Author pick" : "the gem's own glow", lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write

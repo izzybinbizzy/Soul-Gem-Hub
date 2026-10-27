@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 172;
+	constexpr int kFloor = 183;
 
 	using namespace Gems;
 
@@ -313,8 +313,9 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 8);
+		CHECK(ReadSettings(again, back) == 9);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
+		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
 		CHECK(!back.theirsEmissive && back.theirsLightPlacer && !back.theirsMesh);
@@ -374,6 +375,7 @@ namespace
 		Settings   a;
 		CHECK(ColorAt(grand, a) == grand.rgb && ColorAt(star, a) == star.rgb);  // Automatic: the color found at data load
 		a.gemMod = praedy;
+		a.authorPick = true;  // the pick's own colors; its glow set is LightColorPick's
 		const auto& rgb = GemModAt(praedy)->rgb;
 		CHECK(ColorAt(grand, a) == rgb[static_cast<std::size_t>(Kind::kGrand)]);
 		CHECK(ColorAt(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
@@ -395,6 +397,45 @@ namespace
 		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
 		a.gemMod = 99;  // out of range: Automatic
 		CHECK(ColorAt(grand, a) == grand.rgb);
+	}
+
+	// the menu's "Light color": by default a gem whose own glow is not its light's color wears its glow, on Author pick the
+	// color as found; a glow marked always (ASGO's Solar gems) on both
+	void LightColorPick()
+	{
+		Settings s;
+		CHECK(!s.authorPick);  // the gem's own glow is the default
+		std::stringstream in("AuthorPick=1\n");
+		CHECK(ReadSettings(in, s) == 1 && s.authorPick);
+		std::stringstream out;
+		WriteSettings(s, out);
+		CHECK(out.str().find("AuthorPick=1\n") != std::string::npos);
+
+		Look praedyBlack{ Family::kPraedys, Kind::kBlack, { 125, 108, 255 } };
+		praedyBlack.glow = Rgb{ 233, 120, 255 };
+		Look plain = GameLook(Kind::kGrand, false);
+		Look solar{ Family::kGame, Kind::kGrand, { 255, 194, 65 } };
+		solar.ownColor = true;
+		solar.glow = Rgb{ 255, 110, 80 };
+		solar.glowAlways = true;
+		Settings d, author;
+		author.authorPick = true;
+		CHECK(ColorAt(praedyBlack, d) == *praedyBlack.glow && ColorAt(praedyBlack, author) == praedyBlack.rgb);
+		CHECK(ColorAt(plain, d) == plain.rgb && ColorAt(plain, author) == plain.rgb);  // no own glow listed: one color
+		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
+		// with a gem mod picked: its glow set by default, its colors on Author pick; a gem keeping its own color keeps its glow
+		const int praedy = GemModIndex("praedy");
+		d.gemMod = author.gemMod = praedy;
+		const auto* pick = GemModAt(praedy);
+		CHECK(ColorAt(plain, d) == pick->glow[static_cast<std::size_t>(Kind::kGrand)] && ColorAt(plain, author) == pick->rgb[static_cast<std::size_t>(Kind::kGrand)]);
+		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
+		// the glow table: sorted, found by its fingerprint, nothing for a file it does not list
+		CHECK(std::ranges::is_sorted(kGlowColors, {}, &GlowColor::hash));
+		bool found = true;
+		for (const auto& row : kGlowColors) {
+			found = found && GlowColorOf(row.hash) == &row;
+		}
+		CHECK(found && !GlowColorOf(0));
 	}
 }
 
@@ -466,6 +507,7 @@ int main()
 	Tokens();
 	SettingsText();
 	GemColorPick();
+	LightColorPick();
 	Permits();
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {

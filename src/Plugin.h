@@ -87,6 +87,7 @@ namespace Plugin
 	[[nodiscard]] std::string                                      RusticFound();              // "Sorted", "Unsorted", "both" or ""
 	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();               // gem records another light mod would light, by Gems::Owner
 	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();       // placed gems near the player whose other light is put out for ours
+	[[nodiscard]] std::size_t                                      GemParticleConfigs();       // Data\ParticleLights configs found at data load
 	[[nodiscard]] std::string                                      GemsReport();               // for DevBench (JSON)
 	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);  // main thread: the glow each lit shape of a placed gem shows now (JSON)
 

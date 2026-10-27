@@ -134,6 +134,15 @@ namespace Plugin
 			return ext;
 		}
 
+		// a path as UTF-8 for the log (path::string() throws on a name the local code page cannot hold)
+		[[nodiscard]] std::string Utf8(const std::filesystem::path& a_path)
+		{
+			const auto  u8 = a_path.u8string();
+			std::string out(u8.size(), '\0');
+			std::ranges::transform(u8, out.begin(), [](char8_t c) { return static_cast<char>(c); });
+			return out;
+		}
+
 		[[nodiscard]] Claims ReadLightPlacerClaims()
 		{
 			Claims          out;
@@ -141,13 +150,17 @@ namespace Plugin
 			const auto      root = std::filesystem::current_path() / "Data" / "LightPlacer";
 			std::size_t     files = 0;
 			for (std::filesystem::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
-				if (!it->is_regular_file(ec) || LowerExtension(it->path()) != L".json") {
+				std::error_code fileEc;  // one file that cannot be looked at must not end the walk
+				if (!it->is_regular_file(fileEc) || LowerExtension(it->path()) != L".json") {
 					continue;
 				}
 				std::ifstream in(it->path(), std::ios::binary);
 				const auto    doc = nlohmann::json::parse(in, nullptr, false, true);  // no exceptions; a comment does not drop the file
 				++files;
 				if (!doc.is_array()) {
+					if (doc.is_discarded()) {
+						SKSE::log::warn("Light Placer: {} did not read as JSON - the gems it claims are not known", Utf8(it->path().lexically_relative(root)));
+					}
 					continue;
 				}
 				for (const auto& entry : doc) {
@@ -166,6 +179,9 @@ namespace Plugin
 						}
 					}
 				}
+			}
+			if (ec && ec != std::errc::no_such_file_or_directory) {
+				SKSE::log::warn("Light Placer: its folder could not be read to the end ({}) - configs after that point are not known", ec.message());
 			}
 			SKSE::log::info("Light Placer is loaded: {} config file(s) read, {} model(s) and {} form(s) claimed", files, out.models.size(), out.forms.size());
 			return out;
@@ -402,6 +418,27 @@ namespace Plugin
 			return std::nullopt;
 		}
 
+		// the gem's own glow, when its first model file the glow table lists (GemGlowColors.h) says it differs from its light
+		const Gems::GlowColor* GlowOf(std::string_view a_model)
+		{
+			if (a_model.empty()) {
+				return nullptr;
+			}
+			for (const auto print : PrintsOf(a_model)) {
+				if (const auto* glow = Gems::GlowColorOf(print)) {
+					return glow;
+				}
+			}
+			return nullptr;
+		}
+
+		// a look's own glow, from a glow table row (none: the look keeps only its color)
+		void SetGlow(Gems::Look& a_look, const Gems::GlowColor* a_glow) noexcept
+		{
+			a_look.glow = a_glow ? std::optional(Gems::Rgb{ a_glow->r, a_glow->g, a_glow->b }) : std::nullopt;
+			a_look.glowAlways = a_glow && a_glow->always;
+		}
+
 		// the diffuse textures a record's own texture swaps (MODS) put on its model: Andrealletius Soul Gem Overhaul's Solar and
 		// Astral gems wear the game's models in textures of their own, so a color read off the model alone would be the game's
 		[[nodiscard]] std::vector<std::string> SwappedDiffuses(const RE::TESForm* a_form)
@@ -469,6 +506,23 @@ namespace Plugin
 			}
 			const auto rgb = all.Result();
 			return rgb ? std::optional(Gems::ShownColor(*rgb, a_kind)) : std::nullopt;
+		}
+
+		// the own glow swapped textures show, when the glow table lists one of them; once per set of textures
+		const Gems::GlowColor* SwapGlow(const std::vector<std::string>& a_textures)
+		{
+			static std::map<std::vector<std::string>, const Gems::GlowColor*> read;
+			const auto [it, added] = read.try_emplace(a_textures, nullptr);
+			if (added) {
+				for (const auto& texture : a_textures) {
+					Gems::FingerprintSum sum;
+					if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size() &&
+						(it->second = Gems::GlowColorOf(sum.Result()))) {
+						break;
+					}
+				}
+			}
+			return it->second;
 		}
 
 		// one more of a_name in a name -> count list (kept in the order first seen)
@@ -555,6 +609,7 @@ namespace Plugin
 					look->rgb = *seen;
 					look->seen = true;
 				}
+				SetGlow(*look, GlowOf(path));
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod }, a_others) ? 1 : 0;
 			}
 			return added;
@@ -1008,7 +1063,7 @@ namespace Plugin
 		}
 		const auto*                                               azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
-		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0;
+		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0, withGlow = 0;
 		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
 		for (const auto& n : kNamedForms) {
 			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
@@ -1024,6 +1079,9 @@ namespace Plugin
 		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star, std::uint32_t a_named) {
 			if (BlockedBy(a_model)) {
 				return;
+			}
+			if (!a_star) {
+				SetGlow(a_look, GlowOf(a_model));
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
@@ -1068,11 +1126,13 @@ namespace Plugin
 				}
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
-					look->seen = false;  // the base model's picture row no longer applies
+					look->seen = false;  // the base model's picture row and glow no longer apply
 					look->ownColor = true;
+					SetGlow(*look, SwapGlow(swapped));
 					++fromSwap;
 				}
 			}
+			withGlow += look->glow ? 1 : 0;
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others) && always) {
 				++lit;
@@ -1127,8 +1187,8 @@ namespace Plugin
 			gParticleTextures.size());
 		SKSE::log::info(
 			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
-			"their own swapped textures",
-			fromPicture, fromModel, fromSwap);
+			"their own swapped textures; {} have an own glow of another color (the Light color default)",
+			fromPicture, fromModel, fromSwap, withGlow);
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
@@ -1157,7 +1217,10 @@ namespace Plugin
 
 	void ApplyNow()
 	{
-		gSinceScan = kScanEvery;  // the next frame looks around again and draws every light with the settings as they are now
+		// one look around now, not at the next frame: while the menu pauses the game no frame comes, and a light switched off
+		// would stay lit until it runs again
+		gSinceScan = kScanEvery;
+		Frame(0.0f);
 		RefreshLights();
 	}
 
@@ -1178,6 +1241,7 @@ namespace Plugin
 	std::vector<std::pair<std::string, std::size_t>> GemsBlocked() { return gBlocked; }
 	std::array<std::size_t, 4>                       GemsLeftTo() { return gLeftTo; }
 	std::size_t                                      GemsLeftToOwnLight() { return gOwnLightNow.load(); }
+	std::size_t                                      GemParticleConfigs() { return gParticleTextures.size(); }
 	std::string                                      RusticFound() { return gRustic; }
 
 	std::string GlowNow(RE::FormID a_ref)
