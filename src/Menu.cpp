@@ -3,8 +3,8 @@
 // GPL-3.0-or-later; see LICENSE.txt and the notice at the top of main.cpp.
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
-// found (the lighting, the gem looks, the gems left to another mod's light), then the lights' switch, Brightness, Reach and the
-// soft pulse. A change is saved and applied on the game's main thread when it is let go.
+// found (the lighting, the gem looks, the gems left to another mod's light), then the lights' switch, Brightness, Reach, the
+// soft pulse and the gem colors pick. A change is saved and applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
@@ -79,8 +79,7 @@ namespace Plugin
 			if (SliderInt(a_label, &v, a_min, a_max, "%d%%")) {
 				v = std::clamp((v + 2) / 5 * 5, a_min, a_max);  // in steps of 5, rounded only when moved
 				if (v != s.*a_field) {
-					s.*a_field = v;
-					SetSettings(s);
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.*a_field = v; });
 					Live();
 				}
 			}
@@ -95,14 +94,40 @@ namespace Plugin
 			auto s = SettingsNow();
 			bool v = s.*a_field;
 			if (Checkbox(a_label, &v)) {
-				s.*a_field = v;
-				SetSettings(s);
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.*a_field = v; });
 				Changed();
 			}
 			MenuStyle::Tip(a_tip);
 		}
 
+		// "Gem colors": Automatic, or one gem mod's colors on every soul gem - for a gem mod the automatic reading misses
+		void GemColors()
+		{
+			auto                     s = SettingsNow();
+			int                      v = s.gemMod;
+			std::vector<const char*> items{ T("Automatic") };
+			for (const auto& pick : Gems::kGemModPicks) {
+				items.push_back(pick.name.data());  // a string literal: ends in a zero
+			}
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Gem colors"), &v, items.data(), static_cast<int>(items.size())) && v != s.gemMod) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.gemMod = v; });
+				Changed();
+			}
+			MenuStyle::Tip(T(
+				"Automatic finds each gem's color from the mod that dresses it. If your gems glow in the wrong color, pick your "
+				"gem mod: every soul gem then wears that mod's colors."));
+		}
+
+		void RenderPage();
+
+		// SKSE Menu Framework calls this from its own DLL on the render thread: nothing may be thrown back across
 		void __stdcall RenderSettings()
+		{
+			Guarded("menu page", [] { RenderPage(); });  // a lambda of its own: its own "told once" flag in Guarded
+		}
+
+		void RenderPage()
 		{
 			MenuStyle::Page page;
 
@@ -134,29 +159,38 @@ namespace Plugin
 			Header(Icon::kBulb, T("Lights"));
 			Switch(T("Soul gem lights"), &Gems::Settings::on, T("Every filled soul gem, Azura's Star and the Black Star glow in their own color."));
 			const bool on = SettingsNow().on;
-			BeginDisabled(!on);
-			Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
-				T("How bright the gems' light is. 100% is as built."));
-			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
-			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
-			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
-			const auto lighting = LightingFound();
-			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
-				Header(Icon::kGem, T("Their Own Lights"));
-				if (left[1]) {
-					Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
-						T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
-				}
-				if (left[2]) {
-					Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
-						T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
-				}
-				if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
-					Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
-						T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+			{
+				// ended however the block is left, so a caught throw never leaves the next frame disabled
+				struct Disabled
+				{
+					explicit Disabled(bool a_off) { BeginDisabled(a_off); }
+					~Disabled() { EndDisabled(); }
+					Disabled(const Disabled&) = delete;
+					Disabled& operator=(const Disabled&) = delete;
+				} disabled{ !on };
+				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
+					T("How bright the gems' light is. 100% is as built."));
+				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
+				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+				GemColors();
+				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
+				const auto lighting = LightingFound();
+				if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+					Header(Icon::kGem, T("Their Own Lights"));
+					if (left[1]) {
+						Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
+							T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
+					}
+					if (left[2]) {
+						Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
+							T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
+					}
+					if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+						Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
+							T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+					}
 				}
 			}
-			EndDisabled();
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}
 	}

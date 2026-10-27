@@ -18,11 +18,11 @@
 // the same light drawn plain on ENB and Vanilla), breathing softly when the pulse is on. A gem picked up, unloaded or turned off
 // loses its light; a game loaded drops them all.
 //
-// NOTHING ANOTHER MOD ALREADY DOES: a gem another light mod lights is left to it - a Light Placer file's
-// gem (Emissive Soul Gems', CS Light's, the CS Lights add-ons'), a gem whose model already holds a light that is not ours (Light
-// Placer's, RE::Light's, one inside the mesh - looked at every scan), and a gem whose own model carries a light (the ENB particle
-// lights of Praedy's, Subtle's, Skyking's, Kanjs' ... meshes) wherever that light shines: always on ENB, and on Community
-// Shaders when a particle-light config (Data\ParticleLights\<texture>.ini - Bottled Shaders ships one for fxglowENB) names it.
+// NEVER TWO LIGHTS ON ONE GEM, OURS ON EVERY GEM: another light on a gem we light is put out while ours is on it (OtherLights,
+// looked at every scan) - a Light Placer file's light (Emissive Soul Gems', Subtle's, CS Light's ...), RE::Light's, or a light
+// inside the gem's own model (the ENB particle lights of Praedy's, Subtle's, Skyking's ... meshes) wherever it shines: on ENB,
+// and on Community Shaders when a particle-light config (Data\ParticleLights\<texture>.ini) names it. The menu's Their Own
+// Lights gives a kind back (TheirsKept); this mod's own RE::Light files light their gems themselves (Gems::OwnerOf).
 //
 // CREDIT: a light is made and registered the way ReLight by Truman does it (github.com/TrumanGIT/ReLight, GPL-3.0-or-later,
 // used with his permission, as Illuminated uses it): a master NiPointLight cloned for every use and handed to the shadow scene
@@ -42,7 +42,7 @@ namespace Plugin
 		constexpr float       kScanEvery = 0.25f;  // seconds between looks around the player
 		constexpr std::size_t kMaxLights = 24;     // the most gem lights at once - the nearest gems
 		constexpr auto        kRetryAfter = std::chrono::seconds(15);
-		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches under 100 units)
+		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches about 100-160 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
 		constexpr const auto& kNamedForms = Gems::kNamedGems;
@@ -402,6 +402,75 @@ namespace Plugin
 			return std::nullopt;
 		}
 
+		// the diffuse textures a record's own texture swaps (MODS) put on its model: Andrealletius Soul Gem Overhaul's Solar and
+		// Astral gems wear the game's models in textures of their own, so a color read off the model alone would be the game's
+		[[nodiscard]] std::vector<std::string> SwappedDiffuses(const RE::TESForm* a_form)
+		{
+			std::vector<std::string> out;
+			const auto*              swap = a_form ? a_form->As<RE::TESModelTextureSwap>() : nullptr;
+			if (!swap || !swap->alternateTextures) {
+				return out;
+			}
+			for (const auto& alt : std::span(swap->alternateTextures, swap->numAlternateTextures)) {
+				const char* diffuse = alt.textureSet ? alt.textureSet->GetTexturePath(RE::BSTextureSet::Textures::kDiffuse) : nullptr;
+				if (diffuse && *diffuse && !Gems::IsNormalMap(diffuse)) {
+					out.emplace_back(diffuse);
+				}
+			}
+			return out;
+		}
+
+		// the gem mod waiting on its author's permission whose texture a record swaps onto its model, if any
+		// once per set of textures: a gem mod's many records share a few texture sets
+		std::optional<std::string_view> BlockedSwap(const std::vector<std::string>& a_textures)
+		{
+			static std::map<std::vector<std::string>, std::optional<std::string_view>> read;
+			const auto [it, added] = read.try_emplace(a_textures);
+			if (added) {
+				for (const auto& texture : a_textures) {
+					if ((it->second = BlockedTexture(texture))) {
+						break;
+					}
+				}
+			}
+			return it->second;
+		}
+
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind);
+
+		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule);
+		// once per set of textures and kind
+		std::optional<Gems::Rgb> SwapColor(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		{
+			static std::map<std::pair<std::vector<std::string>, Gems::Kind>, std::optional<Gems::Rgb>> read;
+			const auto [it, added] = read.try_emplace({ a_textures, a_kind });
+			if (added) {
+				it->second = SwapColorOnce(a_textures, a_kind);
+			}
+			return it->second;
+		}
+
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		{
+			for (const auto& texture : a_textures) {
+				Gems::FingerprintSum sum;
+				if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
+					if (const auto seen = Gems::SeenColorOf(sum.Result())) {
+						return seen;
+					}
+				}
+			}
+			Gems::ColorSum all;
+			for (const auto& texture : a_textures) {
+				Gems::ColorSum one;
+				if (AddTexturePixels(texture, one)) {
+					all.Add(one);
+				}
+			}
+			const auto rgb = all.Result();
+			return rgb ? std::optional(Gems::ShownColor(*rgb, a_kind)) : std::nullopt;
+		}
+
 		// one more of a_name in a name -> count list (kept in the order first seen)
 		void CountName(std::vector<std::pair<std::string, std::size_t>>& a_list, std::string_view a_name)
 		{
@@ -611,7 +680,7 @@ namespace Plugin
 			const float pulse = a_s.pulse ? Gems::PulseAt(gClock + a_kept.phase) : 1.0f;
 			const auto  shown = Gems::ShownAt(look.kind, InverseSquare(), LightingFound() == Lighting::kVanilla, a_s, pulse);
 			auto&       data = a_kept.light->GetLightRuntimeData();
-			const auto& rgb = look.rgb;
+			const auto  rgb = Gems::ColorAt(look, a_s);
 			data.diffuse = { rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f };
 			data.fade = shown.fade;
 			if (a_kept.wroteRadius != shown.radius) {
@@ -778,10 +847,11 @@ namespace Plugin
 			std::size_t onShow = 0;
 			struct Candidate
 			{
-				RE::FormID  id;
-				RE::NiNode* root;
-				const Gem*  gem;
-				float       distance;  // squared, to the player
+				RE::TESObjectREFR* ref;  // read this frame only, on the main thread
+				RE::FormID         id;
+				RE::NiNode*        root;
+				const Gem*         gem;
+				float              distance;  // squared, to the player
 			};
 			std::vector<Candidate> candidates;
 			const auto             here = player->GetPosition();
@@ -794,10 +864,6 @@ namespace Plugin
 				if (it->second.needsSoul && a_ref->extraList.GetSoulLevel() == RE::SOUL_LEVEL::kNone) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
-				if (OnShow(a_ref)) {
-					++onShow;
-					return RE::BSContainer::ForEachResult::kContinue;
-				}
 				auto*      model = a_ref->Get3D();
 				auto*      root = model ? model->AsNode() : nullptr;
 				const auto id = a_ref->GetFormID();
@@ -808,10 +874,9 @@ namespace Plugin
 				// four times a second as she walks
 				const auto held = gKept.find(id);
 				const bool lit = held != gKept.end() && held->second.light && held->second.root.get() == root;
-				candidates.push_back({ id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
+				candidates.push_back({ a_ref, id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
-			gOnShowNow = onShow;
 			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem in reach;
 			// a farther gem is let go below and takes a light again when it is among the nearest
 			std::ranges::sort(candidates, {}, &Candidate::distance);
@@ -827,12 +892,19 @@ namespace Plugin
 				if (lit.size() == kMaxLights) {
 					break;
 				}
+				// asked only of the nearest gems, outside the reference walk: it takes the Papyrus VM's lock
+				if (OnShow(c.ref)) {
+					++onShow;
+					continue;
+				}
 				auto       others = OtherLights(c.root, lighting, ownLights);
+				const bool placedLight = std::ranges::any_of(others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
 				const bool meshLight = std::ranges::any_of(others, [](const auto& a_other) { return !netimmerse_cast<RE::NiLight*>(a_other.get()); });
-				if (!Gems::TheirsKept(c.gem->owner, meshLight, a_s)) {
+				if (!Gems::TheirsKept(c.gem->owner, placedLight, meshLight, a_s)) {
 					lit.push_back({ &c, std::move(others) });
 				}
 			}
+			gOnShowNow = onShow;
 			std::size_t putOut = 0;
 			for (auto& l : lit) {
 				putOut += l.others.empty() ? 0 : 1;
@@ -852,7 +924,10 @@ namespace Plugin
 		{
 			auto*      scene = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 			const auto s = SettingsNow();
-			gSinceDisplays += (std::max)(a_delta, 0.0f);
+			if (!std::isfinite(a_delta) || a_delta < 0.0f) {
+				a_delta = 0.0f;  // one NaN would stop the scan and the pulse until the next load
+			}
+			gSinceDisplays += a_delta;
 			if (gSinceDisplays >= kDisplayEvery) {
 				gSinceDisplays = 0.0f;
 				DarkenDisplays();
@@ -862,8 +937,8 @@ namespace Plugin
 				gOwnLightNow = 0;
 				return;
 			}
-			gClock = std::fmod(gClock + (std::max)(a_delta, 0.0f), 3600.0f);
-			gSinceScan += (std::max)(a_delta, 0.0f);
+			gClock = std::fmod(gClock + a_delta, 3600.0f);
+			gSinceScan += a_delta;
 			if (gSinceScan >= kScanEvery) {
 				gSinceScan = 0.0f;
 				Scan(scene, s);
@@ -933,7 +1008,7 @@ namespace Plugin
 		}
 		const auto*                                               azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
-		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0;
+		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0;
 		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
 		for (const auto& n : kNamedForms) {
 			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
@@ -945,7 +1020,7 @@ namespace Plugin
 			return it == named.end() ? 0u : it->second;
 		};
 		// a gem wears the color its lit-room picture shows (stars keep their own; a named quest gem its own row), else a look its
-		// model colors the one read off the model; a blocked mod's is never read
+		// model colors the one read off the model; a blocked mod's model is never read here
 		const auto readColor = [&](Gems::Look& a_look, std::string_view a_model, bool a_star, std::uint32_t a_named) {
 			if (BlockedBy(a_model)) {
 				return;
@@ -966,21 +1041,37 @@ namespace Plugin
 				continue;
 			}
 			++records;
-			const bool  star = gem == azurasStar || gem == blackStar;
 			const bool  holds = gem->GetContainedSoul() != RE::SOUL_LEVEL::kNone;
 			const char* path = gem->GetModel();
 			const auto  model = std::string_view(path ? path : "");
-			auto        look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
+			// a star by its record, or by the star model it wears (a gem mod's own star records)
+			const auto starModel = Gems::StarOf(model);
+			const bool black = gem == blackStar || (gem != azurasStar && starModel == Gems::StarModel::kBlack);
+			const bool star = black || gem == azurasStar || starModel == Gems::StarModel::kAzura;
+			auto       look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
 			if (star) {
-				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, gem == azurasStar ? Gems::kAzurasStarRgb : Gems::kBlackStarRgb };
+				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, black ? Gems::kBlackStarRgb : Gems::kAzurasStarRgb };
 			} else if (!look || look->family == Gems::Family::kSoulCairn) {
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
-			// a gem left unlit for want of its author's permission never needs its color read
 			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
 			// keeps its purple
-			if (gem != blackStar) {
+			if (!black) {
 				readColor(*look, model, star, namedId(gem));
+			}
+			look->ownColor = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
+			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
+			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
+				if (const auto mod = BlockedSwap(swapped)) {
+					CountName(gBlocked, *mod);
+					continue;
+				}
+				if (const auto own = SwapColor(swapped, look->kind)) {
+					look->rgb = *own;
+					look->seen = false;  // the base model's picture row no longer applies
+					look->ownColor = true;
+					++fromSwap;
+				}
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others) && always) {
@@ -1013,6 +1104,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
+			look.ownColor = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
@@ -1027,13 +1119,16 @@ namespace Plugin
 		using enum Gems::Owner;
 		SKSE::log::info(
 			"gems: {} soul gem record(s), {} lit always ({}), the rest when a placed gem holds a soul; {} other piece(s) by their "
-			"model; Rustic Soul Gems {}; left to Emissive Soul Gems' models {}, to other Light Placer configs {}, to RE::Light {} "
-			"(Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem whose own model's light shines here is left to it",
+			"model; Rustic Soul Gems {}; taken over from Emissive Soul Gems' models {}, from other Light Placer configs {}, left to "
+			"RE::Light {} (Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem's own model light is put out under ours",
 			records, lit, list.empty() ? "none" : list, pieces, gRustic.empty() ? "not loaded" : gRustic,
 			gLeftTo[static_cast<std::size_t>(kEmissive)], gLeftTo[static_cast<std::size_t>(kLightPlacer)],
 			gLeftTo[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded", others.reLight ? "loaded" : "not loaded",
 			gParticleTextures.size());
-		SKSE::log::info("gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model", fromPicture, fromModel);
+		SKSE::log::info(
+			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
+			"their own swapped textures",
+			fromPicture, fromModel, fromSwap);
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
@@ -1109,27 +1204,32 @@ namespace Plugin
 
 	std::string GemsReport()
 	{
-		std::string lights;
+		// built as JSON, not by text: a mod or family name holding a quote or a non-UTF-8 byte stays a valid reply
+		const auto     s = SettingsNow();
+		nlohmann::json lights = nlohmann::json::array();
 		for (const auto& [id, kept] : gKept) {
 			if (!kept.light || !kept.gem) {
 				continue;
 			}
 			const auto& d = kept.light->GetLightRuntimeData();
 			const auto& p = kept.light->world.translate;
-			lights += std::format(R"({}{{"ref":"0x{:08X}","family":"{}","kind":{},"rgb":[{},{},{}],"fade":{:.4f},"radius":{:.1f},"at":[{:.0f},{:.0f},{:.0f}]}})",
-				lights.empty() ? "" : ",", id, Gems::FamilyName(kept.gem->look.family), static_cast<int>(kept.gem->look.kind),
-				kept.gem->look.rgb[0], kept.gem->look.rgb[1], kept.gem->look.rgb[2], d.fade, d.radius.x, p.x, p.y, p.z);
+			const auto  rgb = Gems::ColorAt(kept.gem->look, s);  // the color it wears now (the menu's "Gem colors" pick)
+			lights.push_back({ { "ref", std::format("0x{:08X}", id) }, { "family", std::string(Gems::FamilyName(kept.gem->look.family)) },
+				{ "kind", static_cast<int>(kept.gem->look.kind) }, { "rgb", { rgb[0], rgb[1], rgb[2] } }, { "fade", d.fade }, { "radius", d.radius.x },
+				{ "at", { std::round(p.x), std::round(p.y), std::round(p.z) } } });
 		}
-		std::string families, blocked;
+		nlohmann::json families = nlohmann::json::object(), blocked = nlohmann::json::object();
 		for (const auto& [name, n] : gFamilies) {
-			families += std::format(R"({}"{}":{})", families.empty() ? "" : ",", name, n);
+			families[name] = n;
 		}
 		for (const auto& [name, n] : gBlocked) {
-			blocked += std::format(R"({}"{}":{})", blocked.empty() ? "" : ",", name, n);
+			blocked[std::string(name)] = n;
 		}
-		return std::format(
-			R"({{"gemForms":{},"litByLook":{{{}}},"waitingOnPermission":{{{}}},"rustic":"{}","takenOver":{{"emissiveSoulGems":{},"lightPlacer":{}}},"leftTo":{{"reLight":{}}},"otherLightsPutOutNearYou":{},"onShowNearYou":{},"particleLightConfigs":{},"displays":{},"displaysDark":{},"lightsNow":{},"lightsMade":{},"lights":[{}]}})",
-			gGems.size(), families, blocked, gRustic, gLeftTo[1], gLeftTo[2], gLeftTo[3], gOwnLightNow.load(), gOnShowNow.load(), gParticleTextures.size(),
-			gDisplays.size(), gDisplaysDark.load(), gKept.size(), gMade.load(), lights);
+		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
+			{ "takenOver", { { "emissiveSoulGems", gLeftTo[1] }, { "lightPlacer", gLeftTo[2] } } }, { "leftTo", { { "reLight", gLeftTo[3] } } },
+			{ "otherLightsPutOutNearYou", gOwnLightNow.load() }, { "onShowNearYou", gOnShowNow.load() },
+			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
+			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "lights", lights } };
+		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 	}
 }

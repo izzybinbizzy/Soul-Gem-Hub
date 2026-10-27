@@ -24,8 +24,8 @@ namespace Plugin
 		const auto     lines = Gems::ReadSettings(in, read);
 		SetSettings(read);  // in the menu's steps of 5, as every other way in (the code review 2026-10-19)
 		const auto s = SettingsNow();
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {} ({} line(s) read)", s.on ? "on" : "off",
-			s.brightness, s.reach, s.pulse ? "on" : "off", lines);
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {}, gem colors {} ({} line(s) read)", s.on ? "on" : "off",
+			s.brightness, s.reach, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod), lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write
@@ -64,12 +64,28 @@ namespace Plugin
 		return gS;
 	}
 
+	namespace
+	{
+		// clamped, in steps of 5 (the menu's steps), whoever set it - the menu, DevBench or the file; under gLock
+		void Clamp(Gems::Settings& a_s)
+		{
+			a_s.brightness = std::clamp((std::clamp(a_s.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
+			a_s.reach = std::clamp((std::clamp(a_s.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+			a_s.gemMod = Gems::GemModAt(a_s.gemMod) ? a_s.gemMod : 0;
+		}
+	}
+
 	void SetSettings(const Gems::Settings& a_settings)
 	{
 		std::scoped_lock l{ gLock };
 		gS = a_settings;
-		// clamped, in steps of 5 (the menu's steps), whoever set it - the menu, DevBench or the file
-		gS.brightness = std::clamp((std::clamp(gS.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
-		gS.reach = std::clamp((std::clamp(gS.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+		Clamp(gS);
+	}
+
+	void UpdateSettings(const std::function<void(Gems::Settings&)>& a_change)
+	{
+		std::scoped_lock l{ gLock };
+		a_change(gS);
+		Clamp(gS);
 	}
 }

@@ -8,6 +8,7 @@
 #include "GemMath.h"
 
 #include <cstdio>
+#include <format>
 #include <sstream>
 #include <string>
 
@@ -29,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 151;
+	constexpr int kFloor = 172;
 
 	using namespace Gems;
 
@@ -312,7 +313,8 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 7);
+		CHECK(ReadSettings(again, back) == 8);
+		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
 		CHECK(!back.theirsEmissive && back.theirsLightPlacer && !back.theirsMesh);
@@ -323,17 +325,76 @@ namespace
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;
-		CHECK(!TheirsKept(Owner::kEmissive, true, t) && !TheirsKept(Owner::kLightPlacer, false, t));
+		CHECK(!TheirsKept(Owner::kEmissive, true, true, t) && !TheirsKept(Owner::kLightPlacer, true, false, t));
 		t.theirsEmissive = true;
-		CHECK(TheirsKept(Owner::kEmissive, false, t) && !TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kThisMod, false, t));
+		CHECK(TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kThisMod, true, false, t));
+		// the audit's M3: Emissive Soul Gems' model with no light of his on it (his mod not installed) keeps OUR light
+		CHECK(!TheirsKept(Owner::kEmissive, false, false, t));
 		t = {};
 		t.theirsLightPlacer = true;
-		CHECK(TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kEmissive, false, t));
+		CHECK(TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, false, false, t));
 		t = {};
 		t.theirsMesh = true;
-		CHECK(TheirsKept(Owner::kThisMod, true, t) && !TheirsKept(Owner::kThisMod, false, t) && !TheirsKept(Owner::kEmissive, false, t));
+		CHECK(TheirsKept(Owner::kThisMod, false, true, t) && !TheirsKept(Owner::kThisMod, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t));
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
+	}
+
+	// the menu's "Gem colors" pick (his checklist 239, 1.1): Automatic by default, a gem mod's colors on every soul gem of the six
+	// sizes when one is picked, and the stars, named gems and Soul Cairn never
+	void GemColorPick()
+	{
+		CHECK(!kGemModPicks.empty());
+		bool keysOk = true;
+		for (std::size_t i = 0; i < kGemModPicks.size(); ++i) {
+			const auto& p = kGemModPicks[i];
+			keysOk = keysOk && p.key == Lower(p.key) && GemModIndex(p.key) == static_cast<int>(i) + 1 && GemModAt(static_cast<int>(i) + 1) == &p &&
+			         std::ranges::find(kBlockedMods, p.name) == kBlockedMods.end();  // never a mod waiting on its author
+		}
+		CHECK(keysOk);
+		CHECK(GemModIndex("auto") == 0 && GemModIndex("") == 0 && GemModIndex("Mlp") == 0);
+		CHECK(!GemModAt(0) && !GemModAt(-1) && !GemModAt(static_cast<int>(kGemModPicks.size()) + 1));
+		const int praedy = GemModIndex("PRAEDY");
+		CHECK(praedy > 0 && GemModAt(praedy)->name == "Praedy's Soul Gems");
+
+		Settings          s;
+		std::stringstream in("GemMod=Praedy\n");
+		CHECK(ReadSettings(in, s) == 1 && s.gemMod == praedy);
+		std::stringstream out;
+		WriteSettings(s, out);
+		CHECK(out.str().find("GemMod=praedy\n") != std::string::npos);
+		std::stringstream odd("GemMod=a gem mod this version does not know\n");
+		CHECK(ReadSettings(odd, s) == 1 && s.gemMod == 0);
+
+		const Look grand = GameLook(Kind::kGrand, false), black = GameLook(Kind::kPetty, true);
+		const Look star{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		const Look named{ Family::kNamed, Kind::kNamed, { 1, 2, 3 } };
+		const Look cairn{ Family::kSoulCairn, Kind::kCairn, { 4, 5, 6 } };
+		const Look rustic{ Family::kRustic, Kind::kLesser, { 7, 8, 9 } };
+		Settings   a;
+		CHECK(ColorAt(grand, a) == grand.rgb && ColorAt(star, a) == star.rgb);  // Automatic: the color found at data load
+		a.gemMod = praedy;
+		const auto& rgb = GemModAt(praedy)->rgb;
+		CHECK(ColorAt(grand, a) == rgb[static_cast<std::size_t>(Kind::kGrand)]);
+		CHECK(ColorAt(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
+		CHECK(ColorAt(rustic, a) == rgb[static_cast<std::size_t>(Kind::kLesser)]);
+		CHECK(ColorAt(star, a) == star.rgb && ColorAt(named, a) == named.rgb && ColorAt(cairn, a) == cairn.rgb);
+		// a named quest gem on a plain model (FindGems builds it as the game's look for its size) keeps its own color too
+		Look plainNamed = GameLook(Kind::kPetty, true);
+		plainNamed.rgb = { 10, 20, 30 };
+		plainNamed.ownColor = true;
+		CHECK(ColorAt(plainNamed, a) == plainNamed.rgb);
+		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
+		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
+			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);
+		// GemMod as DevBench numbers it reads too; a number past the last gem mod is Automatic
+		std::stringstream number(std::format("GemMod={}\nGemMod={}\n", praedy, kGemModPicks.size() + 1));
+		Settings          n;
+		CHECK(ReadSettings(number, n) == 2 && n.gemMod == 0);
+		std::stringstream one(std::format("GemMod={}\n", praedy));
+		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
+		a.gemMod = 99;  // out of range: Automatic
+		CHECK(ColorAt(grand, a) == grand.rgb);
 	}
 }
 
@@ -386,6 +447,11 @@ namespace
 		CHECK(named.size() == 2 && named[0] == "clutter\\a\\gem.dds" && named[1] == "clutter\\a\\gem_n.dds");
 		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds"));
 		CHECK(TexturesNamed({}).empty());
+		// a path followed by one 32-126 characters long: that length's first byte is printable (')' for 41), which a scan of
+		// printable runs glued onto the path before it and lost it (the audit's H1, Animated Filled Soul Gems' gem models)
+		const std::string glued = field("NiNode") + field("textures\\clutter\\a\\b.dds") + field("textures\\clutter\\soulgem\\soulgemblack.dds");
+		const auto        both = TexturesNamed(std::span(reinterpret_cast<const std::uint8_t*>(glued.data()), glued.size()));
+		CHECK(both.size() == 2 && both[0] == "clutter\\a\\b.dds" && both[1] == "clutter\\soulgem\\soulgemblack.dds");
 	}
 }
 
@@ -399,6 +465,7 @@ int main()
 	Owners();
 	Tokens();
 	SettingsText();
+	GemColorPick();
 	Permits();
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {

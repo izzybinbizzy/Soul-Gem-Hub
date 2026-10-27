@@ -27,12 +27,13 @@ namespace Plugin
 			R"json({"description":"Soul Gem Hub - the lighting found (automatic), the settings, the soul gems this plugin lights (by look: the game's own, Praedy's, Rustic, named, stars, Soul Cairn) and those it leaves to another light mod (Emissive Soul Gems on Light Placer, other Light Placer configs, RE::Light, and the gems near the player whose own model's light shines here - ENB particle lights, or a particle-light config on Community Shaders), and every gem light near the player now with its color, fade, radius and place. Read only.","inputSchema":{"type":"object","properties":{}},"readOnly":true})json";
 
 		constexpr const char* kTool =
-			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), pulse (0/1, the soft pulse), theirsEmissive / theirsLightPlacer / theirsMesh (0/1, gems Emissive Soul Gems, another Light Placer file or their own model light keep that light instead of ours). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","pulse","theirsEmissive","theirsLightPlacer","theirsMesh"]},"value":{"type":"number"}},"required":["action"]}})json";
+			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), pulse (0/1, the soft pulse), theirsEmissive / theirsLightPlacer / theirsMesh (0/1, gems Emissive Soul Gems, another Light Placer file or their own model light keep that light instead of ours), gemMod (0 = Automatic, 1 and up = a gem mod in the menu's order, whose colors every soul gem then wears; the state's gemModName names it, a number past the last gem mod is refused). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","pulse","theirsEmissive","theirsLightPlacer","theirsMesh","gemMod"]},"value":{"type":"number"}},"required":["action"]}})json";
 
 		json SettingsJson(const Gems::Settings& a_s)
 		{
 			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "pulse", a_s.pulse },
-				{ "theirsEmissive", a_s.theirsEmissive }, { "theirsLightPlacer", a_s.theirsLightPlacer }, { "theirsMesh", a_s.theirsMesh } };
+				{ "theirsEmissive", a_s.theirsEmissive }, { "theirsLightPlacer", a_s.theirsLightPlacer }, { "theirsMesh", a_s.theirsMesh },
+				{ "gemMod", a_s.gemMod }, { "gemModName", std::string(Gems::GemModName(a_s.gemMod)) } };
 		}
 
 		// everything, read on the main thread (the lights are the main thread's)
@@ -55,7 +56,10 @@ namespace Plugin
 			try {
 				DevBenchGlue::Reply(a_sink, a_write, StateNow());
 			} catch (...) {
-				DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("the soul gem report could not be made"));
+				try {  // the refusal is JSON too and may throw (low memory) - never out of a noexcept function
+					DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("the soul gem report could not be made"));
+				} catch (...) {
+				}
 			}
 		}
 
@@ -91,27 +95,33 @@ namespace Plugin
 			if (!value) {
 				return DevBenchGlue::Refusal("set needs a number value");
 			}
-			auto      s = SettingsNow();
 			const int v = static_cast<int>(std::clamp(*value, -100000.0, 100000.0));  // finite (Number); in range before the cast
+			// the one field, changed under the settings lock - a menu change at the same moment is kept
+			std::function<void(Gems::Settings&)> change;
 			if (key == "lights") {
-				s.on = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.on = v != 0; };
 			} else if (key == "brightness") {
-				s.brightness = v;
+				change = [v](Gems::Settings& a_s) { a_s.brightness = v; };
 			} else if (key == "reach") {
-				s.reach = v;
+				change = [v](Gems::Settings& a_s) { a_s.reach = v; };
 			} else if (key == "pulse") {
-				s.pulse = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.pulse = v != 0; };
 			} else if (key == "theirsEmissive") {
-				s.theirsEmissive = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsEmissive = v != 0; };
 			} else if (key == "theirsLightPlacer") {
-				s.theirsLightPlacer = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsLightPlacer = v != 0; };
 			} else if (key == "theirsMesh") {
-				s.theirsMesh = v != 0;
+				change = [v](Gems::Settings& a_s) { a_s.theirsMesh = v != 0; };
+			} else if (key == "gemMod") {
+				if (v != 0 && !Gems::GemModAt(v)) {
+					return DevBenchGlue::Refusal(std::format("gemMod is 0 (Automatic) to {}", Gems::kGemModPicks.size()));
+				}
+				change = [v](Gems::Settings& a_s) { a_s.gemMod = v; };
 			} else {
 				return DevBenchGlue::Refusal("unknown setting '" + key + "'",
-					json::array({ "lights", "brightness", "reach", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh" }));
+					json::array({ "lights", "brightness", "reach", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh", "gemMod" }));
 			}
-			SetSettings(s);
+			UpdateSettings(change);
 			SaveSettings();
 			auto now = DevBenchGlue::OnMainThread([]() {
 				ApplyNow();
@@ -131,7 +141,10 @@ namespace Plugin
 			try {
 				DevBenchGlue::Reply(a_sink, a_write, Act(DevBenchGlue::Args(a_args)));
 			} catch (...) {
-				DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("Soul Gem Hub could not handle that"));
+				try {
+					DevBenchGlue::Reply(a_sink, a_write, DevBenchGlue::Refusal("Soul Gem Hub could not handle that"));
+				} catch (...) {
+				}
 			}
 		}
 	}

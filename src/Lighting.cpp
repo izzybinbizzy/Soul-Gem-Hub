@@ -4,8 +4,9 @@
 //
 // Which lighting the game draws with - Illuminated's Lighting.cpp (his word for this mod: "use the auto lighting detector"),
 // looked at once, at data load, never picked by the player:
-//   Community Shaders   its inverse square shader, Light Limit Fix's built-in one, or CommunityShaders.dll loaded (Bottled Shaders
-//                       keeps the name): a light's reach comes from its fade and its cutoff, written in Community Shaders' words
+//   Community Shaders   CommunityShaders.dll loaded (Bottled Shaders and Open Shaders keep the name); its inverse square shader files
+//                       are only logged - left behind without the DLL they draw nothing. A light's reach comes from its fade and
+//                       its cutoff, written in Community Shaders' words
 //   ENB                 } the game's own lighting: a light reaches its radius, drawn plain (GemMath.h ShownFor)
 //   Vanilla             }
 // Leftover ENB settings never make it ENB while Community Shaders runs (RELight 2.1's report, Illuminated's rule), and ENB's settings
@@ -27,7 +28,7 @@ namespace Plugin
 		constexpr const char* kEnbFiles[] = { "enbseries.ini", "enblocal.ini" };
 
 		std::atomic<Lighting> gFound{ Lighting::kShaders };
-		std::atomic<bool>     gIslShader{ false };
+		std::atomic<bool>     gIslFiles{ false };  // Community Shaders' inverse square shader files are in Data (logged and reported only)
 		std::atomic<bool>     gCsLoaded{ false }, gEnbRunning{ false }, gEnbFiles{ false };
 
 		[[nodiscard]] bool EnbFilesLeft()
@@ -91,20 +92,21 @@ namespace Plugin
 		const bool      shaderFile = std::filesystem::exists(std::filesystem::current_path() / kIslShader, ec);
 		const bool      inLlf = IslBuiltIntoLightLimitFix();
 		gCsLoaded = CommunityShadersLoaded();
-		gIslShader = shaderFile || inLlf || gCsLoaded;
+		// the shader files alone are a leftover when no Community Shaders runs (a hand removal), as ENB's settings files are
+		gIslFiles = shaderFile || inLlf;
 		gEnbFiles = EnbFilesLeft();
 		const auto running = EnbRunning();
 		gEnbRunning = running.value_or(gEnbFiles.load());
 		if (!running) {
 			SKSE::log::warn("lighting: the loaded modules could not be listed - ENB judged by its settings files");
 		}
-		gFound = gIslShader ? Lighting::kShaders : gEnbRunning ? Lighting::kEnb :
-		                                                         Lighting::kVanilla;
+		gFound = gCsLoaded ? Lighting::kShaders : gEnbRunning ? Lighting::kEnb :
+		                                                        Lighting::kVanilla;
 		SKSE::log::info(
 			"lighting: {} (detected - CommunityShaders.dll {}, inverse square shader {}, in Light Limit Fix {}, ENB running {}, ENB "
 			"settings in the game folder {}{}); lights drawn {}",
 			LightingName(gFound), gCsLoaded ? "loaded" : "not loaded", shaderFile ? "installed" : "not installed", inLlf ? "yes" : "no",
-			gEnbRunning ? "yes" : "no", gEnbFiles ? "yes" : "no", gEnbFiles && !gEnbRunning && !gIslShader ? " - left over, not used" : "",
+			gEnbRunning ? "yes" : "no", gEnbFiles ? "yes" : "no", gEnbFiles && !gEnbRunning && !gCsLoaded ? " - left over, not used" : "",
 			InverseSquare() ? "inverse square" : "plain");
 	}
 
@@ -132,13 +134,13 @@ namespace Plugin
 
 	bool InverseSquare()
 	{
-		return gFound.load() == Lighting::kShaders && gIslShader.load();
+		return gFound.load() == Lighting::kShaders;
 	}
 
 	std::string LightingReport()
 	{
 		return std::format(
-			R"({{"lighting":"{}","detected":true,"inverseSquareShader":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
-			LightingName(gFound), gIslShader.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
+			R"({{"lighting":"{}","detected":true,"inverseSquareFiles":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
+			LightingName(gFound), gIslFiles.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
 	}
 }

@@ -22,11 +22,17 @@ namespace Plugin
 			std::forward<F>(a_work)();
 		} catch (const std::exception& e) {
 			if (!told.exchange(true)) {
-				SKSE::log::error("{}: stopped by an error ({}); later ones here are skipped quietly", a_where, e.what());
+				try {  // the log line itself may throw (low memory) - never out of a noexcept function
+					SKSE::log::error("{}: stopped by an error ({}); later ones here are skipped quietly", a_where, e.what());
+				} catch (...) {
+				}
 			}
 		} catch (...) {
 			if (!told.exchange(true)) {
-				SKSE::log::error("{}: stopped by an unknown error; later ones here are skipped quietly", a_where);
+				try {
+					SKSE::log::error("{}: stopped by an unknown error; later ones here are skipped quietly", a_where);
+				} catch (...) {
+				}
 			}
 		}
 	}
@@ -64,6 +70,8 @@ namespace Plugin
 	void                         SaveSettings();  // any thread
 	[[nodiscard]] Gems::Settings SettingsNow();
 	void                         SetSettings(const Gems::Settings& a_settings);  // clamped; the caller saves and applies
+	// one change made under the lock, so a menu change and a DevBench change at the same moment both land; clamped
+	void UpdateSettings(const std::function<void(Gems::Settings&)>& a_change);
 
 	// ------------------------------------------------------------------ GemLights.cpp: the gems and their lights
 	void                      FindGems();       // data load: which forms are soul gems we light, and how each looks
@@ -77,8 +85,8 @@ namespace Plugin
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();              // mod -> gem records unlit until its author allows it
 	[[nodiscard]] std::string                                      RusticFound();              // "Sorted", "Unsorted", "both" or ""
-	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();               // gem records left to another light mod, by Gems::Owner
-	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();       // placed gems near the player whose own model's light shines here (left to it)
+	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();               // gem records another light mod would light, by Gems::Owner
+	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();       // placed gems near the player whose other light is put out for ours
 	[[nodiscard]] std::string                                      GemsReport();               // for DevBench (JSON)
 	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);  // main thread: the glow each lit shape of a placed gem shows now (JSON)
 

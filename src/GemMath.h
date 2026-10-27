@@ -6,11 +6,12 @@
 //   text      Lower, SameText, Trim, BareName - a model path as the plugin compares it
 //   light     CutoffFor, IslReach, PlainAt - Illuminated's LightMath.h, the same numbers; KeyAt - Truman's KeyframeSequence maths
 //   gems      which gem a model is, its color (ColorSum: off its texture pixels) and its strength
-//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer
+//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's "Gem colors" pick
 //   permits   Fingerprint, BlockedModOf - the gem mods not lit until their authors allow it (GemPermissions.h)
 
 #pragma once
 
+#include "GemModPicks.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
 
@@ -20,6 +21,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <istream>
 #include <iterator>
 #include <optional>
@@ -220,7 +222,8 @@ namespace Gems
 		Family family{ Family::kGame };
 		Kind   kind{ Kind::kGrand };
 		Rgb    rgb{ 255, 255, 255 };
-		bool   seen{ false };  // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool   seen{ false };      // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool   ownColor{ false };  // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -263,6 +266,22 @@ namespace Gems
 	// Black Star is purple by his eye - its dark azurastar.dds reads a near-white blue
 	inline constexpr Rgb kAzurasStarRgb{ 157, 255, 252 };
 	inline constexpr Rgb kBlackStarRgb{ 170, 90, 255 };
+
+	// which star a model is: Azura's Star wears azurastarlite.nif, the Black Star azurastar.nif - so a gem mod's own star records
+	// (Andrealletius Soul Gem Overhaul's Drained ... Flawless stars) are stars too, not only the game's two records
+	enum class StarModel : std::uint8_t
+	{
+		kNone,
+		kAzura,
+		kBlack,
+	};
+	[[nodiscard]] inline StarModel StarOf(std::string_view a_model)
+	{
+		const auto path = NormalPath(a_model);
+		return path == "clutter\\daedric\\azurastarlite.nif" ? StarModel::kAzura :
+		       path == "clutter\\daedric\\azurastar.nif"     ? StarModel::kBlack :
+		                                                       StarModel::kNone;
+	}
 
 	[[nodiscard]] inline const Rgb& SizeRgb(const std::array<Rgb, 6>& a_family, Kind a_kind) noexcept
 	{
@@ -437,8 +456,8 @@ namespace Gems
 	}
 
 	// Emissive Soul Gems (iamzachhunter, Nexus 191137): the models its Light Placer file lights. The two mods work together: with
-	// Light Placer loaded these models are his, whether or not his mod is installed; without Light Placer (which his mod needs)
-	// this mod lights them.
+	// Light Placer loaded these models count as his, installed or not (his light is put out while ours is on the gem, unless the
+	// menu's Their Own Lights keeps it).
 	// Whole paths, as Light Placer matches them: a replacer's copy in another folder (MLP's and Vayura's "full\", Spherical's
 	// "Filled\") is not his - its own Light Placer file, if any, claims it
 	inline constexpr std::array<std::string_view, 14> kEmissiveModels{ "clutter\\soulgem\\soulgempetty01.nif",
@@ -537,23 +556,28 @@ namespace Gems
 		return out;
 	}
 
-	// every texture a model file names, read off its bytes (a NIF keeps each path as plain text after its length), as
-	// TexturePath writes it - no model loader needed, so it works on VR too
+	// every texture a model file names, read off its bytes, in the order it stores them, as TexturePath writes it - no model
+	// loader needed, so it works on VR too. A NIF keeps each path as a 4-byte length, then the text: each ".dds" end is taken with
+	// the length that reaches it (a run of printable bytes is not enough - the next path's length byte is often printable too)
 	[[nodiscard]] inline std::vector<std::string> TexturesNamed(std::span<const std::uint8_t> a_nif)
 	{
+		constexpr std::size_t    kLongestPath = 300;
+		const char*              text = reinterpret_cast<const char*>(a_nif.data());
 		std::vector<std::string> out;
-		std::size_t              start = 0;
-		for (std::size_t i = 0; i <= a_nif.size(); ++i) {
-			if (i < a_nif.size() && a_nif[i] >= 0x20 && a_nif[i] < 0x7F) {
+		for (std::size_t end = 9; end <= a_nif.size(); ++end) {
+			if (!SameText(std::string_view(text + end - 4, 4), ".dds")) {
 				continue;
 			}
-			const std::string_view run(reinterpret_cast<const char*>(a_nif.data()) + start, i - start);
-			if (run.size() > 4 && SameText(run.substr(run.size() - 4), ".dds")) {
-				if (auto path = TexturePath(run); std::ranges::find(out, path) == out.end()) {
-					out.push_back(std::move(path));
+			for (std::size_t start = end - 5; start >= 4 && end - start <= kLongestPath; --start) {
+				std::uint32_t length = 0;
+				std::memcpy(&length, a_nif.data() + start - 4, sizeof(length));  // little-endian, as the file and the PC
+				if (length == end - start) {
+					if (auto path = TexturePath(std::string_view(text + start, end - start)); std::ranges::find(out, path) == out.end()) {
+						out.push_back(std::move(path));
+					}
+					break;
 				}
 			}
-			start = i + 1;
 		}
 		return out;
 	}
@@ -688,13 +712,52 @@ namespace Gems
 		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
 		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
 		bool theirsMesh{ false };         // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		int  gemMod{ 0 };                 // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
 	};
 
-	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays. a_meshLight: its model carries a light
-	// that shines in this game (GemLights.cpp OtherLights)
-	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_meshLight, const Settings& a_s) noexcept
+	// the "Gem colors" pick a Settings.ini value names (a kGemModPicks key, any case); 0 = Automatic, also for a value this
+	// version does not know
+	[[nodiscard]] inline int GemModIndex(std::string_view a_key) noexcept
 	{
-		return (a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer) ||
+		for (std::size_t i = 0; i < kGemModPicks.size(); ++i) {
+			if (SameText(a_key, kGemModPicks[i].key)) {
+				return static_cast<int>(i) + 1;
+			}
+		}
+		return 0;
+	}
+
+	[[nodiscard]] inline const GemModPick* GemModAt(int a_index) noexcept
+	{
+		return a_index >= 1 && static_cast<std::size_t>(a_index) <= kGemModPicks.size() ? &kGemModPicks[static_cast<std::size_t>(a_index) - 1] : nullptr;
+	}
+
+	[[nodiscard]] inline std::string_view GemModName(int a_index) noexcept
+	{
+		const auto* pick = GemModAt(a_index);
+		return pick ? pick->name : std::string_view("Automatic");
+	}
+
+	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
+	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems (on any model) and the Soul Cairn keep
+	// their own - else the color found for it at data load
+	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
+	{
+		const auto* pick = GemModAt(a_s.gemMod);
+		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
+		if (!pick || !sized || a_look.ownColor || a_look.kind > Kind::kBlack) {
+			return a_look.rgb;
+		}
+		return pick->rgb[static_cast<std::size_t>(a_look.kind)];
+	}
+
+	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
+	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that
+	// shines in this game. With Light Placer loaded every game gem model counts as Emissive Soul Gems', installed or not, so the
+	// owner alone would leave such a gem with no light at all
+	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_placedLight, bool a_meshLight, const Settings& a_s) noexcept
+	{
+		return (a_placedLight && ((a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer))) ||
 		       (a_meshLight && a_s.theirsMesh);
 	}
 
@@ -723,7 +786,14 @@ namespace Gems
 			}
 			const auto key = Trim(text.substr(0, eq));
 			const auto val = Trim(text.substr(eq + 1));
-			int        v = 0;
+			if (SameText(key, "GemMod")) {  // a gem mod's key (as written here), or its number in the menu's order (as DevBench takes it)
+				int n = 0;
+				const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), n);
+				a_out.gemMod = ec == std::errc{} && end == val.data() + val.size() && GemModAt(n) ? n : GemModIndex(val);
+				++lines;
+				continue;
+			}
+			int v = 0;
 			const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), v);
 			if (ec != std::errc{} || end != val.data() + val.size()) {
 				continue;
@@ -752,9 +822,11 @@ namespace Gems
 
 	inline void WriteSettings(const Settings& a_s, std::ostream& a_out)
 	{
+		const auto* pick = GemModAt(a_s.gemMod);
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
-			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\n";
+			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
+			  << (pick ? pick->key : std::string_view("auto")) << "\n";
 	}
 }
