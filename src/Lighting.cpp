@@ -28,7 +28,7 @@ namespace Plugin
 		constexpr const char* kEnbFiles[] = { "enbseries.ini", "enblocal.ini" };
 
 		std::atomic<Lighting> gFound{ Lighting::kShaders };
-		std::atomic<bool>     gIslShader{ false };
+		std::atomic<bool>     gIslFiles{ false };  // Community Shaders' inverse square shader files are in Data (logged and reported only)
 		std::atomic<bool>     gCsLoaded{ false }, gEnbRunning{ false }, gEnbFiles{ false };
 
 		[[nodiscard]] bool EnbFilesLeft()
@@ -93,20 +93,20 @@ namespace Plugin
 		const bool      inLlf = IslBuiltIntoLightLimitFix();
 		gCsLoaded = CommunityShadersLoaded();
 		// the shader files alone are a leftover when no Community Shaders runs (a hand removal), as ENB's settings files are
-		gIslShader = gCsLoaded.load();
+		gIslFiles = shaderFile || inLlf;
 		gEnbFiles = EnbFilesLeft();
 		const auto running = EnbRunning();
 		gEnbRunning = running.value_or(gEnbFiles.load());
 		if (!running) {
 			SKSE::log::warn("lighting: the loaded modules could not be listed - ENB judged by its settings files");
 		}
-		gFound = gIslShader ? Lighting::kShaders : gEnbRunning ? Lighting::kEnb :
-		                                                         Lighting::kVanilla;
+		gFound = gCsLoaded ? Lighting::kShaders : gEnbRunning ? Lighting::kEnb :
+		                                                        Lighting::kVanilla;
 		SKSE::log::info(
 			"lighting: {} (detected - CommunityShaders.dll {}, inverse square shader {}, in Light Limit Fix {}, ENB running {}, ENB "
 			"settings in the game folder {}{}); lights drawn {}",
 			LightingName(gFound), gCsLoaded ? "loaded" : "not loaded", shaderFile ? "installed" : "not installed", inLlf ? "yes" : "no",
-			gEnbRunning ? "yes" : "no", gEnbFiles ? "yes" : "no", gEnbFiles && !gEnbRunning && !gIslShader ? " - left over, not used" : "",
+			gEnbRunning ? "yes" : "no", gEnbFiles ? "yes" : "no", gEnbFiles && !gEnbRunning && !gCsLoaded ? " - left over, not used" : "",
 			InverseSquare() ? "inverse square" : "plain");
 	}
 
@@ -134,13 +134,13 @@ namespace Plugin
 
 	bool InverseSquare()
 	{
-		return gFound.load() == Lighting::kShaders && gIslShader.load();
+		return gFound.load() == Lighting::kShaders;
 	}
 
 	std::string LightingReport()
 	{
 		return std::format(
-			R"({{"lighting":"{}","detected":true,"inverseSquareShader":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
-			LightingName(gFound), gIslShader.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
+			R"({{"lighting":"{}","detected":true,"inverseSquareFiles":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
+			LightingName(gFound), gIslFiles.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
 	}
 }

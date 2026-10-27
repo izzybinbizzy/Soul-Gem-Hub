@@ -856,7 +856,7 @@ namespace Plugin
 			if (!std::isfinite(a_delta) || a_delta < 0.0f) {
 				a_delta = 0.0f;  // one NaN would stop the scan and the pulse until the next load
 			}
-			gSinceDisplays += (std::max)(a_delta, 0.0f);
+			gSinceDisplays += a_delta;
 			if (gSinceDisplays >= kDisplayEvery) {
 				gSinceDisplays = 0.0f;
 				DarkenDisplays();
@@ -866,8 +866,8 @@ namespace Plugin
 				gOwnLightNow = 0;
 				return;
 			}
-			gClock = std::fmod(gClock + (std::max)(a_delta, 0.0f), 3600.0f);
-			gSinceScan += (std::max)(a_delta, 0.0f);
+			gClock = std::fmod(gClock + a_delta, 3600.0f);
+			gSinceScan += a_delta;
 			if (gSinceScan >= kScanEvery) {
 				gSinceScan = 0.0f;
 				Scan(scene, s);
