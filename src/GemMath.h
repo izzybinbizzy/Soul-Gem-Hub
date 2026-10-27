@@ -221,7 +221,8 @@ namespace Gems
 		Family family{ Family::kGame };
 		Kind   kind{ Kind::kGrand };
 		Rgb    rgb{ 255, 255, 255 };
-		bool   seen{ false };  // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool   seen{ false };   // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool   named{ false };  // a named quest gem, whatever model it wears: keeps its own color under the "Gem colors" pick
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -709,14 +710,20 @@ namespace Gems
 		return a_index >= 1 && static_cast<std::size_t>(a_index) <= kGemModPicks.size() ? &kGemModPicks[static_cast<std::size_t>(a_index) - 1] : nullptr;
 	}
 
+	[[nodiscard]] inline std::string_view GemModName(int a_index) noexcept
+	{
+		const auto* pick = GemModAt(a_index);
+		return pick ? pick->name : std::string_view("Automatic");
+	}
+
 	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
-	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems and the Soul Cairn keep their own - else
-	// the color found for it at data load
+	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems (on any model) and the Soul Cairn keep
+	// their own - else the color found for it at data load
 	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
 	{
 		const auto* pick = GemModAt(a_s.gemMod);
 		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
-		if (!pick || !sized || a_look.kind > Kind::kBlack) {
+		if (!pick || !sized || a_look.named || a_look.kind > Kind::kBlack) {
 			return a_look.rgb;
 		}
 		return pick->rgb[static_cast<std::size_t>(a_look.kind)];
@@ -755,8 +762,10 @@ namespace Gems
 			}
 			const auto key = Trim(text.substr(0, eq));
 			const auto val = Trim(text.substr(eq + 1));
-			if (SameText(key, "GemMod")) {  // a gem mod's key, not a number
-				a_out.gemMod = GemModIndex(val);
+			if (SameText(key, "GemMod")) {  // a gem mod's key (as written here), or its number in the menu's order (as DevBench takes it)
+				int n = 0;
+				const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), n);
+				a_out.gemMod = ec == std::errc{} && end == val.data() + val.size() && GemModAt(n) ? n : GemModIndex(val);
 				++lines;
 				continue;
 			}
@@ -789,10 +798,11 @@ namespace Gems
 
 	inline void WriteSettings(const Settings& a_s, std::ostream& a_out)
 	{
+		const auto* pick = GemModAt(a_s.gemMod);
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
-			  << (GemModAt(a_s.gemMod) ? GemModAt(a_s.gemMod)->key : std::string_view("auto")) << "\n";
+			  << (pick ? pick->key : std::string_view("auto")) << "\n";
 	}
 }

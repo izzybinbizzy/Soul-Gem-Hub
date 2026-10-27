@@ -982,6 +982,7 @@ namespace Plugin
 			if (gem != blackStar) {
 				readColor(*look, model, star, namedId(gem));
 			}
+			look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			if (Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others) && always) {
 				++lit;
@@ -1013,6 +1014,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
+			look.named = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();

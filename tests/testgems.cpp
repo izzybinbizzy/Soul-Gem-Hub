@@ -8,6 +8,7 @@
 #include "GemMath.h"
 
 #include <cstdio>
+#include <format>
 #include <sstream>
 #include <string>
 
@@ -29,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 166;
+	constexpr int kFloor = 169;
 
 	using namespace Gems;
 
@@ -376,6 +377,17 @@ namespace
 		CHECK(ColorAt(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
 		CHECK(ColorAt(rustic, a) == rgb[static_cast<std::size_t>(Kind::kLesser)]);
 		CHECK(ColorAt(star, a) == star.rgb && ColorAt(named, a) == named.rgb && ColorAt(cairn, a) == cairn.rgb);
+		// a named quest gem on a plain model (FindGems builds it as the game's look for its size) keeps its own color too
+		Look plainNamed = GameLook(Kind::kPetty, true);
+		plainNamed.rgb = { 10, 20, 30 };
+		plainNamed.named = true;
+		CHECK(ColorAt(plainNamed, a) == plainNamed.rgb);
+		// GemMod as DevBench numbers it reads too; a number past the last gem mod is Automatic
+		std::stringstream number(std::format("GemMod={}\nGemMod={}\n", praedy, kGemModPicks.size() + 1));
+		Settings          n;
+		CHECK(ReadSettings(number, n) == 2 && n.gemMod == 0);
+		std::stringstream one(std::format("GemMod={}\n", praedy));
+		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
 		a.gemMod = 99;  // out of range: Automatic
 		CHECK(ColorAt(grand, a) == grand.rgb);
 	}
