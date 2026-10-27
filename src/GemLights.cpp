@@ -188,13 +188,36 @@ namespace Plugin
 			return out;
 		}
 
+		using TweaksEditorId = const char* (*)(std::uint32_t);
+
+		[[nodiscard]] TweaksEditorId FindTweaksEditorId()
+		{
+			const auto tweaks = REX::W32::GetModuleHandleW(L"po3_Tweaks");
+			if (!tweaks) {
+				return nullptr;
+			}
+			return reinterpret_cast<TweaksEditorId>(REX::W32::GetProcAddress(tweaks, "GetFormEditorID"));
+		}
+
+		// the game keeps no editor ID for a soul gem: powerofthree's Tweaks keeps them and exports the lookup, so ask it first
+		[[nodiscard]] const char* EditorIdOf(const RE::TESForm* a_form)
+		{
+			static const TweaksEditorId tweaks = FindTweaksEditorId();
+			if (tweaks) {
+				if (const char* id = tweaks(a_form->GetFormID()); id && *id) {
+					return id;
+				}
+			}
+			return a_form->GetFormEditorID();
+		}
+
 		// does a formIDs token name this form ("SoulGemGrandFilled", "0x2E4FF~Skyrim.esm", "0002E4FF~skyrim.esm" ...)
 		[[nodiscard]] bool Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model)
 		{
 			if (a_claims.models.contains(Gems::NormalPath(a_model))) {
 				return true;
 			}
-			if (const char* id = a_form->GetFormEditorID(); id && *id && a_claims.forms.contains(Lower(id))) {
+			if (const char* id = EditorIdOf(a_form); id && *id && a_claims.forms.contains(Lower(id))) {
 				return true;
 			}
 			const auto* file = a_form->GetFile(0);
