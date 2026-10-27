@@ -21,6 +21,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <istream>
 #include <iterator>
 #include <optional>
@@ -539,23 +540,28 @@ namespace Gems
 		return out;
 	}
 
-	// every texture a model file names, read off its bytes (a NIF keeps each path as plain text after its length), as
-	// TexturePath writes it - no model loader needed, so it works on VR too
+	// every texture a model file names, read off its bytes, in the order it stores them, as TexturePath writes it - no model
+	// loader needed, so it works on VR too. A NIF keeps each path as a 4-byte length, then the text: each ".dds" end is taken with
+	// the length that reaches it (a run of printable bytes is not enough - the next path's length byte is often printable too)
 	[[nodiscard]] inline std::vector<std::string> TexturesNamed(std::span<const std::uint8_t> a_nif)
 	{
+		constexpr std::size_t    kLongestPath = 300;
+		const char*              text = reinterpret_cast<const char*>(a_nif.data());
 		std::vector<std::string> out;
-		std::size_t              start = 0;
-		for (std::size_t i = 0; i <= a_nif.size(); ++i) {
-			if (i < a_nif.size() && a_nif[i] >= 0x20 && a_nif[i] < 0x7F) {
+		for (std::size_t end = 9; end <= a_nif.size(); ++end) {
+			if (!SameText(std::string_view(text + end - 4, 4), ".dds")) {
 				continue;
 			}
-			const std::string_view run(reinterpret_cast<const char*>(a_nif.data()) + start, i - start);
-			if (run.size() > 4 && SameText(run.substr(run.size() - 4), ".dds")) {
-				if (auto path = TexturePath(run); std::ranges::find(out, path) == out.end()) {
-					out.push_back(std::move(path));
+			for (std::size_t start = end - 5; start >= 4 && end - start <= kLongestPath; --start) {
+				std::uint32_t length = 0;
+				std::memcpy(&length, a_nif.data() + start - 4, sizeof(length));  // little-endian, as the file and the PC
+				if (length == end - start) {
+					if (auto path = TexturePath(std::string_view(text + start, end - start)); std::ranges::find(out, path) == out.end()) {
+						out.push_back(std::move(path));
+					}
+					break;
 				}
 			}
-			start = i + 1;
 		}
 		return out;
 	}
@@ -729,11 +735,13 @@ namespace Gems
 		return pick->rgb[static_cast<std::size_t>(a_look.kind)];
 	}
 
-	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays. a_meshLight: its model carries a light
-	// that shines in this game (GemLights.cpp OtherLights)
-	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_meshLight, const Settings& a_s) noexcept
+	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
+	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that
+	// shines in this game. With Light Placer loaded every game gem model counts as Emissive Soul Gems', installed or not, so the
+	// owner alone would leave such a gem with no light at all
+	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_placedLight, bool a_meshLight, const Settings& a_s) noexcept
 	{
-		return (a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer) ||
+		return (a_placedLight && ((a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer))) ||
 		       (a_meshLight && a_s.theirsMesh);
 	}
 

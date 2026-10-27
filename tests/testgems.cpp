@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 169;
+	constexpr int kFloor = 171;
 
 	using namespace Gems;
 
@@ -325,15 +325,17 @@ namespace
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;
-		CHECK(!TheirsKept(Owner::kEmissive, true, t) && !TheirsKept(Owner::kLightPlacer, false, t));
+		CHECK(!TheirsKept(Owner::kEmissive, true, true, t) && !TheirsKept(Owner::kLightPlacer, true, false, t));
 		t.theirsEmissive = true;
-		CHECK(TheirsKept(Owner::kEmissive, false, t) && !TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kThisMod, false, t));
+		CHECK(TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kThisMod, true, false, t));
+		// the audit's M3: Emissive Soul Gems' model with no light of his on it (his mod not installed) keeps OUR light
+		CHECK(!TheirsKept(Owner::kEmissive, false, false, t));
 		t = {};
 		t.theirsLightPlacer = true;
-		CHECK(TheirsKept(Owner::kLightPlacer, false, t) && !TheirsKept(Owner::kEmissive, false, t));
+		CHECK(TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, false, false, t));
 		t = {};
 		t.theirsMesh = true;
-		CHECK(TheirsKept(Owner::kThisMod, true, t) && !TheirsKept(Owner::kThisMod, false, t) && !TheirsKept(Owner::kEmissive, false, t));
+		CHECK(TheirsKept(Owner::kThisMod, false, true, t) && !TheirsKept(Owner::kThisMod, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t));
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}
@@ -442,6 +444,11 @@ namespace
 		CHECK(named.size() == 2 && named[0] == "clutter\\a\\gem.dds" && named[1] == "clutter\\a\\gem_n.dds");
 		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds"));
 		CHECK(TexturesNamed({}).empty());
+		// a path followed by one 32-126 characters long: that length's first byte is printable (')' for 41), which a scan of
+		// printable runs glued onto the path before it and lost it (the audit's H1, Animated Filled Soul Gems' gem models)
+		const std::string glued = field("NiNode") + field("textures\\clutter\\a\\b.dds") + field("textures\\clutter\\soulgem\\soulgemblack.dds");
+		const auto        both = TexturesNamed(std::span(reinterpret_cast<const std::uint8_t*>(glued.data()), glued.size()));
+		CHECK(both.size() == 2 && both[0] == "clutter\\a\\b.dds" && both[1] == "clutter\\soulgem\\soulgemblack.dds");
 	}
 }
 

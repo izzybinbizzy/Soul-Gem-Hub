@@ -18,11 +18,11 @@
 // the same light drawn plain on ENB and Vanilla), breathing softly when the pulse is on. A gem picked up, unloaded or turned off
 // loses its light; a game loaded drops them all.
 //
-// NOTHING ANOTHER MOD ALREADY DOES: a gem another light mod lights is left to it - a Light Placer file's
-// gem (Emissive Soul Gems', CS Light's, the CS Lights add-ons'), a gem whose model already holds a light that is not ours (Light
-// Placer's, RE::Light's, one inside the mesh - looked at every scan), and a gem whose own model carries a light (the ENB particle
-// lights of Praedy's, Subtle's, Skyking's, Kanjs' ... meshes) wherever that light shines: always on ENB, and on Community
-// Shaders when a particle-light config (Data\ParticleLights\<texture>.ini - Bottled Shaders ships one for fxglowENB) names it.
+// NEVER TWO LIGHTS ON ONE GEM, OURS ON EVERY GEM: another light on a gem we light is put out while ours is on it (OtherLights,
+// looked at every scan) - a Light Placer file's light (Emissive Soul Gems', Subtle's, CS Light's ...), RE::Light's, or a light
+// inside the gem's own model (the ENB particle lights of Praedy's, Subtle's, Skyking's ... meshes) wherever it shines: on ENB,
+// and on Community Shaders when a particle-light config (Data\ParticleLights\<texture>.ini) names it. The menu's Their Own
+// Lights gives a kind back (TheirsKept); this mod's own RE::Light files light their gems themselves (Gems::OwnerOf).
 //
 // CREDIT: a light is made and registered the way ReLight by Truman does it (github.com/TrumanGIT/ReLight, GPL-3.0-or-later,
 // used with his permission, as Illuminated uses it): a master NiPointLight cloned for every use and handed to the shadow scene
@@ -828,8 +828,9 @@ namespace Plugin
 					break;
 				}
 				auto       others = OtherLights(c.root, lighting, ownLights);
+				const bool placedLight = std::ranges::any_of(others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
 				const bool meshLight = std::ranges::any_of(others, [](const auto& a_other) { return !netimmerse_cast<RE::NiLight*>(a_other.get()); });
-				if (!Gems::TheirsKept(c.gem->owner, meshLight, a_s)) {
+				if (!Gems::TheirsKept(c.gem->owner, placedLight, meshLight, a_s)) {
 					lit.push_back({ &c, std::move(others) });
 				}
 			}
@@ -852,6 +853,9 @@ namespace Plugin
 		{
 			auto*      scene = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 			const auto s = SettingsNow();
+			if (!std::isfinite(a_delta) || a_delta < 0.0f) {
+				a_delta = 0.0f;  // one NaN would stop the scan and the pulse until the next load
+			}
 			gSinceDisplays += (std::max)(a_delta, 0.0f);
 			if (gSinceDisplays >= kDisplayEvery) {
 				gSinceDisplays = 0.0f;

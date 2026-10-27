@@ -4,8 +4,9 @@
 //
 // Which lighting the game draws with - Illuminated's Lighting.cpp (his word for this mod: "use the auto lighting detector"),
 // looked at once, at data load, never picked by the player:
-//   Community Shaders   its inverse square shader, Light Limit Fix's built-in one, or CommunityShaders.dll loaded (Bottled Shaders
-//                       keeps the name): a light's reach comes from its fade and its cutoff, written in Community Shaders' words
+//   Community Shaders   CommunityShaders.dll loaded (Bottled Shaders and Open Shaders keep the name); its inverse square shader files
+//                       are only logged - left behind without the DLL they draw nothing. A light's reach comes from its fade and
+//                       its cutoff, written in Community Shaders' words
 //   ENB                 } the game's own lighting: a light reaches its radius, drawn plain (GemMath.h ShownFor)
 //   Vanilla             }
 // Leftover ENB settings never make it ENB while Community Shaders runs (RELight 2.1's report, Illuminated's rule), and ENB's settings
@@ -91,7 +92,8 @@ namespace Plugin
 		const bool      shaderFile = std::filesystem::exists(std::filesystem::current_path() / kIslShader, ec);
 		const bool      inLlf = IslBuiltIntoLightLimitFix();
 		gCsLoaded = CommunityShadersLoaded();
-		gIslShader = shaderFile || inLlf || gCsLoaded;
+		// the shader files alone are a leftover when no Community Shaders runs (a hand removal), as ENB's settings files are
+		gIslShader = gCsLoaded.load();
 		gEnbFiles = EnbFilesLeft();
 		const auto running = EnbRunning();
 		gEnbRunning = running.value_or(gEnbFiles.load());
