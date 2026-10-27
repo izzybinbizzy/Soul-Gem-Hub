@@ -31,6 +31,7 @@
 #include "Plugin.h"
 
 #include <DirectXTex.h>
+#include <map>
 #include <nlohmann/json.hpp>
 
 namespace Plugin
@@ -421,18 +422,36 @@ namespace Plugin
 		}
 
 		// the gem mod waiting on its author's permission whose texture a record swaps onto its model, if any
+		// once per set of textures: a gem mod's many records share a few texture sets
 		std::optional<std::string_view> BlockedSwap(const std::vector<std::string>& a_textures)
 		{
-			for (const auto& texture : a_textures) {
-				if (const auto mod = BlockedTexture(texture)) {
-					return mod;
+			static std::map<std::vector<std::string>, std::optional<std::string_view>> read;
+			const auto [it, added] = read.try_emplace(a_textures);
+			if (added) {
+				for (const auto& texture : a_textures) {
+					if ((it->second = BlockedTexture(texture))) {
+						break;
+					}
 				}
 			}
-			return std::nullopt;
+			return it->second;
 		}
 
-		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule)
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind);
+
+		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule);
+		// once per set of textures and kind
 		std::optional<Gems::Rgb> SwapColor(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		{
+			static std::map<std::pair<std::vector<std::string>, Gems::Kind>, std::optional<Gems::Rgb>> read;
+			const auto [it, added] = read.try_emplace({ a_textures, a_kind });
+			if (added) {
+				it->second = SwapColorOnce(a_textures, a_kind);
+			}
+			return it->second;
+		}
+
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
 		{
 			for (const auto& texture : a_textures) {
 				Gems::FingerprintSum sum;
@@ -1048,6 +1067,7 @@ namespace Plugin
 				}
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
+					look->seen = false;  // the base model's picture row no longer applies
 					look->ownColor = true;
 					++fromSwap;
 				}

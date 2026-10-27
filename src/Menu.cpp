@@ -127,7 +127,7 @@ namespace Plugin
 		// SKSE Menu Framework calls this from its own DLL on the render thread: nothing may be thrown back across
 		void __stdcall RenderSettings()
 		{
-			Guarded("menu page", RenderPage);
+			Guarded("menu page", [] { RenderPage(); });  // a lambda of its own: its own "told once" flag in Guarded
 		}
 
 		void RenderPage()
@@ -162,30 +162,38 @@ namespace Plugin
 			Header(Icon::kBulb, T("Lights"));
 			Switch(T("Soul gem lights"), &Gems::Settings::on, T("Every filled soul gem, Azura's Star and the Black Star glow in their own color."));
 			const bool on = SettingsNow().on;
-			BeginDisabled(!on);
-			Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
-				T("How bright the gems' light is. 100% is as built."));
-			Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
-			Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
-			GemColors();
-			// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
-			const auto lighting = LightingFound();
-			if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
-				Header(Icon::kGem, T("Their Own Lights"));
-				if (left[1]) {
-					Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
-						T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
-				}
-				if (left[2]) {
-					Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
-						T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
-				}
-				if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
-					Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
-						T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+			{
+				// ended however the block is left, so a caught throw never leaves the next frame disabled
+				struct Disabled
+				{
+					explicit Disabled(bool a_off) { BeginDisabled(a_off); }
+					~Disabled() { EndDisabled(); }
+					Disabled(const Disabled&) = delete;
+					Disabled& operator=(const Disabled&) = delete;
+				} disabled{ !on };
+				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
+					T("How bright the gems' light is. 100% is as built."));
+				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
+				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+				GemColors();
+				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
+				const auto lighting = LightingFound();
+				if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+					Header(Icon::kGem, T("Their Own Lights"));
+					if (left[1]) {
+						Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
+							T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
+					}
+					if (left[2]) {
+						Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
+							T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
+					}
+					if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+						Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
+							T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+					}
 				}
 			}
-			EndDisabled();
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}
 	}
