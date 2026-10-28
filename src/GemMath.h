@@ -640,6 +640,16 @@ namespace Gems
 		return Rgb{ it->r, it->g, it->b };
 	}
 
+	// a Soul Cairn piece's color set by eye, by a file its model reads: Morrowind-Style Soulgems' common gem texture dresses the bowl
+	// and chunks pink-lavender - the Soul Cairn's pieces only, its common gem keeps its own row
+	inline constexpr std::array<SeenColor, 1> kCairnEyeColors{ { { 0x2B8D94EE2E85315DULL, 252, 168, 255 } } };
+
+	[[nodiscard]] inline std::optional<Rgb> CairnEyeColorOf(std::uint64_t a_fingerprint) noexcept
+	{
+		const auto it = std::ranges::find(kCairnEyeColors, a_fingerprint, &SeenColor::hash);
+		return it == kCairnEyeColors.end() ? std::nullopt : std::optional(Rgb{ it->r, it->g, it->b });
+	}
+
 	// a known gem file's own glow, listed where it is not the color its light wears, or none
 	[[nodiscard]] inline const GlowColor* GlowColorOf(std::uint64_t a_fingerprint) noexcept
 	{

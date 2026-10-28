@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 228;
+	constexpr int kFloor = 231;
 
 	using namespace Gems;
 
@@ -248,6 +248,10 @@ namespace
 		CHECK(!IsDisplayScript("dunYngvildSoulgemScript"));
 		CHECK(KnownDisplay("legacyofthedragonborn.esm", 0x9212C6) && KnownDisplay("LegacyoftheDragonborn.esm", 0x01C59B));
 		CHECK(!KnownDisplay("LegacyoftheDragonborn.esm", 0x02E4E2) && !KnownDisplay("Skyrim.esm", 0x9212C6));
+		// Morrowind-Style's common texture: the Soul Cairn's pieces take his eye call, its common gem keeps its own row
+		CHECK((CairnEyeColorOf(0x2B8D94EE2E85315DULL) == Rgb{ 252, 168, 255 }));
+		CHECK(!CairnEyeColorOf(0x369A766BBF5EF72CULL) && !SeenColorOf(0x2B8D94EE2E85315DULL));
+		CHECK((SeenColorOf(0x369A766BBF5EF72CULL) == Rgb{ 232, 173, 255 }));
 		CHECK(ReLightKeyed("_pgpatcher_dups\\1\\dlc01\\clutter\\dlc01soulgemchunk01.nif"));
 		CHECK(ReLightKeyed("clutter\\soulgem\\soulgemgrand01fullcommon.nif"));
 		CHECK(!ReLightKeyed("_pgpatcher_dups\\1\\clutter\\soulgem\\soulgemcommon01.nif"));

@@ -469,6 +469,17 @@ namespace Plugin
 			return std::nullopt;
 		}
 
+		// a Soul Cairn piece's color set by eye (GemMath.h kCairnEyeColors), by the files SeenColor reads
+		std::optional<Gems::Rgb> CairnEyeColor(std::string_view a_model)
+		{
+			for (const auto print : PrintsOf(a_model)) {
+				if (const auto eye = Gems::CairnEyeColorOf(print)) {
+					return eye;
+				}
+			}
+			return std::nullopt;
+		}
+
 		// the gem's own glow, when its first model file the glow table lists (GemGlowColors.h) says it differs from its light
 		const Gems::GlowColor* GlowOf(std::string_view a_model)
 		{
@@ -662,7 +673,9 @@ namespace Plugin
 				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && look->family == Gems::Family::kNamed))) {
 					continue;
 				}
-				if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
+				if (const auto eye = look->kind == Gems::Kind::kCairn ? CairnEyeColor(path) : std::nullopt) {
+					look->rgb = *eye;
+				} else if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
 					look->rgb = *seen;
 				}
 				SetGlow(*look, GlowOf(path));
