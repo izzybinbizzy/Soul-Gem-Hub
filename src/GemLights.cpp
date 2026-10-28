@@ -45,8 +45,6 @@ namespace Plugin
 		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches about 100-160 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
-		constexpr const auto& kNamedForms = Gems::kNamedGems;
-
 		// ---------------------------------------------------------- the light, as Illuminated's LightKit.h makes it
 		// Community Shaders' inverse-square lighting reads a flag and the cutoff from the first eight bytes of a light's runtime data
 		// (as the game lays it out, its ambient color's red and green); read and written as bytes, always after SetLightAttenuation
@@ -360,7 +358,8 @@ namespace Plugin
 					}
 				}
 			}
-			it->second = glowing.Result() ? glowing.Result() : all.Result();
+			const auto glow = glowing.Result();
+			it->second = glow ? glow : all.Result();
 			return it->second;
 		}
 
@@ -647,8 +646,7 @@ namespace Plugin
 		}
 
 		// displays (statics wearing a gem's or a Soul Cairn piece's model, or a copy RE::Light's keys reach) that RE::Light lights:
-		// his answer to checklist 138, "make our mod turn off displays" - with RE::Light loaded their light is put out (displays never
-		// get lit)
+		// with RE::Light loaded their light is put out, since displays never get lit
 		std::unordered_set<const RE::TESBoundObject*> gDisplays;
 		std::atomic<std::size_t>                      gDisplaysDark{ 0 };
 		constexpr const char*                         kReLightName = "RL";  // the name RE::Light gives every light it hangs
@@ -933,11 +931,11 @@ namespace Plugin
 			std::size_t onShow = 0;
 			struct Candidate
 			{
-				RE::TESObjectREFR* ref;  // read this frame only, on the main thread
-				RE::FormID         id;
-				RE::NiNode*        root;
-				const Gem*         gem;
-				float              distance;  // squared, to the player
+				RE::TESObjectREFR* ref{ nullptr };  // read this frame only, on the main thread
+				RE::FormID         id{ 0 };
+				RE::NiNode*        root{ nullptr };
+				const Gem*         gem{ nullptr };
+				float              distance{ 0.0f };  // squared, to the player
 			};
 			std::vector<Candidate> candidates;
 			const auto             here = player->GetPosition();
@@ -970,7 +968,7 @@ namespace Plugin
 			// go below and the lights it put out come back
 			struct Lit
 			{
-				const Candidate*                           c;
+				const Candidate*                           c{ nullptr };
 				std::vector<RE::NiPointer<RE::NiAVObject>> others;
 			};
 			std::vector<Lit> lit;
@@ -1096,7 +1094,7 @@ namespace Plugin
 		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
 		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0, withGlow = 0;
 		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
-		for (const auto& n : kNamedForms) {
+		for (const auto& n : Gems::kNamedGems) {
 			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
 				named.emplace_back(form, n.id);
 			}
@@ -1174,7 +1172,7 @@ namespace Plugin
 		                     AddByModel<RE::TESObjectACTI>(false, others) + AddByModel<RE::TESFurniture>(false, others);
 		// the named quest gems are lit always, on any look: with no model of their own they wear a plain gem's, in their own
 		// lit-room color where a picture read it (kNamedSeenColors), else the plain gem's
-		for (const auto& n : kNamedForms) {
+		for (const auto& n : Gems::kNamedGems) {
 			auto*       form = dh->LookupForm(n.id, n.plugin);
 			auto*       bound = form ? form->As<RE::TESBoundObject>() : nullptr;
 			const auto* has = bound ? form->As<RE::TESModel>() : nullptr;
@@ -1270,7 +1268,6 @@ namespace Plugin
 	}
 
 	std::size_t GemLightCount() { return gCount.load(); }
-	std::size_t GemLightsMade() { return gMade.load(); }
 
 	std::vector<std::pair<std::string, std::size_t>> GemFamilies() { return gFamilies; }
 	std::vector<std::pair<std::string, std::size_t>> GemsBlocked() { return gBlocked; }

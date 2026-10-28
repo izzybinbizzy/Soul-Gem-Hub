@@ -248,8 +248,8 @@ namespace Gems
 	struct NamedModel
 	{
 		std::string_view path;  // the model as NormalPath writes it (a copy under another folder - a mod's decor - is not it)
-		Family           family;
-		Kind             kind;
+		Family           family{};
+		Kind             kind{};
 		Rgb              rgb;
 	};
 	// the gems and pieces known by their own model, each in its own textures' color: the named gems' models are Praedy's Soul Gems'
@@ -638,9 +638,9 @@ namespace Gems
 
 	struct NamedGem
 	{
-		std::uint32_t    id;  // the record's id in its own plugin
+		std::uint32_t    id{ 0 };  // the record's id in its own plugin
 		std::string_view plugin;
-		Kind             kind;  // the plain gem it wears when no mod gives it a model of its own
+		Kind             kind{};  // the plain gem it wears when no mod gives it a model of its own
 	};
 	// Malyn's Black Soul Gem, Arniel's gem, Wylandriah's gem (an empty record), the Soul Essence Gem
 	inline constexpr std::array<NamedGem, 4> kNamedGems{ { { 0x028AD9, "Skyrim.esm", Kind::kBlack },

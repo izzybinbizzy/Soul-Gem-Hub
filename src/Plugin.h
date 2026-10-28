@@ -80,7 +80,6 @@ namespace Plugin
 	void                      ApplyNow();       // main thread: the settings onto every light now (the menu, DevBench)
 	void                      RefreshLights();  // main thread: the settings onto the lights already hung, even while the game is paused
 	[[nodiscard]] std::size_t GemLightCount();
-	[[nodiscard]] std::size_t GemLightsMade();
 	// what the load order dresses its filled gems in, for the menu: family name -> count of filled gem records
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();              // mod -> gem records unlit until its author allows it
