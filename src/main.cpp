@@ -84,8 +84,9 @@ namespace
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
+	// the wrong game: loaded but idle - a false here makes SKSE add its own "exit game?" box over the guard's
 	if (!RuntimeGuard::RightGame("Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub - VR")) {
-		return false;
+		return true;
 	}
 	// the start line is the only work here that can throw (low memory): it never leaves the plugin
 	try {
