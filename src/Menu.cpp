@@ -67,6 +67,10 @@ namespace Plugin
 					RefreshLights();
 				})) {
 				queued = false;
+				static std::atomic<bool> told{ false };
+				if (!told.exchange(true)) {
+					SKSE::log::warn("menu: a moved slider could not reach the main thread - the lights take it with the next change");
+				}
 			}
 		}
 
@@ -117,6 +121,22 @@ namespace Plugin
 			MenuStyle::Tip(T(
 				"Automatic finds each gem's color from the mod that dresses it. If your gems glow in the wrong color, pick your "
 				"gem mod: every soul gem then wears that mod's colors."));
+		}
+
+		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
+		void LightColor()
+		{
+			auto                             s = SettingsNow();
+			int                              v = s.authorPick ? 1 : 0;
+			const std::array<const char*, 2> items{ T("Gem's own glow"), T("Author pick") };
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Light color"), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.authorPick) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.authorPick = v == 1; });
+				Changed();
+			}
+			MenuStyle::Tip(T(
+				"Some gems glow in another color than the light the author picked for them. Gem's own glow lights them in the color "
+				"they glow; Author pick keeps the author's color."));
 		}
 
 		void RenderPage();
@@ -173,9 +193,15 @@ namespace Plugin
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemColors();
+				// with neither, both choices light every gem the same
+				if (GemsWithOwnGlow() > 0 || Gems::PickHasOwnGlow(SettingsNow().gemMod)) {
+					LightColor();
+				}
 				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
 				const auto lighting = LightingFound();
-				if (left[1] || left[2] || lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+				// a gem's own model light shines on an ENB, or on Community Shaders when a particle-light config names its texture
+				const bool meshLights = lighting == Lighting::kEnb || (lighting == Lighting::kShaders && GemParticleConfigs() > 0);
+				if (left[1] || left[2] || meshLights) {
 					Header(Icon::kGem, T("Their Own Lights"));
 					if (left[1]) {
 						Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
@@ -185,7 +211,7 @@ namespace Plugin
 						Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
 							T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
 					}
-					if (lighting == Lighting::kEnb || lighting == Lighting::kShaders) {
+					if (meshLights) {
 						Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
 							T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
 					}

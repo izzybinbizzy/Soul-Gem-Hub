@@ -6,11 +6,12 @@
 //   text      Lower, SameText, Trim, BareName - a model path as the plugin compares it
 //   light     CutoffFor, IslReach, PlainAt - Illuminated's LightMath.h, the same numbers; KeyAt - Truman's KeyframeSequence maths
 //   gems      which gem a model is, its color (ColorSum: off its texture pixels) and its strength
-//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's "Gem colors" pick
+//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's "Gem colors" and "Light color"
 //   permits   Fingerprint, BlockedModOf - the gem mods not lit until their authors allow it (GemPermissions.h)
 
 #pragma once
 
+#include "GemGlowColors.h"
 #include "GemModPicks.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
@@ -134,7 +135,7 @@ namespace Gems
 
 	// A fade controller's value at a_time: Truman's KeyframeSequence::Interpolate (RE::Light, controller.h, GPL-3.0; his
 	// permission, credited) - step (0), linear (1) or cubic Hermite with no tangents (2). a_keys sorted by time; empty gives 0.
-	[[nodiscard]] inline float KeyAt(const std::vector<std::pair<float, float>>& a_keys, int a_interpolation, float a_time) noexcept
+	[[nodiscard]] inline float KeyAt(std::span<const std::pair<float, float>> a_keys, int a_interpolation, float a_time) noexcept
 	{
 		if (a_keys.empty()) {
 			return 0.0f;
@@ -164,8 +165,8 @@ namespace Gems
 	inline constexpr float     kPulseSeconds = 4.5f;
 	[[nodiscard]] inline float PulseAt(float a_seconds) noexcept
 	{
-		static const std::vector<std::pair<float, float>> keys{ { 0.0f, 0.9f }, { kPulseSeconds / 2.0f, 1.1f }, { kPulseSeconds, 0.9f } };
-		const float                                       t = std::fmod(std::fabs(a_seconds), kPulseSeconds);
+		constexpr std::array<std::pair<float, float>, 3> keys{ { { 0.0f, 0.9f }, { kPulseSeconds / 2.0f, 1.1f }, { kPulseSeconds, 0.9f } } };
+		const float                                      t = std::fmod(std::fabs(a_seconds), kPulseSeconds);
 		return KeyAt(keys, 2, t);
 	}
 
@@ -219,11 +220,13 @@ namespace Gems
 
 	struct Look
 	{
-		Family family{ Family::kGame };
-		Kind   kind{ Kind::kGrand };
-		Rgb    rgb{ 255, 255, 255 };
-		bool   seen{ false };      // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
-		bool   ownColor{ false };  // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
+		Family             family{ Family::kGame };
+		Kind               kind{ Kind::kGrand };
+		Rgb                rgb{ 255, 255, 255 };
+		bool               seen{ false };        // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
+		bool               ownColor{ false };    // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
+		std::optional<Rgb> glow{};               // its own glow where that is not rgb (GemGlowColors.h): the "Light color" default
+		bool               glowAlways{ false };  // that glow on "Author pick" too
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -626,6 +629,13 @@ namespace Gems
 		return Rgb{ it->r, it->g, it->b };
 	}
 
+	// a known gem file's own glow, listed where it is not the color its light wears, or none
+	[[nodiscard]] inline const GlowColor* GlowColorOf(std::uint64_t a_fingerprint) noexcept
+	{
+		const auto it = std::ranges::lower_bound(kGlowColors, a_fingerprint, {}, &GlowColor::hash);
+		return it == kGlowColors.end() || it->hash != a_fingerprint ? nullptr : &*it;
+	}
+
 	struct NamedGem
 	{
 		std::uint32_t    id;  // the record's id in its own plugin
@@ -713,6 +723,7 @@ namespace Gems
 		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
 		bool theirsMesh{ false };         // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
 		int  gemMod{ 0 };                 // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
+		bool authorPick{ false };         // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
 	};
 
 	// the "Gem colors" pick a Settings.ini value names (a kGemModPicks key, any case); 0 = Automatic, also for a value this
@@ -738,17 +749,25 @@ namespace Gems
 		return pick ? pick->name : std::string_view("Automatic");
 	}
 
+	// a picked gem mod whose own glow differs from its colors at some size: "Light color" then changes what that pick shows
+	[[nodiscard]] inline bool PickHasOwnGlow(int a_index) noexcept
+	{
+		const auto* pick = GemModAt(a_index);
+		return pick && pick->glow != pick->rgb;
+	}
+
 	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
 	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems (on any model) and the Soul Cairn keep
-	// their own - else the color found for it at data load
+	// their own - else the color found for it at data load. "Light color": by default a gem's own glow where it differs from that
+	// color, on Author pick the color as found
 	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
 	{
 		const auto* pick = GemModAt(a_s.gemMod);
 		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
 		if (!pick || !sized || a_look.ownColor || a_look.kind > Kind::kBlack) {
-			return a_look.rgb;
+			return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
 		}
-		return pick->rgb[static_cast<std::size_t>(a_look.kind)];
+		return (a_s.authorPick ? pick->rgb : pick->glow)[static_cast<std::size_t>(a_look.kind)];
 	}
 
 	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
@@ -813,6 +832,8 @@ namespace Gems
 				a_out.theirsLightPlacer = v != 0;
 			} else if (SameText(key, "TheirsMesh")) {
 				a_out.theirsMesh = v != 0;
+			} else if (SameText(key, "AuthorPick")) {
+				a_out.authorPick = v != 0;
 			} else {
 				--lines;  // a key this version does not know
 			}
@@ -827,6 +848,6 @@ namespace Gems
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
-			  << (pick ? pick->key : std::string_view("auto")) << "\n";
+			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\n";
 	}
 }
