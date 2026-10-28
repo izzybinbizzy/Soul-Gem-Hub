@@ -879,9 +879,9 @@ namespace Plugin
 
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
 		// museum shows the real Azura's Star and Black Star through dbm_dynamicdisplayscript, enabled once donated. A gem left
-		// lying about carries no such script (the College's carry defaultDisableHavokOnLoad). The script table's place is SE / AE's;
-		// Legacy's own displays are known by their place as well (Gems::KnownDisplay), and on VR a gem placed disabled - for a
-		// script to show it once donated, as Legacy's stars are - counts as on show
+		// lying about carries no such script (the College's carry defaultDisableHavokOnLoad). The same check runs on VR (Papyrus
+		// Extender's VR build reads this table the same way); Legacy's own displays are also known by their place
+		// (Gems::KnownDisplay), for the moment before their script is bound
 		std::atomic<std::size_t> gOnShowNow{ 0 };
 
 		[[nodiscard]] bool OnShow(const RE::TESObjectREFR* a_ref)
@@ -889,10 +889,7 @@ namespace Plugin
 			if (const auto* file = a_ref->GetFile(0); file && Gems::KnownDisplay(file->GetFilename(), a_ref->GetLocalFormID())) {
 				return true;
 			}
-			if (REL::Module::IsVR() && a_ref->IsInitiallyDisabled()) {
-				return true;
-			}
-			auto* vm = REL::Module::IsVR() ? nullptr : RE::BSScript::Internal::VirtualMachine::GetSingleton();
+			auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 			auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
 			if (!policy) {
 				return false;

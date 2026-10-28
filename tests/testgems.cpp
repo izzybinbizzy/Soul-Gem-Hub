@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 183;
+	constexpr int kFloor = 228;
 
 	using namespace Gems;
 
