@@ -191,6 +191,8 @@ namespace Plugin
 				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 					T("How bright the gems' light is. 100% is as built."));
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
+				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
+					T("How bright Azura's Star and the Black Star are, on top of Brightness. Turn it down when their light drowns the gems near them."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemColors();
 				// with neither, both choices light every gem the same

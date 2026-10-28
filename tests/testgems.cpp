@@ -313,7 +313,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 9);
+		CHECK(ReadSettings(again, back) == 10);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
@@ -322,7 +322,18 @@ namespace
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 100);
+		// "Stars" (his checklist 309 answer): clamped to its range, written back, and only the two stars dimmed by it
+		std::stringstream starsIn("Stars=5\n");
+		Settings          st;
+		CHECK(ReadSettings(starsIn, st) == 1 && st.stars == kStarsMin);
+		st.stars = 50;
+		std::stringstream starsOut;
+		WriteSettings(st, starsOut);
+		CHECK(starsOut.str().find("Stars=50\n") != std::string::npos);
+		const Settings full;
+		CHECK(Near(ShownAt(Kind::kStar, false, false, st).fade, ShownAt(Kind::kStar, false, false, full).fade * 0.5f));
+		CHECK(Near(ShownAt(Kind::kGrand, false, false, st).fade, ShownAt(Kind::kGrand, false, false, full).fade));
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;

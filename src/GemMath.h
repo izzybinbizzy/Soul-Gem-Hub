@@ -702,6 +702,8 @@ namespace Gems
 
 	// ------------------------------------------------------------------ settings (SoulGemHub\Settings.ini, written by the menu)
 	inline constexpr int kBrightnessMin = 25, kBrightnessMax = 200, kReachMin = 50, kReachMax = 150;
+	// "Stars": Azura's Star and the Black Star on top of Brightness - their big pools can drown every gem near them
+	inline constexpr int kStarsMin = 10, kStarsMax = 100;
 
 	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
 	inline constexpr float kVanillaBoost = 1.25f;
@@ -717,6 +719,7 @@ namespace Gems
 		bool on{ true };         // every soul gem light
 		int  brightness{ 100 };  // percent
 		int  reach{ 100 };       // percent
+		int  stars{ 100 };       // percent of Brightness for the two stars
 		bool pulse{ true };      // the soft pulse
 		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
 		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
@@ -784,7 +787,8 @@ namespace Gems
 	// Community Shaders' lights, a_vanilla = the game's own lighting without an ENB
 	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
 	{
-		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
+		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla) * stars,
 			static_cast<float>(a_s.reach) / 100.0f, a_pulse);
 	}
 
@@ -824,6 +828,8 @@ namespace Gems
 				a_out.brightness = std::clamp(v, kBrightnessMin, kBrightnessMax);
 			} else if (SameText(key, "Reach")) {
 				a_out.reach = std::clamp(v, kReachMin, kReachMax);
+			} else if (SameText(key, "Stars")) {
+				a_out.stars = std::clamp(v, kStarsMin, kStarsMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
 			} else if (SameText(key, "TheirsEmissive")) {
@@ -845,7 +851,7 @@ namespace Gems
 	{
 		const auto* pick = GemModAt(a_s.gemMod);
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
-			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach
+			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
 			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\n";

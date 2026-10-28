@@ -24,8 +24,8 @@ namespace Plugin
 		const auto     lines = Gems::ReadSettings(in, read);
 		SetSettings(read);  // in the menu's steps of 5, as every other way in
 		const auto s = SettingsNow();
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, soft pulse {}, gem colors {}, light color {} ({} line(s) read)",
-			s.on ? "on" : "off", s.brightness, s.reach, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {} ({} line(s) read)",
+			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
 			s.authorPick ? "Author pick" : "the gem's own glow", lines);
 	}
 
@@ -72,6 +72,7 @@ namespace Plugin
 		{
 			a_s.brightness = std::clamp((std::clamp(a_s.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
 			a_s.reach = std::clamp((std::clamp(a_s.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+			a_s.stars = std::clamp((std::clamp(a_s.stars, Gems::kStarsMin, Gems::kStarsMax) + 2) / 5 * 5, Gems::kStarsMin, Gems::kStarsMax);
 			a_s.gemMod = Gems::GemModAt(a_s.gemMod) ? a_s.gemMod : 0;
 		}
 	}
