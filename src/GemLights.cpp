@@ -15,8 +15,7 @@
 //
 // HOW (once a frame, after the player's update, on the main thread): every quarter second the gems around the player are
 // looked for; the nearest 24 (kMaxLights) each get one light of ours hung on its model, made and registered the way ReLight
-// does it (the credit below),
-// in its color, at its strength and reach for the lighting found (Lighting.cpp - Community Shaders' inverse-square words, or
+// does it (the credit below), in its color, at its strength and reach for the lighting found (Lighting.cpp - Community Shaders' inverse-square words, or
 // the same light drawn plain on ENB and Vanilla), breathing softly when the pulse is on. A gem picked up, unloaded or turned off
 // loses its light; a game loaded drops them all.
 //
