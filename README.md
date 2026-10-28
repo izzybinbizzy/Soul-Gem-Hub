@@ -8,6 +8,9 @@ save.
 ## What it does
 - Every filled soul gem lying in the world gets a soft light in its own color: the game's gems, Praedy's Soul Gems,
   Azura's Star, the Black Star, the named quest gems and the Soul Cairn's gem bowl and chunks.
+- Finds the lighting by itself (Community Shaders with or without Light Placer, ENB, Vanilla) and makes each light for it.
+- Lights every gem itself and puts out another mod's light on it while ours is on, so no gem glows twice (the menu's
+  Their Own Lights gives a kind back). Displays are never lit.
 - Gem mods whose authors have not allowed it yet are left unlit (`src/GemPermissions.h`, file fingerprints).
 
 ## The permission table
@@ -15,19 +18,18 @@ save.
 of every soul gem mod checked for the mod page: the blocked mods' gem models and textures are hashed (FNV-1a 64 over the
 first 64 KB, then the file size) and their own file names listed; the game's files and every allowed mod's are left out.
 When an author allows it, that mod is taken off the script's blocked list and the header is generated again.
-- Finds the lighting by itself (Community Shaders with or without Light Placer, ENB, Vanilla) and makes each light for it.
-- Leaves every gem another mod already lights to that mod (Light Placer files, RE::Light files, gems whose mesh carries a
-  light of its own), so no gem glows twice. Displays are never lit.
 
 ## Requires
-SKSE and Address Library for SKSE Plugins; SKSE Menu Framework for the menu.
+SKSE and Address Library for SKSE Plugins; SKSE Menu Framework for the menu. Skyrim VR: SKSE VR and the VR version of
+Address Library, with the VR build (a build on the wrong game stays off and says so in a box).
 
 ## Settings
 SKSE Menu Framework > Illuminated - Soul Gem Hub, saved to `Data\SKSE\Plugins\SoulGemHub\Settings.ini`.
 
 ## Building
 `build.bat` (git, xmake 3 and the Visual Studio C++ tools): CommonLib at the pinned commit, the DLL, then the off-game
-tests (`tests/testgems.cpp`, the game-free maths in `src/GemMath.h`).
+tests (`tests/testgems.cpp`, the game-free maths in `src/GemMath.h`). For Skyrim VR: `git -C lib\commonlibsse-ng
+submodule update --init extern/openvr`, then `build.bat` with `GLOW_VR=1` set (a VR-only build).
 
 ## Credits
 The way a light is made and registered follows ReLight's, used with TrumanAE's permission.

@@ -407,10 +407,7 @@ namespace Gems
 	// (soulgemcommon0_n.dds); read as a color it is a strong lavender blue that outweighed the gem's own texture.
 	[[nodiscard]] inline bool IsNormalMap(std::string_view a_path)
 	{
-		std::string name(a_path.substr(a_path.find_last_of("/\\") == std::string_view::npos ? 0 : a_path.find_last_of("/\\") + 1));
-		for (auto& c : name) {
-			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-		}
+		std::string name = Lower(a_path.substr(a_path.find_last_of("/\\") == std::string_view::npos ? 0 : a_path.find_last_of("/\\") + 1));
 		if (const auto dot = name.rfind('.'); dot != std::string::npos) {
 			name.erase(dot);
 		}

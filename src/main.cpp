@@ -25,6 +25,7 @@
 //   tests\testgems.cpp  the off-game tests of GemMath.h
 
 #include "Plugin.h"
+#include "RuntimeGuard.h"
 #include "Translation.h"
 
 using namespace Plugin;
@@ -83,9 +84,7 @@ namespace
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
-	// an SE / AE build cannot see Skyrim VR (IsVR is a fixed false there) and would read SE / AE game addresses: it stays off
-	if (!REL::Module::IsVR() && REX::W32::GetModuleHandleA("SkyrimVR.exe")) {
-		SKSE::log::error("Skyrim VR found - this is the SE / AE build, so it stays off. Install the optional VR download over it.");
+	if (!RuntimeGuard::RightGame("Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub - VR")) {
 		return false;
 	}
 	// the start line is the only work here that can throw (low memory): it never leaves the plugin

@@ -342,6 +342,10 @@ namespace
 		CHECK(Near(plainHalf.fade, plainFull.fade * 0.5f) && Near(plainHalf.radius, plainFull.radius * 0.5f, 0.5f));
 		CHECK(Near(ShownAt(Kind::kGrand, false, false, st).fade, ShownAt(Kind::kGrand, false, false, full).fade));
 		CHECK(Near(ShownAt(Kind::kGrand, true, false, st).radius, ShownAt(Kind::kGrand, true, false, full).radius));
+		// ShownFor's dim comes after Community Shaders' cutoff clamp: at a reach short enough to clamp, half the fade, the same reach
+		const auto& starStrength = kStrength[static_cast<std::size_t>(Kind::kStar)];
+		const auto  clampFull = ShownFor(starStrength, true, 1.0f, 0.5f), clampHalf = ShownFor(starStrength, true, 1.0f, 0.5f, 1.0f, 0.5f);
+		CHECK(Near(clampHalf.fade, clampFull.fade * 0.5f, 0.001f) && Near(clampHalf.radius, clampFull.radius, 0.5f));
 		// on Community Shaders at every Reach a star at 50 % is dimmer and reaches less far
 		for (const int reach : { kReachMin, 100, kReachMax }) {
 			Settings atReach = full;
