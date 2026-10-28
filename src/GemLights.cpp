@@ -469,7 +469,7 @@ namespace Plugin
 			return std::nullopt;
 		}
 
-		// his eye call on a Soul Cairn piece's look (GemMath.h kCairnEyeColors), by the files SeenColor reads
+		// a Soul Cairn piece's color set by eye (GemMath.h kCairnEyeColors), by the files SeenColor reads
 		std::optional<Gems::Rgb> CairnEyeColor(std::string_view a_model)
 		{
 			for (const auto print : PrintsOf(a_model)) {
