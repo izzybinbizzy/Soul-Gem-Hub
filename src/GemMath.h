@@ -223,7 +223,6 @@ namespace Gems
 		Family             family{ Family::kGame };
 		Kind               kind{ Kind::kGrand };
 		Rgb                rgb{ 255, 255, 255 };
-		bool               seen{ false };        // rgb is the color the gem's picture shows (GemSeenColors.h): no color maths on it
 		bool               ownColor{ false };    // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
 		std::optional<Rgb> glow{};               // its own glow where that is not rgb (GemGlowColors.h): the "Light color" default
 		bool               glowAlways{ false };  // that glow on "Author pick" too
@@ -458,11 +457,9 @@ namespace Gems
 		return Look{ Family::kGame, kind, SizeRgb(kGameRgb, kind) };
 	}
 
-	// Emissive Soul Gems (iamzachhunter, Nexus 191137): the models its Light Placer file lights. The two mods work together: with
-	// Light Placer loaded these models count as his, installed or not (his light is put out while ours is on the gem, unless the
-	// menu's Their Own Lights keeps it).
-	// Whole paths, as Light Placer matches them: a replacer's copy in another folder (MLP's and Vayura's "full\", Spherical's
-	// "Filled\") is not his - its own Light Placer file, if any, claims it
+	// Emissive Soul Gems (iamzachhunter, Nexus 191137): the models its Light Placer file lights - our RE::Light files never name
+	// one (build soul gems.py reads this table). Whole paths, as Light Placer matches them: a replacer's copy in another folder
+	// (MLP's and Vayura's "full\", Spherical's "Filled\") is not his
 	inline constexpr std::array<std::string_view, 14> kEmissiveModels{ "clutter\\soulgem\\soulgempetty01.nif",
 		"clutter\\soulgem\\soulgempetty_full.nif", "clutter\\soulgem\\soulgemlesser01.nif", "clutter\\soulgem\\soulgemlesser_full.nif",
 		"clutter\\soulgem\\soulgemcommon01.nif", "clutter\\soulgem\\soulgemcommon_full.nif", "clutter\\soulgem\\soulgemgreater01.nif",
@@ -491,22 +488,31 @@ namespace Gems
 		return Lower(a_script).find("display") != std::string::npos;
 	}
 
-	// who lights a gem: this plugin, or a light mod it leaves the gem to
+	// whose other light a gem would wear: none; Emissive Soul Gems' own Light Placer file's, or another Light Placer file's
+	// (Subtle Soul Gems', CS Light's ...) - lit by us all the same, theirs put out unless the menu keeps that kind; or this
+	// mod's own RE::Light files' (RE::Light loaded) - left to RE::Light
 	enum class Owner : std::uint8_t
 	{
 		kThisMod,
-		kEmissive,     // Light Placer is loaded and the model is Emissive Soul Gems'
-		kLightPlacer,  // Light Placer is loaded and one of its configs claims the gem
-		kReLight,      // RE::Light is loaded and this mod's RE::Light configs light the gem
+		kEmissive,
+		kLightPlacer,
+		kReLight,
 	};
 
-	[[nodiscard]] inline Owner OwnerOf(std::string_view a_model, Family a_family, bool a_lightPlacer, bool a_claimedByLightPlacer,
-		bool a_reLight)
+	// which loaded Light Placer file claims a gem: none (also when Light Placer is not loaded), Emissive Soul Gems' own, another
+	enum class Claim : std::uint8_t
 	{
-		if (a_lightPlacer && EmissiveModel(a_model)) {
+		kNone,
+		kEmissive,
+		kOther,
+	};
+
+	[[nodiscard]] inline Owner OwnerOf(std::string_view a_model, Family a_family, Claim a_claim, bool a_reLight)
+	{
+		if (a_claim == Claim::kEmissive) {
 			return Owner::kEmissive;
 		}
-		if (a_lightPlacer && a_claimedByLightPlacer) {
+		if (a_claim == Claim::kOther) {
 			return Owner::kLightPlacer;
 		}
 		if (a_reLight && ReLightCovers(a_family) && !EmissiveModel(a_model)) {
@@ -685,18 +691,20 @@ namespace Gems
 	{
 		float fade{ 0.0f }, radius{ 0.0f }, cutoff{ 0.0f };
 	};
+	// a_dim (0-1, the Stars slider) dims the light after the clamp, its fade and cutoff alike: the reach stays, only the light drops
 	[[nodiscard]] inline Shown ShownFor(const Strength& a_s, bool a_inverseSquare, float a_brightness, float a_reach,
-		float a_pulse = 1.0f) noexcept
+		float a_pulse = 1.0f, float a_dim = 1.0f) noexcept
 	{
 		const float b = (std::max)(a_brightness, 0.0f), r = (std::max)(a_reach, 0.05f), p = (std::max)(a_pulse, 0.0f);
+		const float d = std::clamp(a_dim, 0.0f, 1.0f);
 		if (a_inverseSquare) {
 			const float wanted = a_s.cutoff * b / (r * r);
-			const float cutoff = std::clamp(wanted, kLowestCutoff, kHighestCutoff);
+			const float cutoff = std::clamp(std::clamp(wanted, kLowestCutoff, kHighestCutoff) * d, kLowestCutoff, kHighestCutoff);
 			// past the highest cutoff a shorter reach is kept by a dimmer fade (reach² goes with fade / cutoff)
-			const float fade = a_s.fade * b * (wanted > kHighestCutoff ? kHighestCutoff / wanted : 1.0f);
+			const float fade = a_s.fade * b * (wanted > kHighestCutoff ? kHighestCutoff / wanted : 1.0f) * d;
 			return { fade * p, (std::max)(IslReach(fade, cutoff), 1.0f), cutoff };
 		}
-		const auto plain = PlainAt(a_s.fade * b * p, 0.0f, IslReach(a_s.fade, a_s.cutoff) * r);
+		const auto plain = PlainAt(a_s.fade * b * d * p, 0.0f, IslReach(a_s.fade, a_s.cutoff) * r);
 		return { plain.fade, (std::max)(plain.radius, 1.0f), 0.0f };
 	}
 
@@ -759,24 +767,35 @@ namespace Gems
 		return pick && pick->glow != pick->rgb;
 	}
 
-	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
-	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems (on any model) and the Soul Cairn keep
-	// their own - else the color found for it at data load. "Light color": by default a gem's own glow where it differs from that
-	// color, on Author pick the color as found
+	// a gem the "Gem colors" pick recolors: a soul gem of the six sizes (the game's or a replacer's, Praedy's, Rustic's) - never a
+	// star, a named quest gem (on any model), a gem in its own swapped textures or a Soul Cairn piece, which keep their own
+	[[nodiscard]] inline bool PickRecolors(const Look& a_look) noexcept
+	{
+		const bool sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
+		return sized && !a_look.ownColor && a_look.kind <= Kind::kBlack;
+	}
+
+	// the color a gem's light wears: the picked gem mod's color for its size when a pick recolors it, else the color found for it
+	// at data load. "Light color": by default a gem's own glow where it differs from that color, on Author pick the color as found
 	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
 	{
 		const auto* pick = GemModAt(a_s.gemMod);
-		const bool  sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
-		if (!pick || !sized || a_look.ownColor || a_look.kind > Kind::kBlack) {
+		if (!pick || !PickRecolors(a_look)) {
 			return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
 		}
 		return (a_s.authorPick ? pick->rgb : pick->glow)[static_cast<std::size_t>(a_look.kind)];
 	}
 
+	// whether "Light color" changes anything: a_glows = lit gems whose own glow is worn on the default choice only, a_glowsKept =
+	// those of them no pick recolors; under a pick, also the pick's own glow set where it differs from its colors
+	[[nodiscard]] inline bool LightColorShown(int a_gemMod, std::size_t a_glows, std::size_t a_glowsKept) noexcept
+	{
+		return GemModAt(a_gemMod) ? PickHasOwnGlow(a_gemMod) || a_glowsKept > 0 : a_glows > 0;
+	}
+
 	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
 	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that
-	// shines in this game. With Light Placer loaded every game gem model counts as Emissive Soul Gems', installed or not, so the
-	// owner alone would leave such a gem with no light at all
+	// shines in this game. A claim alone is no light: a file may claim a gem it does not light here
 	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_placedLight, bool a_meshLight, const Settings& a_s) noexcept
 	{
 		return (a_placedLight && ((a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer))) ||
@@ -788,18 +807,36 @@ namespace Gems
 	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
 	{
 		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
-		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla) * stars,
-			static_cast<float>(a_s.reach) / 100.0f, a_pulse);
+		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+			static_cast<float>(a_s.reach) / 100.0f, a_pulse, stars);
 	}
 
-	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a number that does not read
-	// keeps the value it had; every number clamped to its slider. Returns the key lines read.
+	// a setting's value as a number: digits, or true / false, on / off, yes / no, as a hand-edited file may hold it
+	[[nodiscard]] inline std::optional<int> SettingNumber(std::string_view a_value) noexcept
+	{
+		constexpr std::array<std::pair<std::string_view, int>, 6> kWords{ { { "true", 1 }, { "on", 1 }, { "yes", 1 }, { "false", 0 },
+			{ "off", 0 }, { "no", 0 } } };
+		for (const auto& [word, n] : kWords) {
+			if (SameText(a_value, word)) {
+				return n;
+			}
+		}
+		int v = 0;
+		const auto [end, ec] = std::from_chars(a_value.data(), a_value.data() + a_value.size(), v);
+		return ec == std::errc{} && end == a_value.data() + a_value.size() ? std::optional(v) : std::nullopt;
+	}
+
+	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a note after a value (; or #) is
+	// left out; a value that does not read keeps the one it had; every number clamped to its slider. Returns the key lines read.
 	inline std::size_t ReadSettings(std::istream& a_in, Settings& a_out)
 	{
 		std::size_t lines = 0;
 		std::string line;
 		while (a_in && std::getline(a_in, line)) {
-			const auto text = Trim(line);
+			auto text = Trim(line);
+			if (text.starts_with("\xEF\xBB\xBF")) {
+				text = Trim(text.substr(3));  // the UTF-8 mark an editor may put before the first line
+			}
 			if (text.empty() || text.front() == ';' || text.front() == '#' || text.front() == '[') {
 				continue;
 			}
@@ -808,7 +845,8 @@ namespace Gems
 				continue;
 			}
 			const auto key = Trim(text.substr(0, eq));
-			const auto val = Trim(text.substr(eq + 1));
+			auto       val = Trim(text.substr(eq + 1));
+			val = Trim(val.substr(0, val.find_first_of(";#")));
 			if (SameText(key, "GemMod")) {  // a gem mod's key (as written here), or its number in the menu's order (as DevBench takes it)
 				int n = 0;
 				const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), n);
@@ -816,11 +854,11 @@ namespace Gems
 				++lines;
 				continue;
 			}
-			int v = 0;
-			const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), v);
-			if (ec != std::errc{} || end != val.data() + val.size()) {
+			const auto read = SettingNumber(val);
+			if (!read) {
 				continue;
 			}
+			const int v = *read;
 			++lines;
 			if (SameText(key, "Lights")) {
 				a_out.on = v != 0;

@@ -31,7 +31,7 @@ namespace Plugin
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write
 	// leaves the old file, never half of one. One save at a time, each with its own snapshot
-	void SaveSettings()
+	bool SaveSettings()
 	{
 		static std::mutex  writing;
 		std::scoped_lock   w{ writing };
@@ -50,13 +50,15 @@ namespace Plugin
 			if (!file) {
 				SKSE::log::warn("settings: {} could not be written", kPath);
 				std::filesystem::remove(tmp, ec);
-				return;
+				return false;
 			}
 		}
 		if (std::filesystem::rename(tmp, kPath, ec); ec) {
 			SKSE::log::warn("settings: {} could not be replaced ({})", kPath, ec.message());
 			std::filesystem::remove(tmp, ec);
+			return false;
 		}
+		return true;
 	}
 
 	Gems::Settings SettingsNow()

@@ -3,8 +3,9 @@
 // GPL-3.0-or-later; see LICENSE.txt and the notice at the top of main.cpp.
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
-// found (the lighting, the gem looks, the gems left to another mod's light), then the lights' switch, Brightness, Reach, the
-// soft pulse and the gem colors pick. A change is saved and applied on the game's main thread when it is let go.
+// found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
+// lights' switch, Brightness, Reach, Stars, the soft pulse, Gem colors, Light color and Their Own Lights. A change is saved and
+// applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
@@ -81,7 +82,7 @@ namespace Plugin
 			int  v = s.*a_field;
 			SetNextItemWidth(260.0f);
 			if (SliderInt(a_label, &v, a_min, a_max, "%d%%")) {
-				v = std::clamp((v + 2) / 5 * 5, a_min, a_max);  // in steps of 5, rounded only when moved
+				v = std::clamp((std::clamp(v, a_min, a_max) + 2) / 5 * 5, a_min, a_max);  // in steps of 5, rounded only when moved
 				if (v != s.*a_field) {
 					UpdateSettings([&](Gems::Settings& a_s) { a_s.*a_field = v; });
 					Live();
@@ -120,7 +121,8 @@ namespace Plugin
 			}
 			MenuStyle::Tip(T(
 				"Automatic finds each gem's color from the mod that dresses it. If your gems glow in the wrong color, pick your "
-				"gem mod: every soul gem then wears that mod's colors."));
+				"gem mod: every plain soul gem of the six sizes then wears that mod's colors (the stars, the named quest gems and "
+				"gems in textures of their own keep theirs)."));
 		}
 
 		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
@@ -161,7 +163,7 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Rustic Soul Gems found ({})"), T(rustic.c_str())).c_str());
 			}
 			// the gems another light mod would light: lit by this mod instead, its light put out (RE::Light keeps this mod's own files)
-			const auto  left = GemsLeftTo();
+			const auto  left = GemsOtherLighters();
 			const char* leftTo[] = { nullptr, TR_MARK("Taken over from Emissive Soul Gems (Light Placer): {}"),
 				TR_MARK("Taken over from other Light Placer lights: {}"), TR_MARK("Left to RE::Light (this mod's RE::Light files): {}") };
 			for (std::size_t i = 1; i < left.size(); ++i) {
@@ -172,12 +174,13 @@ namespace Plugin
 			for (const auto& [mod, n] : GemsBlocked()) {
 				TextColored(kMuted, "%s", Fill(T("Not lit until its author allows it - {}: {}"), mod, std::to_string(n)).c_str());
 			}
-			if (const auto own = GemsLeftToOwnLight(); own) {
+			if (const auto own = GemsOtherLightsPutOut(); own) {
 				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
-			Switch(T("Soul gem lights"), &Gems::Settings::on, T("Every filled soul gem, Azura's Star and the Black Star glow in their own color."));
+			Switch(T("Soul gem lights"), &Gems::Settings::on,
+				T("Every filled soul gem, Azura's Star, the Black Star, the named quest gems and the Soul Cairn's gems glow in their own color."));
 			const bool on = SettingsNow().on;
 			{
 				// ended however the block is left, so a caught throw never leaves the next frame disabled
@@ -195,11 +198,12 @@ namespace Plugin
 					T("How bright Azura's Star and the Black Star are, on top of Brightness. Turn it down when their light drowns the gems near them."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemColors();
-				// with neither, both choices light every gem the same
-				if (GemsWithOwnGlow() > 0 || Gems::PickHasOwnGlow(SettingsNow().gemMod)) {
+				// shown only where its two choices light a gem differently under the Gem colors pick
+				if (LightColorMatters(SettingsNow().gemMod)) {
 					LightColor();
 				}
-				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light is here)
+				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light can be:
+				// Emissive Soul Gems' or another Light Placer file claims a gem, or the lighting draws a gem's own model light)
 				const auto lighting = LightingFound();
 				// a gem's own model light shines on an ENB, or on Community Shaders when a particle-light config names its texture
 				const bool meshLights = lighting == Lighting::kEnb || (lighting == Lighting::kShaders && GemParticleConfigs() > 0);

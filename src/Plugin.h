@@ -58,16 +58,15 @@ namespace Plugin
 		kEnb = 1,      // an ENB: the game's own lighting, every light drawn plain
 		kVanilla = 2,  // the game's own lighting, every light drawn plain
 	};
-	void                      ReadLighting();     // data load, before any light is made
-	[[nodiscard]] Lighting    LightingFound();    // never picked by the player (Illuminated's rule, his word)
-	[[nodiscard]] bool        EnbRunningFound();  // an ENB answering at run time, not only its settings files left behind
+	void                      ReadLighting();   // data load, before any light is made
+	[[nodiscard]] Lighting    LightingFound();  // never picked by the player (Illuminated's rule, his word)
 	[[nodiscard]] const char* LightingName(Lighting a_lighting);
 	[[nodiscard]] bool        InverseSquare();  // the lights are written in Community Shaders' inverse-square words
 	[[nodiscard]] std::string LightingReport();
 
 	// ------------------------------------------------------------------ Settings.cpp: SoulGemHub\Settings.ini, written by the menu
 	void                         LoadSettings();
-	void                         SaveSettings();  // any thread
+	bool                         SaveSettings();  // any thread; false when the file could not be written (logged)
 	[[nodiscard]] Gems::Settings SettingsNow();
 	void                         SetSettings(const Gems::Settings& a_settings);  // clamped; the caller saves and applies
 	// one change made under the lock, so a menu change and a DevBench change at the same moment both land; clamped
@@ -82,14 +81,14 @@ namespace Plugin
 	[[nodiscard]] std::size_t GemLightCount();
 	// what the load order dresses its filled gems in, for the menu: family name -> count of filled gem records
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
-	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();              // mod -> gem records unlit until its author allows it
-	[[nodiscard]] std::string                                      RusticFound();              // "Sorted", "Unsorted", "both" or ""
-	[[nodiscard]] std::array<std::size_t, 4>                       GemsLeftTo();               // gem records another light mod would light, by Gems::Owner
-	[[nodiscard]] std::size_t                                      GemsLeftToOwnLight();       // placed gems near the player whose other light is put out for ours
-	[[nodiscard]] std::size_t                                      GemParticleConfigs();       // Data\ParticleLights configs found at data load
-	[[nodiscard]] std::size_t                                      GemsWithOwnGlow();          // lit things whose own glow is not their light's color
-	[[nodiscard]] std::string                                      GemsReport();               // for DevBench (JSON)
-	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);  // main thread: the glow each lit shape of a placed gem shows now (JSON)
+	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();                    // mod -> gem records unlit until its author allows it
+	[[nodiscard]] std::string                                      RusticFound();                    // "Sorted", "Unsorted", "both", or "" when none of its gems is lit
+	[[nodiscard]] std::array<std::size_t, 4>                       GemsOtherLighters();              // gem records another light mod lights too, by Gems::Owner
+	[[nodiscard]] std::size_t                                      GemsOtherLightsPutOut();          // placed gems near the player whose other light is put out for ours
+	[[nodiscard]] std::size_t                                      GemParticleConfigs();             // Data\ParticleLights configs found at data load
+	[[nodiscard]] bool                                             LightColorMatters(int a_gemMod);  // "Light color" changes a lit gem under this Gem colors pick
+	[[nodiscard]] std::string                                      GemsReport();                     // for DevBench (JSON)
+	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);        // main thread: the glow each lit shape of a placed gem shows now (JSON)
 
 	// ------------------------------------------------------------------ Menu.cpp / DevBench.cpp
 	void RegisterMenu();

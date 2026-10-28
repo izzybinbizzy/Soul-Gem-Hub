@@ -8,12 +8,14 @@
 // world does (a soul trapped into an empty one), and always for Azura's Star and the Black Star - and the items and pieces known
 // by their own model (the Soul Essence Gem, the Soul Cairn's gem bowl and chunks). A gem's look - its color and strength -
 // comes from the model its record wears in this load order, so it follows whatever mesh mod wins: Praedy's Soul Gems (Subtle
-// Soul Gems' copies of them too), Rustic Soul Gems (either download), or the game's own gems by their size. Never a static or
+// Soul Gems' copies of them too), Rustic Soul Gems (either download, once its author allows it - GemPermissions.h), or the
+// game's own gems by their size; a gem mod waiting on its author's permission stays unlit. Never a static or
 // a museum display that only wears a gem's model (his rule: displays never get lit) - with RE::Light loaded, its light on one
 // is put out.
 //
 // HOW (once a frame, after the player's update, on the main thread): every quarter second the gems around the player are
-// looked for; each gets one light of ours hung on its model, made and registered the way ReLight does it (the credit below),
+// looked for; the nearest 24 (kMaxLights) each get one light of ours hung on its model, made and registered the way ReLight
+// does it (the credit below),
 // in its color, at its strength and reach for the lighting found (Lighting.cpp - Community Shaders' inverse-square words, or
 // the same light drawn plain on ENB and Vanilla), breathing softly when the pulse is on. A gem picked up, unloaded or turned off
 // loses its light; a game loaded drops them all.
@@ -38,9 +40,10 @@ namespace Plugin
 	namespace
 	{
 		constexpr const char* kName = "SoulGemLight";
-		constexpr float       kAmbient = 0.1f;     // a plain light's ambient: a tenth of its color (RE::Light's rule)
-		constexpr float       kScanEvery = 0.25f;  // seconds between looks around the player
-		constexpr std::size_t kMaxLights = 24;     // the most gem lights at once - the nearest gems
+		constexpr float       kAmbient = 0.1f;               // a plain light's ambient: a tenth of its color (RE::Light's rule)
+		constexpr float       kScanEvery = 0.25f;            // seconds between looks around the player
+		constexpr std::size_t kMaxLights = 24;               // the most gem lights at once - the nearest gems
+		constexpr std::size_t kMostLooked = 4 * kMaxLights;  // the nearest gems a scan looks at closely (on show? another light on it?)
 		constexpr auto        kRetryAfter = std::chrono::seconds(15);
 		constexpr float       kRange = 4096.0f;                               // how far from the player a gem is lit (its light reaches about 100-160 units)
 		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
@@ -110,18 +113,19 @@ namespace Plugin
 			bool        needsSoul{ false };              // an empty gem record: lit only when the placed gem holds a soul
 			Gems::Owner owner{ Gems::Owner::kThisMod };  // the light mod that would light it (the menu may leave it to that one)
 		};
-		std::unordered_map<const RE::TESBoundObject*, Gem> gGems;      // the gems this plugin lights; read on the main thread after data load
-		std::vector<std::pair<std::string, std::size_t>>   gFamilies;  // the lit gem records by look, for the menu
-		std::array<std::size_t, 4>                         gLeftTo{};  // gem records left to another light mod, by Gems::Owner
-		std::vector<std::pair<std::string, std::size_t>>   gBlocked;   // gem records left unlit by their mod, until its author allows it
-		std::string                                        gRustic;    // which Rustic Soul Gems download is loaded
+		std::unordered_map<const RE::TESBoundObject*, Gem> gGems;             // the gems this plugin lights; read on the main thread after data load
+		std::vector<std::pair<std::string, std::size_t>>   gFamilies;         // the lit gem records by look, for the menu
+		std::array<std::size_t, 4>                         gOtherLighters{};  // gem records another light mod lights too, by Gems::Owner
+		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, until its author allows it
+		std::string                                        gRustic;           // which Rustic Soul Gems download is loaded
+		bool                                               gRusticLit{ false };
 
-		// What Light Placer's configs claim (models by their file name, formIDs tokens in lower case), read once when Light Placer
-		// is loaded: a gem another config already lights is left to it, so no gem ever wears two lights (Emissive Soul Gems', CS
-		// Light's, Subtle Soul Gems' ...)
+		// What Light Placer's configs claim (models by their whole path as NormalPath writes it, formIDs tokens in lower case), read
+		// once when Light Placer is loaded: whose light a gem would wear (put out while ours is on it, unless the menu keeps that
+		// kind). Emissive Soul Gems' own file's models apart, so its switch is offered only when it is installed
 		struct Claims
 		{
-			std::unordered_set<std::string> models, forms;
+			std::unordered_set<std::string> models, forms, emissive;
 		};
 
 		// a file's extension in lower case, as wide text: path::string() throws on a name the ANSI code page cannot show
@@ -155,6 +159,7 @@ namespace Plugin
 				}
 				std::ifstream in(it->path(), std::ios::binary);
 				const auto    doc = nlohmann::json::parse(in, nullptr, false, true);  // no exceptions; a comment does not drop the file
+				const bool    emissive = Lower(Utf8(it->path().stem())) == "emissive soul gems";
 				++files;
 				if (!doc.is_array()) {
 					if (doc.is_discarded()) {
@@ -171,10 +176,16 @@ namespace Plugin
 						if (found == entry.end() || !found->is_array()) {
 							continue;
 						}
+						const bool models = key == std::string_view("models");
 						for (const auto& v : *found) {
-							if (v.is_string()) {
-								into->insert(key == std::string_view("models") ? Gems::NormalPath(v.get<std::string>()) : Lower(v.get<std::string>()));
+							if (!v.is_string()) {
+								continue;
 							}
+							auto name = models ? Gems::NormalPath(v.get<std::string>()) : Lower(v.get<std::string>());
+							if (models && emissive) {
+								out.emissive.insert(name);
+							}
+							into->insert(std::move(name));
 						}
 					}
 				}
@@ -182,7 +193,8 @@ namespace Plugin
 			if (ec && ec != std::errc::no_such_file_or_directory) {
 				SKSE::log::warn("Light Placer: its folder could not be read to the end ({}) - configs after that point are not known", ec.message());
 			}
-			SKSE::log::info("Light Placer is loaded: {} config file(s) read, {} model(s) and {} form(s) claimed", files, out.models.size(), out.forms.size());
+			SKSE::log::info("Light Placer is loaded: {} config file(s) read, {} model(s) and {} form(s) claimed, {} model(s) by Emissive Soul Gems' own file",
+				files, out.models.size(), out.forms.size(), out.emissive.size());
 			return out;
 		}
 
@@ -209,22 +221,27 @@ namespace Plugin
 			return a_form->GetFormEditorID();
 		}
 
-		// does a formIDs token name this form ("SoulGemGrandFilled", "0x2E4FF~Skyrim.esm", "0002E4FF~skyrim.esm" ...)
-		[[nodiscard]] bool Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model)
+		// which file claims this form: by its model's whole path, or a formIDs token ("SoulGemGrandFilled", "0x2E4FF~Skyrim.esm" ...)
+		[[nodiscard]] Gems::Claim Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model)
 		{
-			if (a_claims.models.contains(Gems::NormalPath(a_model))) {
-				return true;
+			const auto path = Gems::NormalPath(a_model);
+			if (a_claims.emissive.contains(path)) {
+				return Gems::Claim::kEmissive;
+			}
+			if (a_claims.models.contains(path)) {
+				return Gems::Claim::kOther;
 			}
 			if (const char* id = EditorIdOf(a_form); id && *id && a_claims.forms.contains(Lower(id))) {
-				return true;
+				return Gems::Claim::kOther;
 			}
 			const auto* file = a_form->GetFile(0);
 			if (!file) {
-				return false;
+				return Gems::Claim::kNone;
 			}
 			const auto plugin = Lower(file->GetFilename());
 			const auto local = a_form->GetLocalFormID();
-			return std::ranges::any_of(a_claims.forms, [&](const std::string& a_token) { return Gems::TokenNamesForm(a_token, plugin, local); });
+			const bool byId = std::ranges::any_of(a_claims.forms, [&](const std::string& a_token) { return Gems::TokenNamesForm(a_token, plugin, local); });
+			return byId ? Gems::Claim::kOther : Gems::Claim::kNone;
 		}
 
 		// ---------------------------------------------------------- a gem model's own color, read once per model at data load
@@ -602,10 +619,10 @@ namespace Plugin
 				CountName(gBlocked, *mod);
 				return false;
 			}
-			const bool claimed = a_others.lightPlacer && Claimed(a_others.claims, a_form, a_model);
-			const auto owner = Gems::OwnerOf(a_model, a_gem.look.family, a_others.lightPlacer, claimed, a_others.reLight);
+			const auto claim = a_others.lightPlacer ? Claimed(a_others.claims, a_form, a_model) : Gems::Claim::kNone;
+			const auto owner = Gems::OwnerOf(a_model, a_gem.look.family, claim, a_others.reLight);
 			if (owner != Gems::Owner::kThisMod) {
-				++gLeftTo[static_cast<std::size_t>(owner)];
+				++gOtherLighters[static_cast<std::size_t>(owner)];
 			}
 			if (owner == Gems::Owner::kReLight) {
 				return false;
@@ -637,7 +654,6 @@ namespace Plugin
 				}
 				if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
 					look->rgb = *seen;
-					look->seen = true;
 				}
 				SetGlow(*look, GlowOf(path));
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod }, a_others) ? 1 : 0;
@@ -731,7 +747,7 @@ namespace Plugin
 		};
 		std::unordered_map<RE::FormID, Retry> gRetryAt;
 		std::unordered_set<std::string>       gParticleTextures;  // the textures Data\ParticleLights\*.ini name (lower case, no extension)
-		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gOwnLightNow{ 0 }, gWithGlow{ 0 };
+		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 }, gWithGlowKept{ 0 };
 		float                                 gClock = 0.0f, gSinceScan = kScanEvery;
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
@@ -813,7 +829,7 @@ namespace Plugin
 		{
 			auto* geometry = a_object ? a_object->AsGeometry() : nullptr;
 			auto* shader = geometry ? geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr;
-			if (!shader || shader->GetMaterialType() != RE::BSShaderMaterial::Type::kEffect || !shader->material) {
+			if (!shader || !shader->material || shader->GetMaterialType() != RE::BSShaderMaterial::Type::kEffect) {
 				return {};
 			}
 			const char* path = static_cast<RE::BSEffectShaderMaterial*>(shader->material)->sourceTexturePath.c_str();
@@ -840,9 +856,9 @@ namespace Plugin
 				}
 				if (a_ownLights) {
 					const auto texture = EffectTexture(a_object);
-					const bool particle = !texture.empty() && gParticleTextures.contains(texture);
-					const bool enb = a_lighting == Lighting::kEnb && (particle || std::ranges::find(kEnbLightTextures, texture) != kEnbLightTextures.end());
-					if (enb || (a_lighting == Lighting::kShaders && particle)) {
+					const bool own = a_lighting == Lighting::kEnb ? std::ranges::find(kEnbLightTextures, texture) != kEnbLightTextures.end() :
+					                                                !texture.empty() && gParticleTextures.contains(texture);
+					if (own) {
 						out.emplace_back(a_object);
 					}
 				}
@@ -872,7 +888,9 @@ namespace Plugin
 			});
 		}
 
-		void Keep(RE::FormID a_id, RE::NiNode* a_root, const Gem& a_gem, RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s,
+		// ours on the gem (made once, again when its model was rebuilt), then its other lights put out; false when ours could not
+		// be made - the gem is let go below, its other lights left as they were
+		[[nodiscard]] bool Keep(RE::FormID a_id, RE::NiNode* a_root, const Gem& a_gem, RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s,
 			std::vector<RE::NiPointer<RE::NiAVObject>>&& a_others)
 		{
 			auto& kept = gKept[a_id];
@@ -880,23 +898,10 @@ namespace Plugin
 				Drop(kept, a_scene);  // the gem's model was rebuilt: a new one
 			}
 			kept.gem = &a_gem;
-			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
-			for (auto& other : a_others) {
-				const auto had = std::ranges::find(kept.putOut, other, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first);
-				const bool wasOut = had != kept.putOut.end() ? had->second : other->GetAppCulled();
-				other->SetAppCulled(true);
-				putOut.emplace_back(std::move(other), wasOut);
-			}
-			for (const auto& [old, wasOut] : kept.putOut) {
-				if (std::ranges::find(putOut, old, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first) == putOut.end()) {
-					old->SetAppCulled(wasOut);  // gone from the gem, or another mod's light that left it
-				}
-			}
-			kept.putOut = std::move(putOut);
 			if (!kept.light) {
 				const auto now = std::chrono::steady_clock::now();
 				if (const auto retry = gRetryAt.find(a_id); retry != gRetryAt.end() && retry->second.root == a_root && now < retry->second.at) {
-					return;  // not seen: let go below
+					return false;
 				}
 				kept.phase = static_cast<float>(a_id % 997u) / 997.0f * Gems::kPulseSeconds;
 				if (!Make(kept, a_root, a_scene, a_s)) {
@@ -908,11 +913,27 @@ namespace Plugin
 					if (!std::exchange(warned, true)) {
 						SKSE::log::warn("a soul gem light could not be made or registered; such a gem is tried again every {} s", kRetryAfter.count());
 					}
-					return;  // not seen: let go below
+					return false;
 				}
 				gRetryAt.erase(a_id);
 			}
+			// each other light is recorded before it is put out (room made first), so none is ever left out unrecorded
+			std::vector<std::pair<RE::NiPointer<RE::NiAVObject>, bool>> putOut;
+			putOut.reserve(a_others.size());
+			for (auto& other : a_others) {
+				const auto had = std::ranges::find(kept.putOut, other, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first);
+				const bool wasOut = had != kept.putOut.end() ? had->second : other->GetAppCulled();
+				putOut.emplace_back(std::move(other), wasOut);
+				putOut.back().first->SetAppCulled(true);
+			}
+			for (const auto& [old, wasOut] : kept.putOut) {
+				if (std::ranges::find(putOut, old, &std::pair<RE::NiPointer<RE::NiAVObject>, bool>::first) == putOut.end()) {
+					old->SetAppCulled(wasOut);  // gone from the gem, or another mod's light that left it
+				}
+			}
+			kept.putOut = std::move(putOut);
 			kept.seen = true;
+			return true;
 		}
 
 		void Scan(RE::ShadowSceneNode* a_scene, const Gems::Settings& a_s)
@@ -926,8 +947,8 @@ namespace Plugin
 				kept.seen = false;
 			}
 			const auto lighting = LightingFound();
-			// an ENB's own particle lights shine only while an ENB runs - settings files left behind light nothing
-			const bool  ownLights = (lighting == Lighting::kEnb && EnbRunningFound()) || (lighting == Lighting::kShaders && !gParticleTextures.empty());
+			// a gem's own model light shines on an ENB (found running), or on Community Shaders when a particle-light config names it
+			const bool  ownLights = lighting == Lighting::kEnb || (lighting == Lighting::kShaders && !gParticleTextures.empty());
 			std::size_t onShow = 0;
 			struct Candidate
 			{
@@ -972,11 +993,12 @@ namespace Plugin
 				std::vector<RE::NiPointer<RE::NiAVObject>> others;
 			};
 			std::vector<Lit> lit;
+			std::size_t      looked = 0;
 			for (const auto& c : candidates) {
-				if (lit.size() == kMaxLights) {
+				if (lit.size() == kMaxLights || ++looked > kMostLooked) {
 					break;
 				}
-				// asked only of the nearest gems, outside the reference walk: it takes the Papyrus VM's lock
+				// asked only of the nearest kMostLooked gems, outside the reference walk: it takes the Papyrus VM's lock
 				if (OnShow(c.ref)) {
 					++onShow;
 					continue;
@@ -991,10 +1013,10 @@ namespace Plugin
 			gOnShowNow = onShow;
 			std::size_t putOut = 0;
 			for (auto& l : lit) {
-				putOut += l.others.empty() ? 0 : 1;
-				Keep(l.c->id, l.c->root, *l.c->gem, a_scene, a_s, std::move(l.others));
+				const bool others = !l.others.empty();
+				putOut += Keep(l.c->id, l.c->root, *l.c->gem, a_scene, a_s, std::move(l.others)) && others ? 1 : 0;
 			}
-			gOwnLightNow = putOut;
+			gPutOutNow = putOut;
 			std::erase_if(gKept, [&](auto& a_entry) {
 				if (!a_entry.second.seen) {
 					Drop(a_entry.second, a_scene);
@@ -1016,9 +1038,12 @@ namespace Plugin
 				gSinceDisplays = 0.0f;
 				DarkenDisplays();
 			}
-			if (!scene || !s.on) {
+			if (!scene) {
+				return;  // no shadow scene to take our lights out of: they stay as they are until there is one
+			}
+			if (!s.on) {
 				DropAll(scene);
-				gOwnLightNow = 0;
+				gPutOutNow = 0;
 				return;
 			}
 			gClock = std::fmod(gClock + a_delta, 3600.0f);
@@ -1054,13 +1079,27 @@ namespace Plugin
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
+
+		// Quit to Main Menu: the world our lights hang in is gone and the player's update stops until a game loads, so they are
+		// taken out when the Main Menu opens (on the main thread; a game loading drops them too)
+		class MainMenuWatch final : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+		{
+		public:
+			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+			{
+				if (a_event && a_event->opening && std::string_view(a_event->menuName.c_str()) == RE::MainMenu::MENU_NAME) {
+					static_cast<void>(Later("main menu", []() { DropGemLights(); }));
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
+		};
 	}
 
 	void FindGems()
 	{
 		gGems.clear();
 		gFamilies.clear();
-		gLeftTo = {};
+		gOtherLighters = {};
 		gBlocked.clear();
 		auto* dh = RE::TESDataHandler::GetSingleton();
 		if (!dh) {
@@ -1086,7 +1125,10 @@ namespace Plugin
 		}
 		Others others;
 		others.lightPlacer = REX::W32::GetModuleHandleA("po3_LightPlacer.dll") != nullptr;
-		others.reLight = REX::W32::GetModuleHandleA("Relight.dll") != nullptr;  // RE::Light (ReLight)
+		// RE::Light (ReLight) lights this mod's gems only through this mod's RE::Light files: without them we light those gems
+		const bool reLightDll = REX::W32::GetModuleHandleA("Relight.dll") != nullptr;
+		const auto ourConfigs = std::filesystem::current_path() / "Data" / "SKSE" / "Plugins" / "ReLight" / "Configs" / "Illuminated - Soul Gem Hub";
+		others.reLight = reLightDll && std::filesystem::is_directory(ourConfigs, ec);
 		if (others.lightPlacer) {
 			others.claims = ReadLightPlacerClaims();
 		}
@@ -1114,7 +1156,6 @@ namespace Plugin
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
-				a_look.seen = true;
 				++fromPicture;
 			} else if (!Gems::ColorFromModel(a_look.family)) {
 				return;
@@ -1155,15 +1196,15 @@ namespace Plugin
 				}
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
-					look->seen = false;  // the base model's picture row and glow no longer apply
 					look->ownColor = true;
 					SetGlow(*look, SwapGlow(swapped));
 					++fromSwap;
 				}
 			}
-			withGlow += look->glow ? 1 : 0;
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
-			if (Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others) && always) {
+			const bool taken = Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others);
+			withGlow += taken && look->glow ? 1 : 0;
+			if (taken && always) {
 				++lit;
 				CountName(gFamilies, Gems::FamilyName(look->family));
 			}
@@ -1189,7 +1230,7 @@ namespace Plugin
 				continue;
 			}
 			if (form->Is(RE::FormType::SoulGem)) {
-				continue;  // left to another light mod by the soul gem pass
+				continue;  // left to RE::Light, or waiting on its author's permission, by the soul gem pass
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
@@ -1208,20 +1249,25 @@ namespace Plugin
 		using enum Gems::Owner;
 		SKSE::log::info(
 			"gems: {} soul gem record(s), {} lit always ({}), the rest when a placed gem holds a soul; {} other piece(s) by their "
-			"model; Rustic Soul Gems {}; taken over from Emissive Soul Gems' models {}, from other Light Placer configs {}, left to "
+			"model; Rustic Soul Gems {}; taken over from Emissive Soul Gems {}, from other Light Placer files {}, left to "
 			"RE::Light {} (Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem's own model light is put out under ours",
 			records, lit, list.empty() ? "none" : list, pieces, gRustic.empty() ? "not loaded" : gRustic,
-			gLeftTo[static_cast<std::size_t>(kEmissive)], gLeftTo[static_cast<std::size_t>(kLightPlacer)],
-			gLeftTo[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded", others.reLight ? "loaded" : "not loaded",
+			gOtherLighters[static_cast<std::size_t>(kEmissive)], gOtherLighters[static_cast<std::size_t>(kLightPlacer)],
+			gOtherLighters[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded",
+			others.reLight ? "loaded with this mod's files" : reLightDll ? "loaded without this mod's files" :
+																		   "not loaded",
 			gParticleTextures.size());
 		SKSE::log::info(
 			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
 			"their own swapped textures; {} have an own glow of another color (the Light color default)",
 			fromPicture, fromModel, fromSwap, withGlow);
 		// a glow worn on both choices (ASGO's Solar gems) gives the menu's Light color nothing to switch
-		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [](const auto& a_entry) {
-			return a_entry.second.look.glow.has_value() && !a_entry.second.look.glowAlways;
+		const auto ownGlow = [](const Gem& a_gem) { return a_gem.look.glow.has_value() && !a_gem.look.glowAlways; };
+		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [&](const auto& a_entry) { return ownGlow(a_entry.second); }));
+		gWithGlowKept = static_cast<std::size_t>(std::ranges::count_if(gGems, [&](const auto& a_entry) {
+			return ownGlow(a_entry.second) && !Gems::PickRecolors(a_entry.second.look);
 		}));
+		gRusticLit = std::ranges::any_of(gGems, [](const auto& a_entry) { return a_entry.second.look.family == Gems::Family::kRustic; });
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
@@ -1237,6 +1283,10 @@ namespace Plugin
 	{
 		REL::Relocation<std::uintptr_t> vtbl{ RE::PlayerCharacter::VTABLE[0] };
 		PlayerUpdate::func = vtbl.write_vfunc(REL::Relocate(0xAD, 0xAD, 0xAF), PlayerUpdate::thunk);  // Actor::Update
+		static MainMenuWatch mainMenu;
+		if (auto* ui = RE::UI::GetSingleton()) {
+			ui->AddEventSink<RE::MenuOpenCloseEvent>(&mainMenu);
+		}
 		SKSE::log::info("lights follow the player's update (Actor::Update)");
 	}
 
@@ -1251,10 +1301,9 @@ namespace Plugin
 	void ApplyNow()
 	{
 		// one look around now, not at the next frame: while the menu pauses the game no frame comes, and a light switched off
-		// would stay lit until it runs again
+		// would stay lit until it runs again (the frame also brings every light kept up to the settings)
 		gSinceScan = kScanEvery;
 		Frame(0.0f);
-		RefreshLights();
 	}
 
 	void RefreshLights()
@@ -1271,11 +1320,11 @@ namespace Plugin
 
 	std::vector<std::pair<std::string, std::size_t>> GemFamilies() { return gFamilies; }
 	std::vector<std::pair<std::string, std::size_t>> GemsBlocked() { return gBlocked; }
-	std::array<std::size_t, 4>                       GemsLeftTo() { return gLeftTo; }
-	std::size_t                                      GemsLeftToOwnLight() { return gOwnLightNow.load(); }
+	std::array<std::size_t, 4>                       GemsOtherLighters() { return gOtherLighters; }
+	std::size_t                                      GemsOtherLightsPutOut() { return gPutOutNow.load(); }
 	std::size_t                                      GemParticleConfigs() { return gParticleTextures.size(); }
-	std::size_t                                      GemsWithOwnGlow() { return gWithGlow.load(); }
-	std::string                                      RusticFound() { return gRustic; }
+	bool                                             LightColorMatters(int a_gemMod) { return Gems::LightColorShown(a_gemMod, gWithGlow.load(), gWithGlowKept.load()); }
+	std::string                                      RusticFound() { return gRusticLit ? gRustic : std::string(); }
 
 	std::string GlowNow(RE::FormID a_ref)
 	{
@@ -1323,8 +1372,8 @@ namespace Plugin
 			blocked[std::string(name)] = n;
 		}
 		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
-			{ "takenOver", { { "emissiveSoulGems", gLeftTo[1] }, { "lightPlacer", gLeftTo[2] } } }, { "leftTo", { { "reLight", gLeftTo[3] } } },
-			{ "otherLightsPutOutNearYou", gOwnLightNow.load() }, { "onShowNearYou", gOnShowNow.load() },
+			{ "takenOver", { { "emissiveSoulGems", gOtherLighters[1] }, { "lightPlacer", gOtherLighters[2] } } },
+			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
 			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
 			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "lights", lights } };
 		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
