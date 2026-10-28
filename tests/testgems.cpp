@@ -429,6 +429,8 @@ namespace
 		const auto* pick = GemModAt(praedy);
 		CHECK(ColorAt(plain, d) == pick->glow[static_cast<std::size_t>(Kind::kGrand)] && ColorAt(plain, author) == pick->rgb[static_cast<std::size_t>(Kind::kGrand)]);
 		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
+		// the menu offers Light color for a picked gem mod whose glow set differs (Praedy's black gem), never for Automatic
+		CHECK(PickHasOwnGlow(praedy) == (pick->glow != pick->rgb) && PickHasOwnGlow(praedy) && !PickHasOwnGlow(0));
 		// the glow table: sorted, found by its fingerprint, nothing for a file it does not list
 		CHECK(std::ranges::is_sorted(kGlowColors, {}, &GlowColor::hash));
 		bool found = true;
@@ -436,6 +438,8 @@ namespace
 			found = found && GlowColorOf(row.hash) == &row;
 		}
 		CHECK(found && !GlowColorOf(0));
+		// the table carries ASGO's Solar glow on both choices
+		CHECK(std::ranges::any_of(kGlowColors, &GlowColor::always));
 	}
 }
 

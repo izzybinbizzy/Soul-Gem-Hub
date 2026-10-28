@@ -22,14 +22,16 @@ namespace Gems
 	};
 
 	// sorted by hash
-	inline constexpr std::array<GlowColor, 15> kGlowColors{ {
+	inline constexpr std::array<GlowColor, 17> kGlowColors{ {
 		{ 0x2DF0183A9FF756CFULL, 2, 255, 176, false },    // crystalline SoulGemGreaterFilled clutter\soulgem\soulgemgreater0_transluc.dds
 		{ 0x3A2A9A2A5F582607ULL, 93, 90, 255, false },    // ultimate SoulGemGrandFilled ultimatesoulgems\soulgemgrand_d.dds
+		{ 0x627BEFB7B458DFC6ULL, 255, 119, 82, true },    // asgo SoulGem03CommonFilled_03Common_Solar textures\asgo\clutter\soulgem\soulgemcommon_solar.dds
 		{ 0x6E7BAA800E90690BULL, 173, 104, 255, false },  // praedy MGRArniel02SoulGem praedythxvi\soulgems\mp\arniel.dds
 		{ 0x793799766B8677D5ULL, 55, 110, 255, false },   // animated SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01_filled.nif
 		{ 0x87C747657B4CD85AULL, 176, 106, 255, false },  // enhanced SoulGemLesserFilled clutter\soulgem\soulgemlesser.dds
 		{ 0x8D607B1480ADF203ULL, 255, 101, 66, false },   // morrowind SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
 		{ 0x8EE44DE6FF690A05ULL, 90, 74, 255, false },    // enhanced SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
+		{ 0x931CD2576ACB9F34ULL, 255, 122, 123, true },   // asgo SoulGem05GrandFilled_05Grand_Solar textures\asgo\clutter\soulgem\soulgemgrand_solar.dds
 		{ 0x9C58FABC821BDB69ULL, 199, 121, 255, false },  // enhanced DLC1VQ04SoulGemShards meshes\dlc01\clutter\dlc01soulgembowlfull.nif
 		{ 0xB0ECEC48C8938C35ULL, 130, 74, 255, false },   // better SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
 		{ 0xB6C64EF57B52C580ULL, 255, 18, 254, false },   // spherical SoulGemGrandFilled psq\egggem\egggrand.dds

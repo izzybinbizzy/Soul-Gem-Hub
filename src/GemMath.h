@@ -749,6 +749,13 @@ namespace Gems
 		return pick ? pick->name : std::string_view("Automatic");
 	}
 
+	// a picked gem mod whose own glow differs from its colors at some size: "Light color" then changes what that pick shows
+	[[nodiscard]] inline bool PickHasOwnGlow(int a_index) noexcept
+	{
+		const auto* pick = GemModAt(a_index);
+		return pick && pick->glow != pick->rgb;
+	}
+
 	// the color a gem's light wears: the picked gem mod's color for its size when one is picked - only a soul gem of the six sizes
 	// (the game's or a replacer's, Praedy's, Rustic's); the stars, the named quest gems (on any model) and the Soul Cairn keep
 	// their own - else the color found for it at data load. "Light color": by default a gem's own glow where it differs from that

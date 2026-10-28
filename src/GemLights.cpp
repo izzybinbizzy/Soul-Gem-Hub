@@ -1220,7 +1220,10 @@ namespace Plugin
 			"gems: {} soul gem record(s) wear the color their picture shows, {} the color read off their own model, {} the color of "
 			"their own swapped textures; {} have an own glow of another color (the Light color default)",
 			fromPicture, fromModel, fromSwap, withGlow);
-		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [](const auto& a_entry) { return a_entry.second.look.glow.has_value(); }));
+		// a glow worn on both choices (ASGO's Solar gems) gives the menu's Light color nothing to switch
+		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [](const auto& a_entry) {
+			return a_entry.second.look.glow.has_value() && !a_entry.second.look.glowAlways;
+		}));
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
 		}
