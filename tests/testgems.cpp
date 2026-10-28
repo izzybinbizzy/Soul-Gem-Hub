@@ -30,7 +30,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 183;
+	constexpr int kFloor = 228;
 
 	using namespace Gems;
 
@@ -246,6 +246,8 @@ namespace
 		CHECK(IsDisplayScript("MuseumDisplayCaseScript"));
 		CHECK(!IsDisplayScript("defaultDisableHavokOnLoad"));
 		CHECK(!IsDisplayScript("dunYngvildSoulgemScript"));
+		CHECK(KnownDisplay("legacyofthedragonborn.esm", 0x9212C6) && KnownDisplay("LegacyoftheDragonborn.esm", 0x01C59B));
+		CHECK(!KnownDisplay("LegacyoftheDragonborn.esm", 0x02E4E2) && !KnownDisplay("Skyrim.esm", 0x9212C6));
 		CHECK(ReLightKeyed("_pgpatcher_dups\\1\\dlc01\\clutter\\dlc01soulgemchunk01.nif"));
 		CHECK(ReLightKeyed("clutter\\soulgem\\soulgemgrand01fullcommon.nif"));
 		CHECK(!ReLightKeyed("_pgpatcher_dups\\1\\clutter\\soulgem\\soulgemcommon01.nif"));
@@ -322,12 +324,13 @@ namespace
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 100);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 50);
 		// a hand-edited file: an editor's UTF-8 mark, a note after a value, true / false and on / off words
 		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
 		Settings          h;
 		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
-		// "Stars" (his checklist 309 answer): clamped to its range, written back, and only the two stars dimmed by it
+		// "Stars" (his checklist 309 / 321 answers): clamped to its range, written back, and only the two stars dimmed and
+		// shortened by it
 		std::stringstream starsIn("Stars=5\n");
 		Settings          st;
 		CHECK(ReadSettings(starsIn, st) == 1 && st.stars == kStarsMin);
@@ -335,16 +338,25 @@ namespace
 		std::stringstream starsOut;
 		WriteSettings(st, starsOut);
 		CHECK(starsOut.str().find("Stars=50\n") != std::string::npos);
-		const Settings full;
-		CHECK(Near(ShownAt(Kind::kStar, false, false, st).fade, ShownAt(Kind::kStar, false, false, full).fade * 0.5f));
+		Settings full;
+		full.stars = 100;
+		const auto plainFull = ShownAt(Kind::kStar, false, false, full), plainHalf = ShownAt(Kind::kStar, false, false, st);
+		CHECK(Near(plainHalf.fade, plainFull.fade * 0.5f) && Near(plainHalf.radius, plainFull.radius * 0.5f, 0.5f));
 		CHECK(Near(ShownAt(Kind::kGrand, false, false, st).fade, ShownAt(Kind::kGrand, false, false, full).fade));
-		// on Community Shaders past the cutoff's clamp (a short Reach) Stars still dims a star: half the fade, the same reach
-		Settings shortReach = full;
-		shortReach.reach = 50;
-		Settings shortHalf = shortReach;
-		shortHalf.stars = 50;
-		const auto atFull = ShownAt(Kind::kStar, true, false, shortReach), atHalf = ShownAt(Kind::kStar, true, false, shortHalf);
-		CHECK(Near(atHalf.fade, atFull.fade * 0.5f, 0.001f) && Near(atHalf.radius, atFull.radius, 0.5f) && atHalf.fade < atFull.fade);
+		CHECK(Near(ShownAt(Kind::kGrand, true, false, st).radius, ShownAt(Kind::kGrand, true, false, full).radius));
+		// ShownFor's dim comes after Community Shaders' cutoff clamp: at a reach short enough to clamp, half the fade, the same reach
+		const auto& starStrength = kStrength[static_cast<std::size_t>(Kind::kStar)];
+		const auto  clampFull = ShownFor(starStrength, true, 1.0f, 0.5f), clampHalf = ShownFor(starStrength, true, 1.0f, 0.5f, 1.0f, 0.5f);
+		CHECK(Near(clampHalf.fade, clampFull.fade * 0.5f, 0.001f) && Near(clampHalf.radius, clampFull.radius, 0.5f));
+		// on Community Shaders at every Reach a star at 50 % is dimmer and reaches less far
+		for (const int reach : { kReachMin, 100, kReachMax }) {
+			Settings atReach = full;
+			atReach.reach = reach;
+			Settings halfStars = atReach;
+			halfStars.stars = 50;
+			const auto atFull = ShownAt(Kind::kStar, true, false, atReach), atHalf = ShownAt(Kind::kStar, true, false, halfStars);
+			CHECK(atHalf.fade < atFull.fade && atHalf.radius < atFull.radius);
+		}
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;

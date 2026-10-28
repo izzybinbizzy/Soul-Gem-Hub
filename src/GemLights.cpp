@@ -263,6 +263,20 @@ namespace Plugin
 			return true;
 		}
 
+		// a texture's fingerprint, once per file: the permission block and the picture rows each ask for it
+		std::optional<std::uint64_t> TexturePrint(std::string_view a_path)
+		{
+			static std::unordered_map<std::string, std::optional<std::uint64_t>> read;
+			const auto [it, added] = read.try_emplace(Gems::TexturePath(a_path));
+			if (added) {
+				Gems::FingerprintSum sum;
+				if (ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
+					it->second = sum.Result();
+				}
+			}
+			return it->second;
+		}
+
 		// the gem mod a file of the game's belongs to, while its author has not allowed this mod to light it: by its name, else
 		// by its bytes (streamed - only the first 64 KB are hashed, a 4K texture is never held whole)
 		std::optional<std::string_view> BlockedTexture(std::string_view a_path)
@@ -270,11 +284,8 @@ namespace Plugin
 			if (const auto byName = Gems::BlockedModOfPath(Gems::TexturePath(a_path))) {
 				return byName;
 			}
-			Gems::FingerprintSum sum;
-			if (!ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) || !sum.Size()) {
-				return std::nullopt;
-			}
-			return Gems::BlockedModOf(sum.Result());
+			const auto print = TexturePrint(a_path);
+			return print ? Gems::BlockedModOf(*print) : std::nullopt;
 		}
 
 		[[nodiscard]] const char* DiffuseOf(RE::BSGeometry* a_geometry)
@@ -303,13 +314,15 @@ namespace Plugin
 			if (!image) {
 				return false;
 			}
-			// already 8-bit RGBA: read as it is (DirectXTex refuses a conversion to the same format)
+			// 8-bit RGBA as stored: an sRGB texture stays sRGB (made plain, DirectXTex turns it linear - darker and stronger than the
+			// gem shows); one already in that format is read as it is (DirectXTex refuses a conversion to the same format)
+			const auto            rgbaFormat = DirectX::IsSRGB(image->format) ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
 			DirectX::ScratchImage rgba;
 			const DirectX::Image* pixels = image;
-			if (image->format != DXGI_FORMAT_R8G8B8A8_UNORM) {
+			if (image->format != rgbaFormat) {
 				const auto result = DirectX::IsCompressed(image->format) ?
-				                        DirectX::Decompress(*image, DXGI_FORMAT_R8G8B8A8_UNORM, rgba) :
-				                        DirectX::Convert(*image, DXGI_FORMAT_R8G8B8A8_UNORM, DirectX::TEX_FILTER_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, rgba);
+				                        DirectX::Decompress(*image, rgbaFormat, rgba) :
+				                        DirectX::Convert(*image, rgbaFormat, DirectX::TEX_FILTER_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, rgba);
 				pixels = SUCCEEDED(result) ? rgba.GetImage(0, 0, 0) : nullptr;
 			}
 			if (!pixels) {
@@ -425,9 +438,8 @@ namespace Plugin
 				return it->second;
 			}
 			for (const auto& texture : Gems::TexturesNamed(nif)) {
-				Gems::FingerprintSum sum;
-				if (Gems::ColorTexture(texture) && ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
-					it->second.push_back(sum.Result());
+				if (const auto print = Gems::ColorTexture(texture) ? TexturePrint(texture) : std::nullopt) {
+					it->second.push_back(*print);
 				}
 			}
 			it->second.push_back(Gems::Fingerprint(nif));
@@ -519,9 +531,8 @@ namespace Plugin
 			const auto [it, added] = read.try_emplace(a_textures);
 			if (added) {
 				for (const auto& texture : a_textures) {
-					Gems::FingerprintSum sum;
-					if (ReadGameFile(texture, "textures", [&](std::span<const std::uint8_t> a_piece) { sum.Add(a_piece); }) && sum.Size()) {
-						it->second.push_back(sum.Result());
+					if (const auto print = TexturePrint(texture)) {
+						it->second.push_back(*print);
 					}
 				}
 			}
@@ -868,12 +879,17 @@ namespace Plugin
 
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
 		// museum shows the real Azura's Star and Black Star through dbm_dynamicdisplayscript, enabled once donated. A gem left
-		// lying about carries no such script (the College's carry defaultDisableHavokOnLoad). The script table's place is SE / AE's
+		// lying about carries no such script (the College's carry defaultDisableHavokOnLoad). The same check runs on VR (Papyrus
+		// Extender's VR build reads this table the same way); Legacy's own displays are also known by their place
+		// (Gems::KnownDisplay), for the moment before their script is bound
 		std::atomic<std::size_t> gOnShowNow{ 0 };
 
 		[[nodiscard]] bool OnShow(const RE::TESObjectREFR* a_ref)
 		{
-			auto* vm = REL::Module::IsVR() ? nullptr : RE::BSScript::Internal::VirtualMachine::GetSingleton();
+			if (const auto* file = a_ref->GetFile(0); file && Gems::KnownDisplay(file->GetFilename(), a_ref->GetLocalFormID())) {
+				return true;
+			}
+			auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 			auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
 			if (!policy) {
 				return false;

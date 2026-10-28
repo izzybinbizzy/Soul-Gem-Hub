@@ -407,10 +407,7 @@ namespace Gems
 	// (soulgemcommon0_n.dds); read as a color it is a strong lavender blue that outweighed the gem's own texture.
 	[[nodiscard]] inline bool IsNormalMap(std::string_view a_path)
 	{
-		std::string name(a_path.substr(a_path.find_last_of("/\\") == std::string_view::npos ? 0 : a_path.find_last_of("/\\") + 1));
-		for (auto& c : name) {
-			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-		}
+		std::string name = Lower(a_path.substr(a_path.find_last_of("/\\") == std::string_view::npos ? 0 : a_path.find_last_of("/\\") + 1));
 		if (const auto dot = name.rfind('.'); dot != std::string::npos) {
 			name.erase(dot);
 		}
@@ -486,6 +483,14 @@ namespace Gems
 	[[nodiscard]] inline bool IsDisplayScript(std::string_view a_script)
 	{
 		return Lower(a_script).find("display") != std::string::npos;
+	}
+
+	// the real gems Legacy of the Dragonborn puts on show (its display references, read off LegacyoftheDragonborn.esm): known by
+	// their own place too, so they stay unlit where the script check cannot run (Skyrim VR)
+	[[nodiscard]] inline bool KnownDisplay(std::string_view a_plugin, std::uint32_t a_localId) noexcept
+	{
+		constexpr std::array<std::uint32_t, 3> kLegacyDisplays{ 0x01C59B, 0x9212C6, 0x9212C7 };  // a petty soul gem, Azura's Star, the Black Star
+		return SameText(a_plugin, "LegacyoftheDragonborn.esm") && std::ranges::find(kLegacyDisplays, a_localId) != kLegacyDisplays.end();
 	}
 
 	// whose other light a gem would wear: none; Emissive Soul Gems' own Light Placer file's, or another Light Placer file's
@@ -710,7 +715,7 @@ namespace Gems
 
 	// ------------------------------------------------------------------ settings (SoulGemHub\Settings.ini, written by the menu)
 	inline constexpr int kBrightnessMin = 25, kBrightnessMax = 200, kReachMin = 50, kReachMax = 150;
-	// "Stars": Azura's Star and the Black Star on top of Brightness - their big pools can drown every gem near them
+	// "Stars": Azura's Star and the Black Star on top of Brightness and Reach - their big pools can drown every gem near them
 	inline constexpr int kStarsMin = 10, kStarsMax = 100;
 
 	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
@@ -727,7 +732,7 @@ namespace Gems
 		bool on{ true };         // every soul gem light
 		int  brightness{ 100 };  // percent
 		int  reach{ 100 };       // percent
-		int  stars{ 100 };       // percent of Brightness for the two stars
+		int  stars{ 50 };        // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
 		bool pulse{ true };      // the soft pulse
 		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
 		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
@@ -808,7 +813,7 @@ namespace Gems
 	{
 		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
 		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
-			static_cast<float>(a_s.reach) / 100.0f, a_pulse, stars);
+			static_cast<float>(a_s.reach) / 100.0f * stars, a_pulse, stars);
 	}
 
 	// a setting's value as a number: digits, or true / false, on / off, yes / no, as a hand-edited file may hold it
