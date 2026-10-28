@@ -502,7 +502,7 @@ namespace Gems
 	struct BlockedPath
 	{
 		std::string_view path;  // below meshes\ or textures\, lower case
-		std::uint8_t     mod;
+		std::uint8_t     mod{ 0 };
 	};
 
 	// sorted by path

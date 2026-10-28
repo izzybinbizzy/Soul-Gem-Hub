@@ -260,7 +260,7 @@ namespace
 
 	void Owners()
 	{
-		// Emissive Soul Gems' models are his whenever Light Placer is loaded (his rule 2026-10-19)
+		// the models Emissive Soul Gems' own Light Placer file lights, by whole path (our RE::Light files never name one)
 		CHECK(EmissiveModel("Clutter\\SoulGem\\SoulGemGrand_full.nif"));
 		CHECK(EmissiveModel("clutter\\daedric\\azurastar.nif"));
 		CHECK(EmissiveModel("clutter\\soulgem\\soulgempetty01.nif"));
@@ -269,24 +269,24 @@ namespace
 		// a replacer's copy in another folder is not Emissive Soul Gems' (Light Placer matches whole paths)
 		CHECK(!EmissiveModel("Clutter\\SoulGem\\full\\SoulGemGrand01.nif"));
 		CHECK(!EmissiveModel("Clutter\\SoulGem\\Filled\\SoulGemBlack01.nif"));
-		CHECK(OwnerOf("Clutter\\SoulGem\\full\\SoulGemGrand01.nif", Family::kGame, true, false, false) == Owner::kThisMod);
+		CHECK(OwnerOf("Clutter\\SoulGem\\full\\SoulGemGrand01.nif", Family::kGame, Claim::kNone, false) == Owner::kThisMod);
 		// only Rustic's own names take Rustic's look, never another replacer's "..01_full.nif"
 		CHECK(!LookOfModel("clutter\\soulgem\\soulgemgrand01_full.nif", true));
 		CHECK(!LookOfModel("Clutter\\SoulGem\\Filled\\SoulGemGrand_full.nif", true));
 		const auto rusticGrand = LookOfModel("Meshes/Clutter/SoulGem/SoulGemGrand_full.nif", true);
 		CHECK(rusticGrand && rusticGrand->family == Family::kRustic);
-		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, true, false, false) == Owner::kEmissive);
-		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, false, false, false) == Owner::kThisMod);
-		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, false, false, true) == Owner::kThisMod);
-		// another Light Placer config's gem is left to it, but only with Light Placer loaded
-		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, true, true, false) == Owner::kLightPlacer);
-		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, false, true, false) == Owner::kThisMod);
+		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, Claim::kEmissive, false) == Owner::kEmissive);
+		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, Claim::kNone, false) == Owner::kThisMod);
+		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand_full.nif", Family::kRustic, Claim::kNone, true) == Owner::kThisMod);
+		// another Light Placer file's claim, on Emissive Soul Gems' paths too (CS Light on the game's gems), answers to its own switch
+		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, Claim::kOther, false) == Owner::kLightPlacer);
+		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand01.nif", Family::kGame, Claim::kOther, false) == Owner::kLightPlacer);
 		// this mod's RE::Light files light Praedy's, the named gems and the Soul Cairn's pieces when RE::Light is loaded
-		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, false, false, true) == Owner::kReLight);
-		CHECK(OwnerOf("clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, false, false, true) == Owner::kReLight);
-		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand01.nif", Family::kGame, false, false, true) == Owner::kThisMod);
-		CHECK(OwnerOf("clutter\\daedric\\azurastar.nif", Family::kStar, false, false, true) == Owner::kThisMod);
-		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, false, false, false) == Owner::kThisMod);
+		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, Claim::kNone, true) == Owner::kReLight);
+		CHECK(OwnerOf("clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, Claim::kNone, true) == Owner::kReLight);
+		CHECK(OwnerOf("Clutter\\SoulGem\\SoulGemGrand01.nif", Family::kGame, Claim::kNone, true) == Owner::kThisMod);
+		CHECK(OwnerOf("clutter\\daedric\\azurastar.nif", Family::kStar, Claim::kNone, true) == Owner::kThisMod);
+		CHECK(OwnerOf("clutter\\soulgem\\soulgemgrand01full.nif", Family::kPraedys, Claim::kNone, false) == Owner::kThisMod);
 	}
 
 	// a Light Placer formIDs token against a form (Claimed in GemLights.cpp)
@@ -313,7 +313,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 9);
+		CHECK(ReadSettings(again, back) == 10);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
@@ -322,7 +322,29 @@ namespace
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
-		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse);
+		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 100);
+		// a hand-edited file: an editor's UTF-8 mark, a note after a value, true / false and on / off words
+		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
+		Settings          h;
+		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
+		// "Stars" (his checklist 309 answer): clamped to its range, written back, and only the two stars dimmed by it
+		std::stringstream starsIn("Stars=5\n");
+		Settings          st;
+		CHECK(ReadSettings(starsIn, st) == 1 && st.stars == kStarsMin);
+		st.stars = 50;
+		std::stringstream starsOut;
+		WriteSettings(st, starsOut);
+		CHECK(starsOut.str().find("Stars=50\n") != std::string::npos);
+		const Settings full;
+		CHECK(Near(ShownAt(Kind::kStar, false, false, st).fade, ShownAt(Kind::kStar, false, false, full).fade * 0.5f));
+		CHECK(Near(ShownAt(Kind::kGrand, false, false, st).fade, ShownAt(Kind::kGrand, false, false, full).fade));
+		// on Community Shaders past the cutoff's clamp (a short Reach) Stars still dims a star: half the fade, the same reach
+		Settings shortReach = full;
+		shortReach.reach = 50;
+		Settings shortHalf = shortReach;
+		shortHalf.stars = 50;
+		const auto atFull = ShownAt(Kind::kStar, true, false, shortReach), atHalf = ShownAt(Kind::kStar, true, false, shortHalf);
+		CHECK(Near(atHalf.fade, atFull.fade * 0.5f, 0.001f) && Near(atHalf.radius, atFull.radius, 0.5f) && atHalf.fade < atFull.fade);
 		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
 		// "Use their light": each switch keeps only its own kind of other light
 		Settings t;
@@ -431,6 +453,12 @@ namespace
 		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
 		// the menu offers Light color for a picked gem mod whose glow set differs (Praedy's black gem), never for Automatic
 		CHECK(PickHasOwnGlow(praedy) == (pick->glow != pick->rgb) && PickHasOwnGlow(praedy) && !PickHasOwnGlow(0));
+		// a pick recolors only the six sizes' plain gems; Light color shows where its two choices differ under the pick
+		Look bowl{ Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } };
+		CHECK(PickRecolors(plain) && PickRecolors(praedyBlack) && !PickRecolors(solar) && !PickRecolors(bowl));
+		const int animated = GemModIndex("animatedfilled");
+		CHECK(!LightColorShown(0, 0, 0) && LightColorShown(0, 1, 0) && LightColorShown(praedy, 0, 0));
+		CHECK(animated > 0 && !PickHasOwnGlow(animated) && !LightColorShown(animated, 5, 0) && LightColorShown(animated, 5, 1));
 		// the glow table: sorted, found by its fingerprint, nothing for a file it does not list
 		CHECK(std::ranges::is_sorted(kGlowColors, {}, &GlowColor::hash));
 		bool found = true;

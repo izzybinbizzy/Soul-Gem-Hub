@@ -10,7 +10,8 @@
 //   ENB                 } the game's own lighting: a light reaches its radius, drawn plain (GemMath.h ShownFor)
 //   Vanilla             }
 // Leftover ENB settings never make it ENB while Community Shaders runs (RELight 2.1's report, Illuminated's rule), and ENB's settings
-// files alone never make it ENB at all: an ENB preset left in the game folder with no ENB running is Vanilla lighting.
+// files alone do not make it ENB: an ENB preset left in the game folder with no ENB running is Vanilla lighting. Only when the
+// loaded modules cannot be listed do the settings files decide (and the log says so).
 
 #include "Plugin.h"
 
@@ -113,11 +114,6 @@ namespace Plugin
 	Lighting LightingFound()
 	{
 		return gFound.load();
-	}
-
-	bool EnbRunningFound()
-	{
-		return gEnbRunning.load();
 	}
 
 	const char* LightingName(Lighting a_lighting)

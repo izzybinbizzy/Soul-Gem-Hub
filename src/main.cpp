@@ -36,9 +36,9 @@ namespace
 		const auto started = std::chrono::steady_clock::now();
 		ReadLighting();
 		FindGems();
+		InstallFrame();  // before the menu's steps: a throw in them leaves the gems lit
 		SKSE::log::info("{}", Translation::Load("Data/SKSE/Plugins/SoulGemHub/Translation.json"));
 		RegisterMenu();
-		InstallFrame();
 		SKSE::log::info("ready in {:.1f} ms", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
 	}
 
@@ -83,10 +83,14 @@ namespace
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
-	// the version the DLL declares (xmake.lua set_version), never a typed number
-	const auto* decl = SKSE::PluginDeclaration::GetSingleton();
-	const auto  ver = decl ? std::format("{}.{}", decl->GetVersion().major(), decl->GetVersion().minor()) : std::string("?");
-	SKSE::log::info("Illuminated - Soul Gem Hub {} - every soul gem glows in its own color, on any lighting", ver);
+	// the start line is the only work here that can throw (low memory): it never leaves the plugin
+	try {
+		// the version the DLL declares (xmake.lua set_version), never a typed number
+		const auto* decl = SKSE::PluginDeclaration::GetSingleton();
+		const auto  ver = decl ? std::format("{}.{}", decl->GetVersion().major(), decl->GetVersion().minor()) : std::string("?");
+		SKSE::log::info("Illuminated - Soul Gem Hub {} - every soul gem glows in its own color, on any lighting", ver);
+	} catch (...) {
+	}
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
 	return true;
 }
