@@ -246,6 +246,8 @@ namespace
 		CHECK(IsDisplayScript("MuseumDisplayCaseScript"));
 		CHECK(!IsDisplayScript("defaultDisableHavokOnLoad"));
 		CHECK(!IsDisplayScript("dunYngvildSoulgemScript"));
+		CHECK(KnownDisplay("legacyofthedragonborn.esm", 0x9212C6) && KnownDisplay("LegacyoftheDragonborn.esm", 0x01C59B));
+		CHECK(!KnownDisplay("LegacyoftheDragonborn.esm", 0x02E4E2) && !KnownDisplay("Skyrim.esm", 0x9212C6));
 		CHECK(ReLightKeyed("_pgpatcher_dups\\1\\dlc01\\clutter\\dlc01soulgemchunk01.nif"));
 		CHECK(ReLightKeyed("clutter\\soulgem\\soulgemgrand01fullcommon.nif"));
 		CHECK(!ReLightKeyed("_pgpatcher_dups\\1\\clutter\\soulgem\\soulgemcommon01.nif"));

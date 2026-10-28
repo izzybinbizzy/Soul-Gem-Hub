@@ -485,6 +485,14 @@ namespace Gems
 		return Lower(a_script).find("display") != std::string::npos;
 	}
 
+	// the real gems Legacy of the Dragonborn puts on show (its display references, read off LegacyoftheDragonborn.esm): known by
+	// their own place too, so they stay unlit where the script check cannot run (Skyrim VR)
+	[[nodiscard]] inline bool KnownDisplay(std::string_view a_plugin, std::uint32_t a_localId) noexcept
+	{
+		constexpr std::array<std::uint32_t, 3> kLegacyDisplays{ 0x01C59B, 0x9212C6, 0x9212C7 };  // a petty soul gem, Azura's Star, the Black Star
+		return SameText(a_plugin, "LegacyoftheDragonborn.esm") && std::ranges::find(kLegacyDisplays, a_localId) != kLegacyDisplays.end();
+	}
+
 	// whose other light a gem would wear: none; Emissive Soul Gems' own Light Placer file's, or another Light Placer file's
 	// (Subtle Soul Gems', CS Light's ...) - lit by us all the same, theirs put out unless the menu keeps that kind; or this
 	// mod's own RE::Light files' (RE::Light loaded) - left to RE::Light
