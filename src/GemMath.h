@@ -25,6 +25,7 @@
 #include <cstring>
 #include <istream>
 #include <iterator>
+#include <ranges>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -715,10 +716,9 @@ namespace Gems
 		const auto modFile = [](std::uint64_t a_print) {
 			return std::ranges::find(kGameGemFiles, a_print) == kGameGemFiles.end() && SeenColorOf(a_print).has_value();
 		};
-		std::vector<std::string> colors;
-		std::ranges::copy_if(a_textures, std::back_inserter(colors), [](const std::string& a_path) { return ColorTexture(a_path); });
+		auto       colors = a_textures | std::views::filter([](const std::string& a_path) { return ColorTexture(a_path); });
 		const bool classic = std::ranges::all_of(colors, gameDiffuse) && std::ranges::find(a_textures, "cubemaps\\chitin_e.dds") != a_textures.end();
-		if (colors.empty() || !(classic || std::ranges::all_of(colors, pbr)) || std::ranges::any_of(a_prints, modFile)) {
+		if (std::ranges::empty(colors) || !(classic || std::ranges::all_of(colors, pbr)) || std::ranges::any_of(a_prints, modFile)) {
 			return std::nullopt;
 		}
 		const auto bare = BareName(a_model);

@@ -1282,10 +1282,11 @@ namespace Plugin
 					CountName(gBlocked, *mod);
 					continue;
 				}
+				// its own textures, never the game model's glow
+				SetGlow(*look, SwapGlow(swapped));
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
 					look->ownColor = true;
-					SetGlow(*look, SwapGlow(swapped));
 					++fromSwap;
 				}
 			}
