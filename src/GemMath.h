@@ -683,6 +683,33 @@ namespace Gems
 		return it == kGlowColors.end() || it->hash != a_fingerprint ? nullptr : &*it;
 	}
 
+	// the game's own six gem models in the game's own textures glow these colors alone in the dark (our light off) - the default
+	// of the menu's "Light color": their lit-room colors lit pale blue and teal pools under violet gems
+	inline constexpr std::array<std::uint64_t, 3> kGameGemTextures{ 0x40E64FA415FA17CFULL, 0x7F3555FAF7E28371ULL, 0x9DCF4B6BA39D84BFULL };
+
+	struct GameGlow
+	{
+		std::string_view model;
+		Rgb              rgb{};
+	};
+	inline constexpr std::array<GameGlow, 6> kGameGlows{ { { "soulgempetty01.nif", { 159, 110, 255 } },
+		{ "soulgemlesser01.nif", { 176, 116, 255 } }, { "soulgemcommon01.nif", { 206, 145, 255 } },
+		{ "soulgemgreater01.nif", { 95, 106, 255 } }, { "soulgemgrand01.nif", { 86, 116, 255 } },
+		{ "soulgemblack01.nif", { 197, 74, 255 } } } };
+
+	// the own glow of a game model whose every color texture is the game's (a_textures: their fingerprints), or none - a mod's own
+	// model or textures at the game's names keep their own rows
+	[[nodiscard]] inline std::optional<Rgb> GameGlowOf(std::string_view a_model, std::span<const std::uint64_t> a_textures)
+	{
+		const auto ours = [](std::uint64_t a_print) { return std::ranges::find(kGameGemTextures, a_print) != kGameGemTextures.end(); };
+		if (a_textures.empty() || !std::ranges::all_of(a_textures, ours)) {
+			return std::nullopt;
+		}
+		const auto bare = BareName(a_model);
+		const auto it = std::ranges::find(kGameGlows, std::string_view(bare), &GameGlow::model);
+		return it == kGameGlows.end() ? std::nullopt : std::optional(it->rgb);
+	}
+
 	struct NamedGem
 	{
 		std::uint32_t    id{ 0 };  // the record's id in its own plugin

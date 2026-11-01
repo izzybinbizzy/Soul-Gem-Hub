@@ -522,6 +522,12 @@ namespace
 		CHECK(found && !GlowColorOf(0));
 		// the table carries ASGO's Solar glow on both choices
 		CHECK(std::ranges::any_of(kGlowColors, &GlowColor::always));
+		// the game's own gems glow by kind only on a game model in the game's own textures
+		const std::array<std::uint64_t, 1> gameCommon{ 0x7F3555FAF7E28371ULL };
+		const std::array<std::uint64_t, 1> modTexture{ 0x1234ULL };
+		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", gameCommon) == kGameGlows[2].rgb);
+		CHECK(!GameGlowOf("clutter\\soulgem\\soulgempetty01_filled.nif", gameCommon));
+		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", modTexture) && !GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", {}));
 	}
 }
 

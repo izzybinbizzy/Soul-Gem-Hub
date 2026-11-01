@@ -557,6 +557,13 @@ namespace Plugin
 			return nullptr;
 		}
 
+		// a game gem model in the game's own textures: its own glow (GemMath.h kGameGlows)
+		std::optional<Gems::Rgb> GameGlow(std::string_view a_model)
+		{
+			const auto& prints = PrintsOf(a_model);
+			return prints.empty() ? std::nullopt : Gems::GameGlowOf(a_model, std::span(prints).first(prints.size() - 1));
+		}
+
 		// a look's own glow, from a glow table row (none: the look keeps only its color)
 		void SetGlow(Gems::Look& a_look, const Gems::GlowColor* a_glow) noexcept
 		{
@@ -1223,6 +1230,9 @@ namespace Plugin
 			}
 			if (!a_star && (!a_named || a_look.family == Gems::Family::kNamed)) {
 				SetGlow(a_look, GlowOf(a_model));
+				if (!a_look.glow && a_look.family == Gems::Family::kGame) {
+					a_look.glow = GameGlow(a_model);
+				}
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
