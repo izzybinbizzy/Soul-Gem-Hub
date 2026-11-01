@@ -347,7 +347,9 @@ namespace Plugin
 		bool AddTexturePixels(const std::string& a_path, Gems::ColorSum& a_sum)
 		{
 			std::vector<std::uint8_t> bytes;
-			ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) { bytes.insert(bytes.end(), a_piece.begin(), a_piece.end()); });
+			if (!ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) { bytes.insert(bytes.end(), a_piece.begin(), a_piece.end()); })) {
+				return false;
+			}
 			DirectX::TexMetadata  meta{};
 			DirectX::ScratchImage loaded;
 			if (bytes.empty() || FAILED(DirectX::LoadFromDDSMemory(bytes.data(), bytes.size(), DirectX::DDS_FLAGS_NONE, &meta, loaded))) {
@@ -389,14 +391,15 @@ namespace Plugin
 		// glow shell, is left out; every lit shape when none glows), a normal map in a color slot never counted - and when those
 		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
-		// the caller keeps the table's color then
-		std::optional<Gems::Rgb> ModelColor(std::string_view a_model)
+		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
+		// keeps the color its own crystal shows (his teal for Azura's Star), whatever light a replacer hangs in it
+		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star)
 		{
-			static std::unordered_map<std::string, std::optional<Gems::Rgb>> read;
+			static std::map<std::pair<std::string, bool>, std::optional<Gems::Rgb>> read;
 			if (REL::Module::IsVR() || a_model.empty()) {
 				return std::nullopt;
 			}
-			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
+			const auto [it, added] = read.try_emplace({ Gems::NormalPath(a_model), a_star });
 			if (!added) {
 				return it->second;
 			}
@@ -435,8 +438,7 @@ namespace Plugin
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			// a star keeps the color its own crystal shows (his teal for Azura's Star), whatever light a replacer hangs in it
-			if (const auto own = ownLight.Result(); own && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
+			if (const auto own = ownLight.Result(); own && !a_star) {
 				return it->second = own;
 			}
 			Gems::ColorSum glowing, all;
@@ -1227,7 +1229,7 @@ namespace Plugin
 				++fromPicture;
 			} else if (!Gems::ColorFromModel(a_look.family)) {
 				return;
-			} else if (const auto own = ModelColor(a_model)) {
+			} else if (const auto own = ModelColor(a_model, a_star)) {
 				a_look.rgb = Gems::ShownColor(*own, a_look.kind);
 				++fromModel;
 			}
