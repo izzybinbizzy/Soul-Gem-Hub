@@ -438,7 +438,7 @@ namespace Plugin
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			if (const auto own = ownLight.Result(); own && !a_star) {
+			if (const auto own = ownLight.Result(); own && !a_star && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
 				return it->second = own;
 			}
 			Gems::ColorSum glowing, all;
