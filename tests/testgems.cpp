@@ -31,7 +31,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 237;
+	constexpr int kFloor = 238;
 
 	using namespace Gems;
 
@@ -201,6 +201,13 @@ namespace
 		CHECK(!crystal.Colorless());
 		crystal.Add(cloud);
 		CHECK(!crystal.Colorless());
+		// a faint but colored glow (alpha 20) is no grey texture: pixels weigh by alpha as the color does
+		ColorSum faint;
+		for (int i = 0; i < 300; ++i) {
+			faint.Add(0, 0, 255, 20);
+			faint.Add(0, 0, 0, 0);
+		}
+		CHECK(!faint.Colorless());
 		// a shader's color scaled to a top channel of 255 (Animated Filled's halo 0.1475, 0.4517, 1.0; its black gem's violet)
 		ColorSum halo, violet, grey, broken;
 		halo.AddShaderColor(0.1475f, 0.4517f, 1.0f);

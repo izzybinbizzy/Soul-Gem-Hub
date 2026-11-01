@@ -360,7 +360,7 @@ namespace Gems
 			if (a_a == 0) {
 				return;
 			}
-			++pixels;
+			pixels += a_a / 255.0;
 			const int top = (std::max)({ a_r, a_g, a_b }), bottom = (std::min)({ a_r, a_g, a_b });
 			if (top < kDarkTop || top == bottom) {
 				return;
@@ -398,7 +398,7 @@ namespace Gems
 
 		// pixels that carry almost no color (a grey cloud tile, clear glass): what such a texture's shape shows comes from its
 		// shader's color. The game's own gem textures carry 17-128, a cloud tile 0.3
-		[[nodiscard]] bool Colorless() const noexcept { return weight < kColorlessChroma * static_cast<double>(pixels) || weight <= 0.0; }
+		[[nodiscard]] bool Colorless() const noexcept { return weight < kColorlessChroma * pixels || weight <= 0.0; }
 
 		[[nodiscard]] std::optional<Rgb> Result() const noexcept
 		{
@@ -418,7 +418,7 @@ namespace Gems
 		static constexpr double kColorlessChroma = 1.0;  // mean chroma per pixel below which a texture is grey
 		std::array<double, 3>   sum{};
 		double                  weight{ 0.0 };
-		std::size_t             pixels{ 0 };  // every pixel that is not see-through, colored or not
+		double                  pixels{ 0.0 };  // every pixel, colored or not, weighed by its alpha as the color is
 	};
 
 	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the named

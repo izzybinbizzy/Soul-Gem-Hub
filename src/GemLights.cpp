@@ -288,12 +288,15 @@ namespace Plugin
 			const auto                path = std::string(a_folder) + "\\" + (a_folder == "meshes" ? Gems::NormalPath(a_path) : Gems::TexturePath(a_path));
 			std::vector<std::uint8_t> chunk(65536);
 			// a path the ANSI code page might not hold goes through the game, which reads it as it is
-			if (std::ranges::none_of(path, [](char a_c) { return static_cast<unsigned char>(a_c) >= 0x80; })) {
-				if (std::ifstream loose(std::filesystem::current_path() / "Data" / path, std::ios::binary); loose) {
+			std::error_code ec;
+			const auto      root = std::filesystem::current_path(ec);
+			if (!ec && std::ranges::none_of(path, [](char a_c) { return static_cast<unsigned char>(a_c) >= 0x80; })) {
+				if (std::ifstream loose(root / "Data" / path, std::ios::binary); loose) {
 					while (loose.read(reinterpret_cast<char*>(chunk.data()), static_cast<std::streamsize>(chunk.size())) || loose.gcount() > 0) {
 						a_take(std::span<const std::uint8_t>(chunk.data(), static_cast<std::size_t>(loose.gcount())));
 					}
-					return true;
+					// a read that broke off part way gave only some of the file: no fingerprint, no color from it
+					return !loose.bad();
 				}
 			}
 			RE::BSResourceNiBinaryStream stream(path);
@@ -432,7 +435,8 @@ namespace Plugin
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			if (const auto own = ownLight.Result()) {
+			// a star keeps the color its own crystal shows (his teal for Azura's Star), whatever light a replacer hangs in it
+			if (const auto own = ownLight.Result(); own && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
 				return it->second = own;
 			}
 			Gems::ColorSum glowing, all;
