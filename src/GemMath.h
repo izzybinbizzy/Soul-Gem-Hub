@@ -357,8 +357,12 @@ namespace Gems
 	public:
 		void Add(std::uint8_t a_r, std::uint8_t a_g, std::uint8_t a_b, std::uint8_t a_a = 255) noexcept
 		{
+			if (a_a == 0) {
+				return;
+			}
+			++pixels;
 			const int top = (std::max)({ a_r, a_g, a_b }), bottom = (std::min)({ a_r, a_g, a_b });
-			if (top < kDarkTop || top == bottom || a_a == 0) {
+			if (top < kDarkTop || top == bottom) {
 				return;
 			}
 			const double w = static_cast<double>(top - bottom) * (a_a / 255.0);
@@ -374,7 +378,27 @@ namespace Gems
 				sum[i] += a_other.sum[i];
 			}
 			weight += a_other.weight;
+			pixels += a_other.pixels;
 		}
+
+		// a shader's color (0..1, or above when over-bright) as one pixel scaled to a top channel of 255: its multiple only makes
+		// it brighter. A grey, black or broken one carries no color
+		void AddShaderColor(float a_r, float a_g, float a_b) noexcept
+		{
+			if (!std::isfinite(a_r) || !std::isfinite(a_g) || !std::isfinite(a_b)) {
+				return;
+			}
+			const float top = (std::max)({ a_r, a_g, a_b });
+			if (top <= 0.0f) {
+				return;
+			}
+			const auto byte = [top](float a_c) { return static_cast<std::uint8_t>(std::clamp(std::round(a_c / top * 255.0f), 0.0f, 255.0f)); };
+			Add(byte(a_r), byte(a_g), byte(a_b));
+		}
+
+		// pixels that carry almost no color (a grey cloud tile, clear glass): what such a texture's shape shows comes from its
+		// shader's color. The game's own gem textures carry 17-128, a cloud tile 0.3
+		[[nodiscard]] bool Colorless() const noexcept { return weight < kColorlessChroma * static_cast<double>(pixels) || weight <= 0.0; }
 
 		[[nodiscard]] std::optional<Rgb> Result() const noexcept
 		{
@@ -390,9 +414,11 @@ namespace Gems
 		}
 
 	private:
-		static constexpr int  kDarkTop = 16;
-		std::array<double, 3> sum{};
-		double                weight{ 0.0 };
+		static constexpr int    kDarkTop = 16;
+		static constexpr double kColorlessChroma = 1.0;  // mean chroma per pixel below which a texture is grey
+		std::array<double, 3>   sum{};
+		double                  weight{ 0.0 };
+		std::size_t             pixels{ 0 };  // every pixel that is not see-through, colored or not
 	};
 
 	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the named

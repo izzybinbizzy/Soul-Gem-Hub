@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <format>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -30,7 +31,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 231;
+	constexpr int kFloor = 237;
 
 	using namespace Gems;
 
@@ -186,6 +187,36 @@ namespace
 		merged.Add(redSum);
 		merged.Add(blueSum);
 		CHECK(merged.Result() == (Rgb{ 255, 0, 255 }));
+		// a grey texture (Animated's soul cloud tile, mean chroma 0.3) is colorless; a soul gem texture is not, nor is a mix
+		ColorSum cloud;
+		for (int i = 0; i < 300; ++i) {
+			cloud.Add(200, 200, 200);
+		}
+		cloud.Add(201, 200, 199);
+		CHECK(cloud.Colorless() && ColorSum{}.Colorless());
+		ColorSum crystal;
+		for (int i = 0; i < 300; ++i) {
+			crystal.Add(150, 230, 255);
+		}
+		CHECK(!crystal.Colorless());
+		crystal.Add(cloud);
+		CHECK(!crystal.Colorless());
+		// a shader's color scaled to a top channel of 255 (Animated Filled's halo 0.1475, 0.4517, 1.0; its black gem's violet)
+		ColorSum halo, violet, grey, broken;
+		halo.AddShaderColor(0.1475f, 0.4517f, 1.0f);
+		violet.AddShaderColor(0.2915f, 0.002f, 0.6497f);
+		CHECK(halo.Result() == (Rgb{ 38, 115, 255 }) && violet.Result() == (Rgb{ 114, 1, 255 }));
+		// over-bright or dark, the same hue; grey, black, negative or broken carries none
+		ColorSum bright, dim;
+		bright.AddShaderColor(0.2f, 0.4f, 2.0f);
+		dim.AddShaderColor(0.05f, 0.1f, 0.5f);
+		CHECK(bright.Result() == dim.Result() && bright.Result() == (Rgb{ 26, 51, 255 }));
+		grey.AddShaderColor(0.5f, 0.5f, 0.5f);
+		grey.AddShaderColor(0.0f, 0.0f, 0.0f);
+		grey.AddShaderColor(-1.0f, -0.5f, -0.2f);
+		broken.AddShaderColor(std::numeric_limits<float>::quiet_NaN(), 1.0f, 0.0f);
+		broken.AddShaderColor(std::numeric_limits<float>::infinity(), 1.0f, 0.0f);
+		CHECK(!grey.Result() && !broken.Result());
 		// the light a model read gives: a colored texture as it is (the game's grand crystal's teal, never its glow's violet)
 		const Rgb teal{ 83, 255, 234 };
 		CHECK(ShownColor(teal, Kind::kGrand) == teal);

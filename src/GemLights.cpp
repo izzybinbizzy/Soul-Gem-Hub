@@ -244,19 +244,63 @@ namespace Plugin
 		}
 
 		// ---------------------------------------------------------- a gem model's own color, read once per model at data load
-		// a file the game can open (loose or in an archive) under a_folder ("textures", "meshes"), handed to a_take piece by
-		// piece; false when it cannot be opened
+		std::unordered_set<std::string> gParticleTextures;  // the textures Data\ParticleLights\*.ini name (lower case, no extension)
+
+		// the textures an ENB particle light draws (ENB Light's, Rudy's): the names Light Limit Fix and Bottled Shaders ship particle
+		// light configs for
+		constexpr std::array<std::string_view, 3> kEnbLightTextures{ "fxglowenb", "glowsoft01_enbl", "enblightglow" };
+
+		// the file name of the texture an effect-shader shape draws, lower case without folder or extension ("" for any other shape)
+		[[nodiscard]] std::string EffectTexture(RE::NiAVObject* a_object)
+		{
+			auto* geometry = a_object ? a_object->AsGeometry() : nullptr;
+			auto* shader = geometry ? geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr;
+			if (!shader || !shader->material || shader->GetMaterialType() != RE::BSShaderMaterial::Type::kEffect) {
+				return {};
+			}
+			const char* path = static_cast<RE::BSEffectShaderMaterial*>(shader->material)->sourceTexturePath.c_str();
+			auto        name = Gems::BareName(path ? path : "");
+			if (const auto dot = name.rfind('.'); dot != std::string::npos) {
+				name.erase(dot);
+			}
+			return name;
+		}
+
+		// the material of a shape that is a light of the gem's own: an effect shape drawing an ENB light texture or one a
+		// particle-light config names (Animated Filled Soul Gems' blue halo), else nullptr
+		[[nodiscard]] const RE::BSEffectShaderMaterial* OwnLightShape(RE::NiAVObject* a_object)
+		{
+			const auto texture = EffectTexture(a_object);
+			if (texture.empty() || (std::ranges::find(kEnbLightTextures, texture) == kEnbLightTextures.end() && !gParticleTextures.contains(texture))) {
+				return nullptr;
+			}
+			return static_cast<const RE::BSEffectShaderMaterial*>(a_object->AsGeometry()->GetGeometryRuntimeData().shaderProperty->material);
+		}
+
+		// a file the game can open under a_folder ("textures", "meshes"), handed to a_take piece by piece; false when it cannot be
+		// opened. A loose file is read off the disk (through the mod manager's virtual folder): the game takes a loose file before an
+		// archive, and a runtime mesh patcher (PGLite) hands the game's loader bytes of its own for the path, so the file's own
+		// bytes - its fingerprint - are only on the disk. An archived file goes through the game's loader
 		template <class F>
 		bool ReadGameFile(std::string_view a_path, std::string_view a_folder, F&& a_take)
 		{
 			// the same normal form the permission lookups use, so "Data\Textures\x.dds" or "\Meshes\x.nif" open too
-			const auto                   path = std::string(a_folder) + "\\" + (a_folder == "meshes" ? Gems::NormalPath(a_path) : Gems::TexturePath(a_path));
+			const auto                path = std::string(a_folder) + "\\" + (a_folder == "meshes" ? Gems::NormalPath(a_path) : Gems::TexturePath(a_path));
+			std::vector<std::uint8_t> chunk(65536);
+			// a path the ANSI code page might not hold goes through the game, which reads it as it is
+			if (std::ranges::none_of(path, [](char a_c) { return static_cast<unsigned char>(a_c) >= 0x80; })) {
+				if (std::ifstream loose(std::filesystem::current_path() / "Data" / path, std::ios::binary); loose) {
+					while (loose.read(reinterpret_cast<char*>(chunk.data()), static_cast<std::streamsize>(chunk.size())) || loose.gcount() > 0) {
+						a_take(std::span<const std::uint8_t>(chunk.data(), static_cast<std::size_t>(loose.gcount())));
+					}
+					return true;
+				}
+			}
 			RE::BSResourceNiBinaryStream stream(path);
 			const auto*                  source = stream.good() ? stream.stream.get() : nullptr;
 			if (!source) {
 				return false;
 			}
-			std::vector<std::uint8_t> chunk(65536);
 			for (std::uint64_t got = 0; source->DoRead(chunk.data(), chunk.size(), got) == RE::BSResource::ErrorCode::kNone && got > 0;) {
 				a_take(std::span<const std::uint8_t>(chunk.data(), static_cast<std::size_t>(got)));
 			}
@@ -337,10 +381,12 @@ namespace Plugin
 			return true;
 		}
 
-		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that
-		// does not glow, or an effect-shader glow shell, is left out; every lit shape when none glows), a normal map in a color
-		// slot never counted. Read through the game's own model loader, once per model; none on VR (the loader's address is SE /
-		// AE only) or when nothing in it carries a color - the caller keeps the table's color then
+		// the color a gem model shows: a light shape of its own first (the light ours stands in for - Animated Filled's halo); else
+		// the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that does not glow, or an effect-shader
+		// glow shell, is left out; every lit shape when none glows), a normal map in a color slot never counted - and when those
+		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
+		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
+		// the caller keeps the table's color then
 		std::optional<Gems::Rgb> ModelColor(std::string_view a_model)
 		{
 			static std::unordered_map<std::string, std::optional<Gems::Rgb>> read;
@@ -363,7 +409,12 @@ namespace Plugin
 				bool           read{ false }, glows{ false };
 			};
 			std::unordered_map<std::string, Texture> textures;
+			Gems::ColorSum                           ownLight, greyGlow;
 			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&](RE::BSGeometry* a_geometry) {
+				if (const auto* light = OwnLightShape(a_geometry)) {
+					ownLight.AddShaderColor(light->baseColor.red, light->baseColor.green, light->baseColor.blue);
+					return RE::BSVisit::BSVisitControl::kContinue;
+				}
 				const char* diffuse = DiffuseOf(a_geometry);
 				if (!diffuse || !*diffuse || Gems::IsNormalMap(diffuse)) {
 					return RE::BSVisit::BSVisitControl::kContinue;
@@ -376,8 +427,14 @@ namespace Plugin
 					SKSE::log::info("gems: {} - its texture {} could not be read", a_model, diffuse);
 				}
 				tex->second.glows = tex->second.glows || glows;
+				if (glows && tex->second.read && tex->second.sum.Colorless()) {
+					greyGlow.AddShaderColor(e->red, e->green, e->blue);
+				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
+			if (const auto own = ownLight.Result()) {
+				return it->second = own;
+			}
 			Gems::ColorSum glowing, all;
 			for (const auto& [name, tex] : textures) {
 				if (tex.read) {
@@ -387,7 +444,7 @@ namespace Plugin
 					}
 				}
 			}
-			const auto glow = glowing.Result();
+			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
 			it->second = glow ? glow : all.Result();
 			return it->second;
 		}
@@ -769,7 +826,6 @@ namespace Plugin
 			std::chrono::steady_clock::time_point at;
 		};
 		std::unordered_map<RE::FormID, Retry> gRetryAt;
-		std::unordered_set<std::string>       gParticleTextures;  // the textures Data\ParticleLights\*.ini name (lower case, no extension)
 		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 }, gWithGlowKept{ 0 };
 		float                                 gClock = 0.0f, gSinceScan = kScanEvery;
 
@@ -841,26 +897,6 @@ namespace Plugin
 			a_kept.bs.reset(bs);
 			++gMade;
 			return true;
-		}
-
-		// the textures an ENB particle light draws (ENB Light's, Rudy's): the names Light Limit Fix and Bottled Shaders ship particle
-		// light configs for
-		constexpr std::array<std::string_view, 3> kEnbLightTextures{ "fxglowenb", "glowsoft01_enbl", "enblightglow" };
-
-		// the file name of the texture an effect-shader shape draws, lower case without folder or extension ("" for any other shape)
-		[[nodiscard]] std::string EffectTexture(RE::NiAVObject* a_object)
-		{
-			auto* geometry = a_object ? a_object->AsGeometry() : nullptr;
-			auto* shader = geometry ? geometry->GetGeometryRuntimeData().shaderProperty.get() : nullptr;
-			if (!shader || !shader->material || shader->GetMaterialType() != RE::BSShaderMaterial::Type::kEffect) {
-				return {};
-			}
-			const char* path = static_cast<RE::BSEffectShaderMaterial*>(shader->material)->sourceTexturePath.c_str();
-			auto        name = Gems::BareName(path ? path : "");
-			if (const auto dot = name.rfind('.'); dot != std::string::npos) {
-				name.erase(dot);
-			}
-			return name;
 		}
 
 		// every other light on this placed gem: one another mod hung under it (Light Placer's, RE::Light's) and a shape whose texture
