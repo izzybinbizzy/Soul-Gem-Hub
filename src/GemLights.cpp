@@ -1277,7 +1277,7 @@ namespace Plugin
 			}
 			// a star's picture rows were keyed by the other star's model, so both stars read their own textures (readColor)
 			readColor(*look, model, star, namedId(gem));
-			look->ownColor = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
+			look->ownColor = look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): its own color, its own switch
 			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
 			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
 				if (const auto mod = BlockedSwap(swapped)) {
@@ -1325,7 +1325,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
-			look.ownColor = true;
+			look.ownColor = look.named = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();

@@ -399,6 +399,11 @@ namespace
 		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
 		CHECK(SwitchOf(GameLook(Kind::kGreater, false)) == GemSwitch::kGreater && SwitchOf(GameLook(Kind::kGrand, true)) == GemSwitch::kBlack);
 		CHECK(!GemLit(blackStar, g) && GemLit(azura, g) && !GemLit(GameLook(Kind::kPetty, false), g) && GemLit(GameLook(Kind::kGrand, false), g));
+		// a named quest gem on a plain gem's model (Malyn's Black Soul on the black gem's) goes by its own switch, not its size's
+		Look malyn = GameLook(Kind::kGrand, true);
+		malyn.named = true;
+		g.gems[static_cast<std::size_t>(GemSwitch::kNamed)] = false;
+		CHECK(SwitchOf(malyn) == GemSwitch::kNamed && !GemLit(malyn, g) && GemLit(GameLook(Kind::kGrand, true), g));
 		g.on = false;
 		CHECK(!GemLit(azura, g));
 		// "Stars" (his checklist 309 / 321 answers): clamped to its range, written back, and only the two stars dimmed and

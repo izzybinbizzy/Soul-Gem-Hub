@@ -228,6 +228,7 @@ namespace Gems
 		std::optional<Rgb> glow{};               // its own glow where that is not rgb (GemGlowColors.h): the "Light color" default
 		bool               glowAlways{ false };  // that glow on "Author pick" too
 		bool               blackStar{ false };   // a star: the Black Star (its own light switch), else Azura's Star
+		bool               named{ false };       // a named quest gem, on its own model or a plain gem's (its own light switch)
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -855,7 +856,7 @@ namespace Gems
 		if (a_look.kind == Kind::kStar) {
 			return a_look.blackStar ? GemSwitch::kBlackStar : GemSwitch::kAzurasStar;
 		}
-		return static_cast<GemSwitch>(a_look.kind);  // petty .. named: the same order
+		return a_look.named ? GemSwitch::kNamed : static_cast<GemSwitch>(a_look.kind);  // petty .. named: the same order
 	}
 
 	struct Settings

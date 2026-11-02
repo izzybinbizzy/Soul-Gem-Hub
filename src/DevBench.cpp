@@ -126,7 +126,8 @@ namespace Plugin
 				change = [v](Gems::Settings& a_s) { a_s.gemMod = v; };
 			} else if (key == "authorPick") {
 				change = [v](Gems::Settings& a_s) { a_s.authorPick = v != 0; };
-			} else if (const auto it = std::ranges::find(Gems::kGemSwitchKeys, key); it != Gems::kGemSwitchKeys.end()) {
+			} else if (const auto it = std::ranges::find_if(Gems::kGemSwitchKeys, [&](std::string_view a_k) { return Gems::SameText(key, a_k); });
+				it != Gems::kGemSwitchKeys.end()) {
 				const auto i = static_cast<std::size_t>(it - Gems::kGemSwitchKeys.begin());
 				change = [v, i](Gems::Settings& a_s) { a_s.gems[i] = v != 0; };
 			} else {
