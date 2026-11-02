@@ -487,11 +487,16 @@ namespace Plugin
 			return found;
 		}
 
-		// the fingerprints of a model's color textures (the winning files, in the order it names them), then of the model itself;
-		// once per model
-		const std::vector<std::uint64_t>& PrintsOf(std::string_view a_model)
+		struct ModelFiles
 		{
-			static std::unordered_map<std::string, std::vector<std::uint64_t>> read;
+			std::vector<std::uint64_t> prints;    // its color textures' (the winning files, in the order it names them), then its own
+			std::vector<std::string>   textures;  // every texture path it names (TexturePath form)
+		};
+
+		// once per model
+		const ModelFiles& FilesOf(std::string_view a_model)
+		{
+			static std::unordered_map<std::string, ModelFiles> read;
 			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
 			if (!added) {
 				return it->second;
@@ -501,13 +506,16 @@ namespace Plugin
 				return it->second;
 			}
 			for (const auto& texture : Gems::TexturesNamed(nif)) {
+				it->second.textures.push_back(Gems::TexturePath(texture));
 				if (const auto print = Gems::ColorTexture(texture) ? TexturePrint(texture) : std::nullopt) {
-					it->second.push_back(*print);
+					it->second.prints.push_back(*print);
 				}
 			}
-			it->second.push_back(Gems::Fingerprint(nif));
+			it->second.prints.push_back(Gems::Fingerprint(nif));
 			return it->second;
 		}
+
+		const std::vector<std::uint64_t>& PrintsOf(std::string_view a_model) { return FilesOf(a_model).prints; }
 
 		// the color a gem's picture shows, when one of its model's files is one a close picture of that gem has read
 		// (GemSeenColors.h) - for a named quest gem (a_named: its record's id) its own row first, then the plain gem's
@@ -555,6 +563,13 @@ namespace Plugin
 				}
 			}
 			return nullptr;
+		}
+
+		// a game gem model laid out as the game's: its own glow (GemMath.h kGameGlows)
+		std::optional<Gems::Rgb> GameGlow(std::string_view a_model)
+		{
+			const auto& files = FilesOf(a_model);
+			return files.prints.empty() ? std::nullopt : Gems::GameGlowOf(a_model, files.textures, files.prints);
 		}
 
 		// a look's own glow, from a glow table row (none: the look keeps only its color)
@@ -1223,6 +1238,9 @@ namespace Plugin
 			}
 			if (!a_star && (!a_named || a_look.family == Gems::Family::kNamed)) {
 				SetGlow(a_look, GlowOf(a_model));
+				if (!a_look.glow && a_look.family == Gems::Family::kGame) {
+					a_look.glow = GameGlow(a_model);
+				}
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
@@ -1264,10 +1282,11 @@ namespace Plugin
 					CountName(gBlocked, *mod);
 					continue;
 				}
+				// its own textures, never the game model's glow
+				SetGlow(*look, SwapGlow(swapped));
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
 					look->ownColor = true;
-					SetGlow(*look, SwapGlow(swapped));
 					++fromSwap;
 				}
 			}

@@ -522,6 +522,29 @@ namespace
 		CHECK(found && !GlowColorOf(0));
 		// the table carries ASGO's Solar glow on both choices
 		CHECK(std::ranges::any_of(kGlowColors, &GlowColor::always));
+		// the game's own gems glow by kind on a game model laid out as the game's, whatever texture pack dresses it
+		const std::vector<std::string>     classic{ "clutter\\soulgem\\soulgemcommon.dds", "clutter\\soulgem\\soulgemcommon_n.dds",
+			"clutter\\soulgem\\soulgems01_g.dds", "cubemaps\\chitin_e.dds" };
+		const std::vector<std::string>     pbrSet{ "pbr\\clutter\\soulgem\\soulgemgrand.dds", "pbr\\clutter\\soulgem\\soulgemgrand_n.dds",
+			"pbr\\clutter\\soulgem\\soulgemgrand_p.dds", "pbr\\clutter\\soulgem\\soulgemgrand_rmaos.dds",
+			"pbr\\clutter\\soulgem\\soulgemgrandcoat_n.dds", "pbr\\clutter\\soulgem\\soulgemgrandcoat.dds" };
+		const std::vector<std::string>     animatedSet{ "clutter\\soulgem\\soulgemcommon.dds", "clutter\\soulgem\\soulgemcommon_n.dds",
+			"clutter\\soulgem\\soulgems01_g.dds", "cubemaps\\shinyglass_e.dds" };
+		const std::vector<std::string>     praedySet{ "praedythxvi\\soulgems\\soulgemsempty\\soulgememptycommon\\soulgemcommon.dds",
+			"praedythxvi\\soulgems\\soulgemcommon\\soulgemcommon_n.dds", "praedythxvi\\cubemaps\\vindition\\v-frostedglass.dds" };
+		const std::array<std::uint64_t, 2> retexture{ 0x98986517EDDE3260ULL, 0x1234ULL };
+		const auto                         modRow = std::ranges::find_if(kSeenColors, [](const SeenColor& a_row) { return std::ranges::find(kGameGemFiles, a_row.hash) == kGameGemFiles.end(); });
+		CHECK(modRow != kSeenColors.end());
+		const std::array<std::uint64_t, 2> modPrint{ modRow->hash, 0x1234ULL };
+		const std::array<std::uint64_t, 2> gameModel{ 0x7F3555FAF7E28371ULL, 0x72BA88B6D473B38FULL };
+		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, retexture) == kGameGlows[2].rgb);
+		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, gameModel) == kGameGlows[2].rgb);
+		CHECK(GameGlowOf("meshes\\clutter\\soulgem\\soulgemgrand01.nif", pbrSet, retexture) == kGameGlows[4].rgb);
+		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", animatedSet, gameModel));
+		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", praedySet, retexture));
+		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, modPrint));
+		CHECK(!GameGlowOf("clutter\\soulgem\\soulgempetty01_filled.nif", classic, retexture));
+		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", {}, retexture));
 	}
 }
 

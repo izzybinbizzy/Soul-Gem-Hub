@@ -25,6 +25,7 @@
 #include <cstring>
 #include <istream>
 #include <iterator>
+#include <ranges>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -681,6 +682,48 @@ namespace Gems
 	{
 		const auto it = std::ranges::lower_bound(kGlowColors, a_fingerprint, {}, &GlowColor::hash);
 		return it == kGlowColors.end() || it->hash != a_fingerprint ? nullptr : &*it;
+	}
+
+	// the game's own six gem models glow these colors alone in the dark (our light off), in the game's textures and in the
+	// retextures filmed (Vanilla Remastered, Skyland, Vanilla PBR with Faultier's PBR meshes) - the default of the menu's "Light
+	// color": their lit-room colors lit pale blue and teal pools under violet gems
+	inline constexpr std::array<std::uint64_t, 9>    kGameGemFiles{ 0x3CE5F8F2CB137059ULL, 0x40E64FA415FA17CFULL, 0x6CF55016FDB5D7A9ULL,
+		0x72BA88B6D473B38FULL, 0x7946C9087AC9C2C3ULL, 0x7F3555FAF7E28371ULL, 0x9DCF4B6BA39D84BFULL, 0xB8F31CDE569730CDULL,
+		0xD0BA24B919394013ULL };
+	inline constexpr std::array<std::string_view, 3> kGameGemDiffuses{ "clutter\\soulgem\\soulgemcommon.dds",
+		"clutter\\soulgem\\soulgemgrand.dds", "clutter\\soulgem\\soulgemblack.dds" };
+
+	struct GameGlow
+	{
+		std::string_view model;
+		Rgb              rgb{};
+	};
+	inline constexpr std::array<GameGlow, 6> kGameGlows{ { { "soulgempetty01.nif", { 159, 110, 255 } },
+		{ "soulgemlesser01.nif", { 176, 116, 255 } }, { "soulgemcommon01.nif", { 206, 145, 255 } },
+		{ "soulgemgreater01.nif", { 95, 106, 255 } }, { "soulgemgrand01.nif", { 86, 116, 255 } },
+		{ "soulgemblack01.nif", { 197, 74, 255 } } } };
+
+	// the own glow of a game gem model laid out as the game's (its color textures at the game's gem paths with the game's chitin
+	// reflection, or all at the PBR gem paths), or none. Texture BYTES cannot tell it: every texture pack differs, and Animated
+	// Soul Gems ships meshes of its own over a byte copy of the game's texture (another reflection map). A file a gem mod's
+	// picture row knows (the game's own files aside) means that mod's look: its rows answer.
+	// a_textures: every texture path the model names (TexturePath form); a_prints: its color textures' and its own fingerprints
+	[[nodiscard]] inline std::optional<Rgb> GameGlowOf(std::string_view a_model, std::span<const std::string> a_textures,
+		std::span<const std::uint64_t> a_prints)
+	{
+		const auto gameDiffuse = [](const std::string& a_path) { return std::ranges::find(kGameGemDiffuses, a_path) != kGameGemDiffuses.end(); };
+		const auto pbr = [](const std::string& a_path) { return a_path.starts_with("pbr\\clutter\\soulgem\\soulgem"); };
+		const auto modFile = [](std::uint64_t a_print) {
+			return std::ranges::find(kGameGemFiles, a_print) == kGameGemFiles.end() && SeenColorOf(a_print).has_value();
+		};
+		auto       colors = a_textures | std::views::filter([](const std::string& a_path) { return ColorTexture(a_path); });
+		const bool classic = std::ranges::all_of(colors, gameDiffuse) && std::ranges::find(a_textures, "cubemaps\\chitin_e.dds") != a_textures.end();
+		if (std::ranges::empty(colors) || !(classic || std::ranges::all_of(colors, pbr)) || std::ranges::any_of(a_prints, modFile)) {
+			return std::nullopt;
+		}
+		const auto bare = BareName(a_model);
+		const auto it = std::ranges::find(kGameGlows, std::string_view(bare), &GameGlow::model);
+		return it == kGameGlows.end() ? std::nullopt : std::optional(it->rgb);
 	}
 
 	struct NamedGem
