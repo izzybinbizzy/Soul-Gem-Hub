@@ -676,14 +676,24 @@ namespace Gems
 			[&](std::string_view a_suffix) { return stem.ends_with(a_suffix); });
 	}
 
-	// the gem mod a file belongs to while its author has not allowed this mod to light it: by its bytes ...
+	// a blocked mod's name by its index; the table may hold none (every gem mod lit)
+	[[nodiscard]] inline std::optional<std::string_view> BlockedModAt(std::size_t a_index) noexcept
+	{
+		if constexpr (kBlockedMods.empty()) {
+			return std::nullopt;
+		} else {
+			return a_index < kBlockedMods.size() ? std::optional(kBlockedMods[a_index]) : std::nullopt;
+		}
+	}
+
+	// the gem mod a file belongs to while its author has asked this mod not to light it: by its bytes ...
 	[[nodiscard]] inline std::optional<std::string_view> BlockedModOf(std::uint64_t a_fingerprint) noexcept
 	{
 		const auto it = std::ranges::lower_bound(kBlockedFiles, a_fingerprint, {}, &BlockedFile::hash);
 		if (it == kBlockedFiles.end() || it->hash != a_fingerprint) {
 			return std::nullopt;
 		}
-		return kBlockedMods[it->mod];
+		return BlockedModAt(it->mod);
 	}
 
 	// ... or by a name only such a mod ships (a model as NormalPath writes it, a texture as TexturePath does), which still
@@ -694,7 +704,7 @@ namespace Gems
 		if (it == kBlockedPaths.end() || it->path != a_path) {
 			return std::nullopt;
 		}
-		return kBlockedMods[it->mod];
+		return BlockedModAt(it->mod);
 	}
 
 	// the color a known gem file's picture shows (a color texture's or a model's fingerprint), or none

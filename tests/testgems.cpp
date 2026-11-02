@@ -628,8 +628,9 @@ namespace
 		CHECK(Fingerprint(big) != Fingerprint(std::span(big).first(kFingerprintHead)));
 		CHECK(std::ranges::is_sorted(kBlockedFiles, {}, &BlockedFile::hash));
 		CHECK(std::ranges::all_of(kBlockedFiles, [](const BlockedFile& f) { return f.mod < kBlockedMods.size(); }));
-		CHECK(BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
-		CHECK(BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
+		// the table may be empty: a mod whose author asks out is the only one in it
+		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
+		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
 		CHECK(!BlockedModOf(Fingerprint(a)));
 		// the picture colors: sorted, every one found by its own fingerprint, a stranger file not
 		CHECK(std::ranges::is_sorted(kSeenColors, {}, &SeenColor::hash));
@@ -657,7 +658,7 @@ namespace
 		CHECK(TexturePath("clutter\\x.dds") == "clutter\\x.dds");
 		CHECK(std::ranges::is_sorted(kBlockedPaths, {}, &BlockedPath::path));
 		CHECK(std::ranges::all_of(kBlockedPaths, [](const BlockedPath& p) { return p.mod < kBlockedMods.size() && p.path == Lower(p.path); }));
-		CHECK(BlockedModOfPath(kBlockedPaths.front().path) == kBlockedMods[kBlockedPaths.front().mod]);
+		CHECK(kBlockedPaths.empty() || BlockedModOfPath(kBlockedPaths.front().path) == kBlockedMods[kBlockedPaths.front().mod]);
 		CHECK(!BlockedModOfPath("clutter\\soulgem\\soulgemgrand01.nif"));  // the game's own model is never a blocked name
 		const auto        field = [](std::string_view a_text) { return std::string(1, static_cast<char>(a_text.size())) + std::string(3, '\0') + std::string(a_text); };
 		const std::string nif = field("NiNode") + field("Textures\\Clutter\\A\\Gem.DDS") + field("textures\\clutter\\a\\gem_n.dds") +
