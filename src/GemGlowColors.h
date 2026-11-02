@@ -22,7 +22,7 @@ namespace Gems
 	};
 
 	// sorted by hash
-	inline constexpr std::array<GlowColor, 24> kGlowColors{ {
+	inline constexpr std::array<GlowColor, 25> kGlowColors{ {
 		{ 0x04980932A3766E73ULL, 143, 108, 255, false },  // ultimate SoulGemPettyFilled ultimatesoulgems\soulgem_petty_d.dds
 		{ 0x105529C39D10A3F0ULL, 122, 38, 255, false },   // crystalline SoulGemCommonFilled clutter\soulgem\soulgemcommon0_transluc.dds
 		{ 0x1852BA467D3D2A5CULL, 137, 51, 255, false },   // ultimate SoulGemBlackFilled ultimatesoulgems\soulgem_black_d.dds
@@ -30,6 +30,7 @@ namespace Gems
 		{ 0x4B75952D945390F2ULL, 174, 38, 255, false },   // ultimate SoulGemLesserFilled ultimatesoulgems\soulgem_lesser_d.dds
 		{ 0x525812FD20B3F621ULL, 255, 38, 52, false },    // spherical SoulGemBlackFilled psq\egggem\eggblack.dds
 		{ 0x56E73D042E91A944ULL, 255, 38, 46, false },    // crystalline SoulGemPettyFilled clutter\soulgem\soulgempetty0_transluc.dds
+		{ 0x5B0E156703FD840DULL, 255, 122, 123, true },   // crystalline asgo patch SoulGem05GrandFilled_05Grand_Solar textures\asgo\clutter\soulgem\soulgemgrand_solar.dds
 		{ 0x627BEFB7B458DFC6ULL, 255, 119, 82, true },    // asgo SoulGem03CommonFilled_03Common_Solar textures\asgo\clutter\soulgem\soulgemcommon_solar.dds
 		{ 0x6E4D84C2D8ED21F4ULL, 38, 100, 255, false },   // animated SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01_filled.nif
 		{ 0x6E7BAA800E90690BULL, 173, 104, 255, false },  // praedy MGRArniel02SoulGem praedythxvi\soulgems\mp\arniel.dds
