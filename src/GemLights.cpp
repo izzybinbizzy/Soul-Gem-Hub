@@ -8,8 +8,8 @@
 // world does (a soul trapped into an empty one), and always for Azura's Star and the Black Star - and the items and pieces known
 // by their own model (the Soul Essence Gem, the Soul Cairn's gem bowl and chunks). A gem's look - its color and strength -
 // comes from the model its record wears in this load order, so it follows whatever mesh mod wins: Praedy's Soul Gems (Subtle
-// Soul Gems' copies of them too), Rustic Soul Gems (either download, once its author allows it - GemPermissions.h), or the
-// game's own gems by their size; a gem mod waiting on its author's permission stays unlit. Never a static or
+// Soul Gems' copies of them too), Rustic Soul Gems (either download), or the game's own gems by their size; a gem mod whose
+// author asked not to be supported stays unlit (GemPermissions.h). Never a static or
 // a museum display that only wears a gem's model (his rule: displays never get lit) - with RE::Light loaded, its light on one
 // is put out.
 //
@@ -115,7 +115,7 @@ namespace Plugin
 		std::unordered_map<const RE::TESBoundObject*, Gem> gGems;             // the gems this plugin lights; read on the main thread after data load
 		std::vector<std::pair<std::string, std::size_t>>   gFamilies;         // the lit gem records by look, for the menu
 		std::array<std::size_t, 4>                         gOtherLighters{};  // gem records another light mod lights too, by Gems::Owner
-		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, until its author allows it
+		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, at its author's request
 		std::string                                        gRustic;           // which Rustic Soul Gems download is loaded
 		bool                                               gRusticLit{ false };
 
@@ -1368,7 +1368,7 @@ namespace Plugin
 		}));
 		gRusticLit = std::ranges::any_of(gGems, [](const auto& a_entry) { return a_entry.second.look.family == Gems::Family::kRustic; });
 		for (const auto& [mod, n] : gBlocked) {
-			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
+			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit, at its author's request", n, mod);
 		}
 		for (const auto& [form, gem] : gGems) {
 			if (const auto* soulGem = form->As<RE::TESModel>(); soulGem && form->Is(RE::FormType::SoulGem) && Gems::ColorFromModel(gem.look.family)) {

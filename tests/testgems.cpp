@@ -632,6 +632,7 @@ namespace
 		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
 		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
 		CHECK(!BlockedModOf(Fingerprint(a)));
+		CHECK(!BlockedModAt(kBlockedMods.size()) && !BlockedModAt(255));
 		// the picture colors: sorted, every one found by its own fingerprint, a stranger file not
 		CHECK(std::ranges::is_sorted(kSeenColors, {}, &SeenColor::hash));
 		CHECK(SeenColorOf(kSeenColors.front().hash) == (Rgb{ kSeenColors.front().r, kSeenColors.front().g, kSeenColors.front().b }));

@@ -203,7 +203,7 @@ namespace Plugin
 				}
 			}
 			for (const auto& [mod, n] : GemsBlocked()) {
-				TextColored(kMuted, "%s", Fill(T("Not lit until its author allows it - {}: {}"), mod, std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
 				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
