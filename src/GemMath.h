@@ -227,6 +227,7 @@ namespace Gems
 		bool               ownColor{ false };    // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
 		std::optional<Rgb> glow{};               // its own glow where that is not rgb (GemGlowColors.h): the "Light color" default
 		bool               glowAlways{ false };  // that glow on "Author pick" too
+		bool               blackStar{ false };   // a star: the Black Star (its own light switch), else Azura's Star
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -265,10 +266,10 @@ namespace Gems
 		{ "dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", Family::kSoulCairn, Kind::kNamed, { 170, 90, 255 } },  // the portal's bowl
 	} };
 
-	// Azura's Star wears its own texture's teal (azurastarlite.dds; a replacer's star is read off its own model in game); the
-	// Black Star is purple by his eye - its dark azurastar.dds reads a near-white blue
-	inline constexpr Rgb kAzurasStarRgb{ 157, 255, 252 };
-	inline constexpr Rgb kBlackStarRgb{ 170, 90, 255 };
+	// each star wears its body's color, not its glowing stripes' (his 393 answer): the game's own textures read as a whole
+	// (azurastarlite.dds a pale aqua, the dark azurastar.dds a cool white); in game a star is read off the model that wins it
+	inline constexpr Rgb kAzurasStarRgb{ 215, 255, 253 };
+	inline constexpr Rgb kBlackStarRgb{ 222, 228, 255 };
 
 	// which star a model is: Azura's Star wears azurastarlite.nif, the Black Star azurastar.nif - so a gem mod's own star records
 	// (Andrealletius Soul Gem Overhaul's Drained ... Flawless stars) are stars too, not only the game's two records
@@ -362,6 +363,9 @@ namespace Gems
 				return;
 			}
 			pixels += a_a / 255.0;
+			plain[0] += a_r * (a_a / 255.0);
+			plain[1] += a_g * (a_a / 255.0);
+			plain[2] += a_b * (a_a / 255.0);
 			const int top = (std::max)({ a_r, a_g, a_b }), bottom = (std::min)({ a_r, a_g, a_b });
 			if (top < kDarkTop || top == bottom) {
 				return;
@@ -377,6 +381,7 @@ namespace Gems
 		{
 			for (std::size_t i = 0; i < 3; ++i) {
 				sum[i] += a_other.sum[i];
+				plain[i] += a_other.plain[i];
 			}
 			weight += a_other.weight;
 			pixels += a_other.pixels;
@@ -414,10 +419,26 @@ namespace Gems
 			return out;
 		}
 
+		// every pixel counted the same, grey and dark ones too: the color the texture shows as a whole (a star's body, not its
+		// glowing stripes - his 393 answer), scaled to a top channel of 255; none for a texture that is all black or see-through
+		[[nodiscard]] std::optional<Rgb> Body() const noexcept
+		{
+			const double top = (std::max)({ plain[0], plain[1], plain[2] });
+			if (pixels <= 0.0 || top <= 0.0) {
+				return std::nullopt;
+			}
+			Rgb out{};
+			for (std::size_t i = 0; i < 3; ++i) {
+				out[i] = static_cast<std::uint8_t>((std::min)(255.0, std::round(plain[i] * 255.0 / top)));
+			}
+			return out;
+		}
+
 	private:
 		static constexpr int    kDarkTop = 16;
 		static constexpr double kColorlessChroma = 1.0;  // mean chroma per pixel below which a texture is grey
 		std::array<double, 3>   sum{};
+		std::array<double, 3>   plain{};  // every pixel's color weighed by its alpha alone (Body)
 		double                  weight{ 0.0 };
 		double                  pixels{ 0.0 };  // every pixel, colored or not, weighed by its alpha as the color is
 	};
@@ -806,6 +827,37 @@ namespace Gems
 		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? kVanillaBoost : 1.0f);
 	}
 
+	// the menu's light switch per gem, in menu order: the six sizes and the named quest gems in Kind order
+	enum class GemSwitch : std::uint8_t
+	{
+		kPetty,
+		kLesser,
+		kCommon,
+		kGreater,
+		kGrand,
+		kBlack,
+		kNamed,
+		kAzurasStar,
+		kBlackStar,
+		kSoulCairn,
+	};
+	inline constexpr std::size_t kGemSwitches = 10;
+
+	// each switch's key in Settings.ini and DevBench (the menu's labels are in Menu.cpp, for its translation)
+	inline constexpr std::array<std::string_view, kGemSwitches> kGemSwitchKeys{ "LightPetty", "LightLesser", "LightCommon", "LightGreater",
+		"LightGrand", "LightBlack", "LightNamed", "LightAzurasStar", "LightBlackStar", "LightSoulCairn" };
+
+	[[nodiscard]] inline GemSwitch SwitchOf(const Look& a_look) noexcept
+	{
+		if (a_look.family == Family::kSoulCairn || a_look.kind == Kind::kCairn) {
+			return GemSwitch::kSoulCairn;  // the portal's bowl is a named kind of the Soul Cairn's family
+		}
+		if (a_look.kind == Kind::kStar) {
+			return a_look.blackStar ? GemSwitch::kBlackStar : GemSwitch::kAzurasStar;
+		}
+		return static_cast<GemSwitch>(a_look.kind);  // petty .. named: the same order
+	}
+
 	struct Settings
 	{
 		bool on{ true };         // every soul gem light
@@ -814,12 +866,19 @@ namespace Gems
 		int  stars{ 50 };        // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
 		bool pulse{ true };      // the soft pulse
 		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
-		bool theirsEmissive{ false };     // Emissive Soul Gems' Light Placer lights
-		bool theirsLightPlacer{ false };  // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
-		bool theirsMesh{ false };         // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
-		int  gemMod{ 0 };                 // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
-		bool authorPick{ false };         // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
+		bool                           theirsEmissive{ false };                                             // Emissive Soul Gems' Light Placer lights
+		bool                           theirsLightPlacer{ false };                                          // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
+		bool                           theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		int                            gemMod{ 0 };                                                         // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
+		bool                           authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
+		std::array<bool, kGemSwitches> gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
 	};
+
+	// whether this gem gets our light: the gems switch and its own (a gem switched off keeps any other mod's light on it)
+	[[nodiscard]] inline bool GemLit(const Look& a_look, const Settings& a_s) noexcept
+	{
+		return a_s.on && a_s.gems[static_cast<std::size_t>(SwitchOf(a_look))];
+	}
 
 	// the "Gem colors" pick a Settings.ini value names (a kGemModPicks key, any case); 0 = Automatic, also for a value this
 	// version does not know
@@ -962,6 +1021,9 @@ namespace Gems
 				a_out.theirsMesh = v != 0;
 			} else if (SameText(key, "AuthorPick")) {
 				a_out.authorPick = v != 0;
+			} else if (const auto it = std::ranges::find_if(kGemSwitchKeys, [&](std::string_view a_k) { return SameText(key, a_k); });
+				it != kGemSwitchKeys.end()) {
+				a_out.gems[static_cast<std::size_t>(it - kGemSwitchKeys.begin())] = v != 0;
 			} else {
 				--lines;  // a key this version does not know
 			}
@@ -977,5 +1039,8 @@ namespace Gems
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
 			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\n";
+		for (std::size_t i = 0; i < kGemSwitches; ++i) {
+			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';
+		}
 	}
 }

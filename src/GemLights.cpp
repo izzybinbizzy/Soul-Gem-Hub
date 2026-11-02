@@ -392,7 +392,7 @@ namespace Plugin
 		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
 		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
-		// keeps the color its own crystal shows (his teal for Azura's Star), whatever light a replacer hangs in it
+		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it
 		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star)
 		{
 			static std::map<std::pair<std::string, bool>, std::optional<Gems::Rgb>> read;
@@ -441,14 +441,17 @@ namespace Plugin
 			if (const auto own = ownLight.Result(); own && !a_star && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
 				return it->second = own;
 			}
-			Gems::ColorSum glowing, all;
+			Gems::ColorSum glowing, all, body;
 			for (const auto& [name, tex] : textures) {
 				if (tex.read) {
 					all.Add(tex.sum);
-					if (tex.glows) {
-						glowing.Add(tex.sum);
-					}
+					(tex.glows ? glowing : body).Add(tex.sum);
 				}
+			}
+			// a star wears its body's color as a whole - the textures that do not glow, else all of them - never its stripes'
+			if (a_star || Gems::StarOf(a_model) != Gems::StarModel::kNone) {
+				const auto whole = body.Body();
+				return it->second = whole ? whole : all.Body();
 			}
 			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
 			it->second = glow ? glow : all.Result();
@@ -1048,7 +1051,8 @@ namespace Plugin
 			tes->ForEachReferenceInRange(player, kRange, [&](RE::TESObjectREFR* a_ref) {
 				const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr;
 				const auto  it = base ? gGems.find(base) : gGems.end();
-				if (it == gGems.end() || a_ref->IsDisabled() || a_ref->IsDeleted() || !a_ref->Is3DLoaded()) {
+				// a gem switched off in the menu takes no place among the nearest: a farther one gets the light
+				if (it == gGems.end() || !Gems::GemLit(it->second.look, a_s) || a_ref->IsDisabled() || a_ref->IsDeleted() || !a_ref->Is3DLoaded()) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				if (it->second.needsSoul && a_ref->extraList.GetSoulLevel() == RE::SOUL_LEVEL::kNone) {
@@ -1267,14 +1271,12 @@ namespace Plugin
 			auto       look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
 			if (star) {
 				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, black ? Gems::kBlackStarRgb : Gems::kAzurasStarRgb };
+				look->blackStar = black;
 			} else if (!look || look->family == Gems::Family::kSoulCairn) {
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
-			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
-			// keeps its purple
-			if (!black) {
-				readColor(*look, model, star, namedId(gem));
-			}
+			// a star's picture rows were keyed by the other star's model, so both stars read their own textures (readColor)
+			readColor(*look, model, star, namedId(gem));
 			look->ownColor = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
 			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
 			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {

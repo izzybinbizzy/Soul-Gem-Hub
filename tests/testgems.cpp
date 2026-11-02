@@ -237,9 +237,21 @@ namespace
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
 		const Rgb starPale{ 157, 255, 252 };
 		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
-		// the Black Star is purple (blue on top, red over green), Azura's Star teal (green and blue over red)
-		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > kBlackStarRgb[1]);
-		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0]);
+		// each star's default is its body's color: the Black Star a cool white (blue on top), Azura's Star a pale aqua
+		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > 200 && kBlackStarRgb[1] > 200);
+		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0] && kAzurasStarRgb[0] > 200);
+		// a star's body counts every pixel the same: a grey body with teal stripes reads near-white, its stripes alone teal
+		ColorSum star;
+		for (int i = 0; i < 9; ++i) {
+			star.Add(100, 100, 104);
+		}
+		star.Add(40, 200, 190);
+		const auto body = star.Body(), stripes = star.Result();
+		CHECK(body && (*body)[0] > 200 && (*body)[2] == 255);
+		CHECK(stripes && (*stripes)[0] < 100);
+		ColorSum clear;
+		clear.Add(0, 0, 0, 0);
+		CHECK(!clear.Body());
 	}
 
 	void Looks()
@@ -357,7 +369,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 10);
+		CHECK(ReadSettings(again, back) == 10 + kGemSwitches);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
@@ -371,6 +383,24 @@ namespace
 		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
 		Settings          h;
 		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
+		// a light switch per gem: every gem on by default, one switched off read, written back and kept off the light
+		CHECK(std::ranges::all_of(d.gems, [](bool a_on) { return a_on; }));
+		std::stringstream gemsIn("lightblackstar=0\nLightPetty=off\n");
+		Settings          g;
+		CHECK(ReadSettings(gemsIn, g) == 2 && !g.gems[static_cast<std::size_t>(GemSwitch::kBlackStar)] &&
+			  !g.gems[static_cast<std::size_t>(GemSwitch::kPetty)] && g.gems[static_cast<std::size_t>(GemSwitch::kAzurasStar)]);
+		std::stringstream gemsOut;
+		WriteSettings(g, gemsOut);
+		CHECK(gemsOut.str().find("LightBlackStar=0\n") != std::string::npos && gemsOut.str().find("LightAzurasStar=1\n") != std::string::npos);
+		Look blackStar{ Family::kStar, Kind::kStar, kBlackStarRgb };
+		blackStar.blackStar = true;
+		const Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		const Look cairn{ Family::kSoulCairn, Kind::kNamed, kBlackStarRgb };  // the portal's bowl
+		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
+		CHECK(SwitchOf(GameLook(Kind::kGreater, false)) == GemSwitch::kGreater && SwitchOf(GameLook(Kind::kGrand, true)) == GemSwitch::kBlack);
+		CHECK(!GemLit(blackStar, g) && GemLit(azura, g) && !GemLit(GameLook(Kind::kPetty, false), g) && GemLit(GameLook(Kind::kGrand, false), g));
+		g.on = false;
+		CHECK(!GemLit(azura, g));
 		// "Stars" (his checklist 309 / 321 answers): clamped to its range, written back, and only the two stars dimmed and
 		// shortened by it
 		std::stringstream starsIn("Stars=5\n");

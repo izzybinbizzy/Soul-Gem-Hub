@@ -4,7 +4,7 @@
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
 // found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
-// lights' switch, Brightness, Reach, Stars, the soft pulse, Gem colors, Light color and Their Own Lights. A change is saved and
+// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, Gem colors, Light color and Their Own Lights. A change is saved and
 // applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -141,6 +141,23 @@ namespace Plugin
 				"they glow; Author pick keeps the author's color."));
 		}
 
+		// "Which Gems Glow": a light switch per gem, in GemSwitch order
+		void GemSwitches()
+		{
+			constexpr std::array<const char*, Gems::kGemSwitches> kLabels{ TR_MARK("Petty soul gems"), TR_MARK("Lesser soul gems"),
+				TR_MARK("Common soul gems"), TR_MARK("Greater soul gems"), TR_MARK("Grand soul gems"), TR_MARK("Black soul gems"),
+				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems") };
+			Header(Icon::kGem, T("Which Gems Glow"));
+			for (std::size_t i = 0; i < kLabels.size(); ++i) {
+				bool v = SettingsNow().gems[i];
+				if (Checkbox(T(kLabels[i]), &v)) {
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
+					Changed();
+				}
+			}
+			MenuStyle::Tip(T("A gem switched off gets none of this mod's light; another mod's light on it stays."));
+		}
+
 		void RenderPage();
 
 		// SKSE Menu Framework calls this from its own DLL on the render thread: nothing may be thrown back across
@@ -197,6 +214,8 @@ namespace Plugin
 				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
 					T("How bright Azura's Star and the Black Star are and how far their light reaches, on top of Brightness and Reach. Turn it down when their light drowns the gems near them."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+				GemSwitches();
+				Header(Icon::kGem, T("Colors"));
 				GemColors();
 				// shown only where its two choices light a gem differently under the Gem colors pick
 				if (LightColorMatters(SettingsNow().gemMod)) {
