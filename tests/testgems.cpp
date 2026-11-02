@@ -533,6 +533,8 @@ namespace
 		CHECK(ColorAt(black, metal) == kBlackStarRgb && ColorAt(black, gem) == kBlackStarGemRgb);
 		// a colored Black Star reading (Praedy's dark star) keeps its own; none read = the game's star's gem
 		CHECK(StarGemColor(Rgb{ 114, 84, 255 }, true) == (Rgb{ 114, 84, 255 }));
+		// a pale Black Star reading of another hue (a replacer's own pale gem) keeps its own; only a pale blue-white is the game's
+		CHECK(StarGemColor(Rgb{ 252, 255, 190 }, true) == (Rgb{ 252, 255, 190 }));
 		CHECK(StarGemColor(std::nullopt, false) == kAzurasStarGemRgb && StarGemColor(std::nullopt, true) == kBlackStarGemRgb);
 		// a pale Azura's Star reading is its gem as read (only the Black Star's dark gem hides in its texture)
 		CHECK(StarGemColor(Rgb{ 252, 255, 190 }, false) == (Rgb{ 252, 255, 190 }));

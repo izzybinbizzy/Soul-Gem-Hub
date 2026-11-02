@@ -231,7 +231,11 @@ namespace Plugin
 				GemSwitches();
 				Header(Icon::kGem, T("Colors"));
 				GemColors();
-				StarLight();
+				// shown only while a star is lit
+				if (const auto s = SettingsNow(); s.gems[static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar)] ||
+												  s.gems[static_cast<std::size_t>(Gems::GemSwitch::kBlackStar)]) {
+					StarLight();
+				}
 				// shown only where its two choices light a gem differently under the Gem colors pick
 				if (LightColorMatters(SettingsNow().gemMod)) {
 					LightColor();

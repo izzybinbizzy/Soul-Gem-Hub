@@ -482,15 +482,17 @@ namespace Gems
 		return top > 0 && bottom >= kPaleShare * top;
 	}
 
-	// a star's gem color off its texture's colored part (none read = the game's star's); a Black Star whose reading is pale holds
-	// a dark gem the texture average cannot show, so it wears kBlackStarGemRgb
+	// a star's gem color off its texture's colored part (none read = the game's star's); a Black Star whose reading is a pale
+	// blue-white holds the game's dark gem, which the texture average cannot show, so it wears kBlackStarGemRgb - a replacer's
+	// pale gem of another hue keeps its own
 	[[nodiscard]] inline Rgb StarGemColor(const std::optional<Rgb>& a_read, bool a_black) noexcept
 	{
 		const Rgb own = a_black ? kBlackStarGemRgb : kAzurasStarGemRgb;
 		if (!a_read) {
 			return own;
 		}
-		return a_black && IsPale(*a_read) ? own : *a_read;
+		const auto& c = *a_read;
+		return a_black && IsPale(c) && c[2] >= (std::max)(c[0], c[1]) ? own : c;
 	}
 
 	[[nodiscard]] inline Rgb PaleBlue(const Rgb& a_texture) noexcept

@@ -451,11 +451,12 @@ namespace Plugin
 			}
 			// a star wears its body's color as a whole - the textures that do not glow, else all of them - never its stripes'
 			if (a_star || Gems::StarOf(a_model) != Gems::StarModel::kNone) {
-				if (a_gem) {
-					return it->second = all.Result();
-				}
 				const auto whole = body.Body();
-				return it->second = whole ? whole : all.Body();
+				const auto metal = whole ? whole : all.Body();
+				const auto gem = all.Result();
+				// both come from this one load, so the other reading is kept too
+				read.insert_or_assign({ std::get<0>(it->first), a_star, !a_gem }, a_gem ? metal : gem);
+				return it->second = a_gem ? gem : metal;
 			}
 			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
 			it->second = glow ? glow : all.Result();
@@ -1373,6 +1374,9 @@ namespace Plugin
 			if (const auto* soulGem = form->As<RE::TESModel>(); soulGem && form->Is(RE::FormType::SoulGem) && Gems::ColorFromModel(gem.look.family)) {
 				const char* model = soulGem->GetModel();
 				SKSE::log::info("  {:08X} {} | {} | {},{},{}", form->GetFormID(), form->GetName(), model ? model : "", gem.look.rgb[0], gem.look.rgb[1], gem.look.rgb[2]);
+				if (const auto& g = gem.look.gemRgb) {
+					SKSE::log::info("    its gem (Star light on Gem): {},{},{}", (*g)[0], (*g)[1], (*g)[2]);
+				}
 			}
 		}
 	}
