@@ -229,6 +229,7 @@ namespace Gems
 		bool               glowAlways{ false };  // that glow on "Author pick" too
 		bool               blackStar{ false };   // a star: the Black Star (its own light switch), else Azura's Star
 		bool               named{ false };       // a named quest gem, on its own model or a plain gem's (its own light switch)
+		std::optional<Rgb> gemRgb{};             // a star: the color of the gem it holds, the "Star light" Gem choice
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -271,6 +272,10 @@ namespace Gems
 	// (azurastarlite.dds a pale aqua, the dark azurastar.dds a cool white); in game a star is read off the model that wins it
 	inline constexpr Rgb kAzurasStarRgb{ 215, 255, 253 };
 	inline constexpr Rgb kBlackStarRgb{ 222, 228, 255 };
+	// the gem a star holds ("Star light" on Gem): the colored part of its texture; the game's Black Star's dark gem reads pale
+	// there, so it wears his own call for it, purple
+	inline constexpr Rgb kAzurasStarGemRgb{ 157, 255, 252 };
+	inline constexpr Rgb kBlackStarGemRgb{ 170, 90, 255 };
 
 	// which star a model is: Azura's Star wears azurastarlite.nif, the Black Star azurastar.nif - so a gem mod's own star records
 	// (Andrealletius Soul Gem Overhaul's Drained ... Flawless stars) are stars too, not only the game's two records
@@ -475,6 +480,17 @@ namespace Gems
 	{
 		const int top = (std::max)({ a_rgb[0], a_rgb[1], a_rgb[2] }), bottom = (std::min)({ a_rgb[0], a_rgb[1], a_rgb[2] });
 		return top > 0 && bottom >= kPaleShare * top;
+	}
+
+	// a star's gem color off its texture's colored part (none read = the game's star's); a Black Star whose reading is pale holds
+	// a dark gem the texture average cannot show, so it wears kBlackStarGemRgb
+	[[nodiscard]] inline Rgb StarGemColor(const std::optional<Rgb>& a_read, bool a_black) noexcept
+	{
+		const Rgb own = a_black ? kBlackStarGemRgb : kAzurasStarGemRgb;
+		if (!a_read) {
+			return own;
+		}
+		return a_black && IsPale(*a_read) ? own : *a_read;
 	}
 
 	[[nodiscard]] inline Rgb PaleBlue(const Rgb& a_texture) noexcept
@@ -872,6 +888,7 @@ namespace Gems
 		bool                           theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
 		int                            gemMod{ 0 };                                                         // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
 		bool                           authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
+		bool                           starGem{ false };                                                    // "Star light": false = a star's metal (its body), true = the gem it holds
 		std::array<bool, kGemSwitches> gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
 	};
 
@@ -923,6 +940,9 @@ namespace Gems
 	// at data load. "Light color": by default a gem's own glow where it differs from that color, on Author pick the color as found
 	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
 	{
+		if (a_look.kind == Kind::kStar) {
+			return a_s.starGem && a_look.gemRgb ? *a_look.gemRgb : a_look.rgb;
+		}
 		const auto* pick = GemModAt(a_s.gemMod);
 		if (!pick || !PickRecolors(a_look)) {
 			return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
@@ -1022,6 +1042,8 @@ namespace Gems
 				a_out.theirsMesh = v != 0;
 			} else if (SameText(key, "AuthorPick")) {
 				a_out.authorPick = v != 0;
+			} else if (SameText(key, "StarGem")) {
+				a_out.starGem = v != 0;
 			} else if (const auto it = std::ranges::find_if(kGemSwitchKeys, [&](std::string_view a_k) { return SameText(key, a_k); });
 				it != kGemSwitchKeys.end()) {
 				a_out.gems[static_cast<std::size_t>(it - kGemSwitchKeys.begin())] = v != 0;
@@ -1039,7 +1061,8 @@ namespace Gems
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
-			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\n";
+			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0)
+			  << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\n";
 		for (std::size_t i = 0; i < kGemSwitches; ++i) {
 			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';
 		}

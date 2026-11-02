@@ -392,14 +392,15 @@ namespace Plugin
 		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
 		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
-		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it
-		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star)
+		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it; a_gem: a star's gem instead, the colored
+		// part of its textures (ColorSum::Result)
+		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star, bool a_gem = false)
 		{
-			static std::map<std::pair<std::string, bool>, std::optional<Gems::Rgb>> read;
+			static std::map<std::tuple<std::string, bool, bool>, std::optional<Gems::Rgb>> read;
 			if (REL::Module::IsVR() || a_model.empty()) {
 				return std::nullopt;
 			}
-			const auto [it, added] = read.try_emplace({ Gems::NormalPath(a_model), a_star });
+			const auto [it, added] = read.try_emplace({ Gems::NormalPath(a_model), a_star, a_gem });
 			if (!added) {
 				return it->second;
 			}
@@ -450,6 +451,9 @@ namespace Plugin
 			}
 			// a star wears its body's color as a whole - the textures that do not glow, else all of them - never its stripes'
 			if (a_star || Gems::StarOf(a_model) != Gems::StarModel::kNone) {
+				if (a_gem) {
+					return it->second = all.Result();
+				}
 				const auto whole = body.Body();
 				return it->second = whole ? whole : all.Body();
 			}
@@ -1254,6 +1258,9 @@ namespace Plugin
 			} else if (const auto own = ModelColor(a_model, a_star)) {
 				a_look.rgb = Gems::ShownColor(*own, a_look.kind);
 				++fromModel;
+			}
+			if (a_star) {
+				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);
 			}
 		};
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {

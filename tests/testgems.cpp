@@ -369,7 +369,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 10 + kGemSwitches);
+		CHECK(ReadSettings(again, back) == 11 + kGemSwitches);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
@@ -508,6 +508,38 @@ namespace
 		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
 		a.gemMod = 99;  // out of range: Automatic
 		CHECK(ColorAt(grand, a) == grand.rgb);
+	}
+
+	// the menu's "Star light": a star wears its metal's color, or on Gem the gem it holds; a pale Black Star reading (the game's
+	// dark gem) wears its own purple; no other gem changes
+	void StarLightPick()
+	{
+		Settings s;
+		CHECK(!s.starGem);
+		std::stringstream in("StarGem=1\n");
+		CHECK(ReadSettings(in, s) == 1 && s.starGem);
+		std::stringstream out;
+		WriteSettings(s, out);
+		CHECK(out.str().find("StarGem=1\n") != std::string::npos);
+
+		Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		azura.gemRgb = StarGemColor(Rgb{ 157, 255, 252 }, false);
+		Look black{ Family::kStar, Kind::kStar, kBlackStarRgb };
+		black.blackStar = true;
+		black.gemRgb = StarGemColor(Rgb{ 192, 203, 255 }, true);
+		Settings metal, gem;
+		gem.starGem = true;
+		CHECK(ColorAt(azura, metal) == kAzurasStarRgb && ColorAt(azura, gem) == (Rgb{ 157, 255, 252 }));
+		CHECK(ColorAt(black, metal) == kBlackStarRgb && ColorAt(black, gem) == kBlackStarGemRgb);
+		// a colored Black Star reading (Praedy's dark star) keeps its own; none read = the game's star's gem
+		CHECK(StarGemColor(Rgb{ 114, 84, 255 }, true) == (Rgb{ 114, 84, 255 }));
+		CHECK(StarGemColor(std::nullopt, false) == kAzurasStarGemRgb && StarGemColor(std::nullopt, true) == kBlackStarGemRgb);
+		// a pale Azura's Star reading is its gem as read (only the Black Star's dark gem hides in its texture)
+		CHECK(StarGemColor(Rgb{ 252, 255, 190 }, false) == (Rgb{ 252, 255, 190 }));
+		// a star with no gem color read keeps its metal on Gem; a plain gem never changes with Star light
+		Look bare{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		Look plain = GameLook(Kind::kGrand, false);
+		CHECK(ColorAt(bare, gem) == kAzurasStarRgb && ColorAt(plain, gem) == ColorAt(plain, metal));
 	}
 
 	// the menu's "Light color": by default a gem whose own glow is not its light's color wears its glow, on Author pick the
@@ -652,6 +684,7 @@ int main()
 	SettingsText();
 	GemColorPick();
 	LightColorPick();
+	StarLightPick();
 	Permits();
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {

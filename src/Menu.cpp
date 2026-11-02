@@ -141,6 +141,20 @@ namespace Plugin
 				"they glow; Author pick keeps the author's color."));
 		}
 
+		// "Star light": Azura's Star and the Black Star lit in the color of their metal or of the gem they hold
+		void StarLight()
+		{
+			auto                             s = SettingsNow();
+			int                              v = s.starGem ? 1 : 0;
+			const std::array<const char*, 2> items{ T("Metal"), T("Gem") };
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Star light"), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.starGem) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.starGem = v == 1; });
+				Changed();
+			}
+			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
+		}
+
 		// "Which Gems Glow": a light switch per gem, in GemSwitch order
 		void GemSwitches()
 		{
@@ -217,6 +231,7 @@ namespace Plugin
 				GemSwitches();
 				Header(Icon::kGem, T("Colors"));
 				GemColors();
+				StarLight();
 				// shown only where its two choices light a gem differently under the Gem colors pick
 				if (LightColorMatters(SettingsNow().gemMod)) {
 					LightColor();

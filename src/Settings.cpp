@@ -30,9 +30,9 @@ namespace Plugin
 				off += (off.empty() ? "" : ", ") + std::string(Gems::kGemSwitchKeys[i]);
 			}
 		}
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {}, gems switched off: {} ({} line(s) read)",
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {}, star light {}, gems switched off: {} ({} line(s) read)",
 			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
-			s.authorPick ? "Author pick" : "the gem's own glow", off.empty() ? "none" : off, lines);
+			s.authorPick ? "Author pick" : "the gem's own glow", s.starGem ? "the gem" : "the metal", off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write
