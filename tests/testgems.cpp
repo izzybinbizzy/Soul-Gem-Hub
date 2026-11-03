@@ -608,6 +608,10 @@ namespace
 		const std::array<std::uint64_t, 2> gameModel{ 0x7F3555FAF7E28371ULL, 0x72BA88B6D473B38FULL };
 		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, retexture) == kGameGlows[2].rgb);
 		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, gameModel) == kGameGlows[2].rgb);
+		// Kanjs' models: the game's layout plus the engine's black filler
+		auto kanjsSet = classic;
+		kanjsSet.insert(kanjsSet.begin(), "black.dds");
+		CHECK(GameGlowOf("clutter\\soulgem\\soulgempetty01.nif", kanjsSet, retexture) == kGameGlows[0].rgb);
 		CHECK(GameGlowOf("meshes\\clutter\\soulgem\\soulgemgrand01.nif", pbrSet, retexture) == kGameGlows[4].rgb);
 		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", animatedSet, gameModel));
 		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", praedySet, retexture));
@@ -666,7 +670,7 @@ namespace
 		                        field("textures\\clutter\\a\\gem.dds");
 		const auto        named = TexturesNamed(std::span(reinterpret_cast<const std::uint8_t*>(nif.data()), nif.size()));
 		CHECK(named.size() == 2 && named[0] == "clutter\\a\\gem.dds" && named[1] == "clutter\\a\\gem_n.dds");
-		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds"));
+		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds") && !ColorTexture("textures\\black.dds"));
 		CHECK(TexturesNamed({}).empty());
 		// a path followed by one 32-126 characters long: that length's first byte is printable (')' for 41), which a scan of
 		// printable runs glued onto the path before it and lost it (the audit's H1, Animated Filled Soul Gems' gem models)

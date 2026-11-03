@@ -664,11 +664,11 @@ namespace Gems
 	}
 
 	// a texture that gives a model its colors - not a cubemap, normal, specular, glow or other map, which mods share widely
-	// (a shared cubemap must never mark someone else's gem as a blocked mod's)
+	// (a shared cubemap must never mark someone else's gem as a blocked mod's); the engine's plain black filler carries no color
 	[[nodiscard]] inline bool ColorTexture(std::string_view a_texture)
 	{
 		const auto path = TexturePath(a_texture);
-		if (path.starts_with("cubemaps\\") || !path.ends_with(".dds")) {
+		if (path.starts_with("cubemaps\\") || !path.ends_with(".dds") || path == "black.dds") {
 			return false;
 		}
 		const std::string_view stem(path.data(), path.size() - 4);
