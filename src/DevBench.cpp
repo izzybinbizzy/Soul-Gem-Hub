@@ -27,13 +27,18 @@ namespace Plugin
 			R"json({"description":"Soul Gem Hub - the lighting found (automatic), the settings, the soul gems this plugin lights (by look: the game's own, Praedy's, Rustic, named, stars, Soul Cairn) and those another light mod lights too (taken over from Emissive Soul Gems and other Light Placer files, left to RE::Light), the gems near the player whose other light is put out for ours, and every gem light near the player now with its color, fade, radius and place. Read only.","inputSchema":{"type":"object","properties":{}},"readOnly":true})json";
 
 		constexpr const char* kTool =
-			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), theirsEmissive / theirsLightPlacer / theirsMesh (0/1, gems Emissive Soul Gems, another Light Placer file or their own model light keep that light instead of ours), gemMod (0 = Automatic, 1 and up = a gem mod in the menu's order, whose colors every plain soul gem of the six sizes then wears; the state's gemModName names it, a number past the last gem mod is refused), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","stars","pulse","theirsEmissive","theirsLightPlacer","theirsMesh","gemMod","authorPick"]},"value":{"type":"number"}},"required":["action"]}})json";
+			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), theirsEmissive / theirsLightPlacer / theirsMesh (0/1, gems Emissive Soul Gems, another Light Placer file or their own model light keep that light instead of ours), gemMod (0 = Automatic, 1 and up = a gem mod in the menu's order, whose colors every plain soul gem of the six sizes then wears; the state's gemModName names it, a number past the last gem mod is refused), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick), starGem (0/1, the Star light: 0 = the star's metal, 1 = the gem it holds), LightPetty / LightLesser / LightCommon / LightGreater / LightGrand / LightBlack / LightNamed / LightAzurasStar / LightBlackStar / LightSoulCairn (0/1, the light switch of that gem; the state's gems lists them). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","stars","pulse","theirsEmissive","theirsLightPlacer","theirsMesh","gemMod","authorPick","starGem","LightPetty","LightLesser","LightCommon","LightGreater","LightGrand","LightBlack","LightNamed","LightAzurasStar","LightBlackStar","LightSoulCairn"]},"value":{"type":"number"}},"required":["action"]}})json";
 
 		json SettingsJson(const Gems::Settings& a_s)
 		{
+			json gems = json::object();
+			for (std::size_t i = 0; i < Gems::kGemSwitches; ++i) {
+				gems[std::string(Gems::kGemSwitchKeys[i])] = a_s.gems[i];
+			}
 			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "stars", a_s.stars }, { "pulse", a_s.pulse },
 				{ "theirsEmissive", a_s.theirsEmissive }, { "theirsLightPlacer", a_s.theirsLightPlacer }, { "theirsMesh", a_s.theirsMesh },
-				{ "gemMod", a_s.gemMod }, { "gemModName", std::string(Gems::GemModName(a_s.gemMod)) }, { "authorPick", a_s.authorPick } };
+				{ "gemMod", a_s.gemMod }, { "gemModName", std::string(Gems::GemModName(a_s.gemMod)) }, { "authorPick", a_s.authorPick }, { "starGem", a_s.starGem },
+				{ "gems", std::move(gems) } };
 		}
 
 		// everything, read on the main thread (the lights are the main thread's)
@@ -121,9 +126,18 @@ namespace Plugin
 				change = [v](Gems::Settings& a_s) { a_s.gemMod = v; };
 			} else if (key == "authorPick") {
 				change = [v](Gems::Settings& a_s) { a_s.authorPick = v != 0; };
+			} else if (key == "starGem") {
+				change = [v](Gems::Settings& a_s) { a_s.starGem = v != 0; };
+			} else if (const auto it = std::ranges::find_if(Gems::kGemSwitchKeys, [&](std::string_view a_k) { return Gems::SameText(key, a_k); });
+				it != Gems::kGemSwitchKeys.end()) {
+				const auto i = static_cast<std::size_t>(it - Gems::kGemSwitchKeys.begin());
+				change = [v, i](Gems::Settings& a_s) { a_s.gems[i] = v != 0; };
 			} else {
-				return DevBenchGlue::Refusal("unknown setting '" + key + "'",
-					json::array({ "lights", "brightness", "reach", "stars", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh", "gemMod", "authorPick" }));
+				auto known = json::array({ "lights", "brightness", "reach", "stars", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh", "gemMod", "authorPick", "starGem" });
+				for (const auto k : Gems::kGemSwitchKeys) {
+					known.push_back(std::string(k));
+				}
+				return DevBenchGlue::Refusal("unknown setting '" + key + "'", std::move(known));
 			}
 			UpdateSettings(change);
 			const bool saved = SaveSettings();

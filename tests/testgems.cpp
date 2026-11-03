@@ -237,9 +237,21 @@ namespace
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
 		const Rgb starPale{ 157, 255, 252 };
 		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
-		// the Black Star is purple (blue on top, red over green), Azura's Star teal (green and blue over red)
-		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > kBlackStarRgb[1]);
-		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0]);
+		// each star's default is its body's color: the Black Star a cool white (blue on top), Azura's Star a pale aqua
+		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > 200 && kBlackStarRgb[1] > 200);
+		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0] && kAzurasStarRgb[0] > 200);
+		// a star's body counts every pixel the same: a grey body with teal stripes reads near-white, its stripes alone teal
+		ColorSum star;
+		for (int i = 0; i < 9; ++i) {
+			star.Add(100, 100, 104);
+		}
+		star.Add(40, 200, 190);
+		const auto body = star.Body(), stripes = star.Result();
+		CHECK(body && (*body)[0] > 200 && (*body)[2] == 255);
+		CHECK(stripes && (*stripes)[0] < 100);
+		ColorSum clear;
+		clear.Add(0, 0, 0, 0);
+		CHECK(!clear.Body());
 	}
 
 	void Looks()
@@ -357,7 +369,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 10);
+		CHECK(ReadSettings(again, back) == 11 + kGemSwitches);
 		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
@@ -371,6 +383,29 @@ namespace
 		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
 		Settings          h;
 		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
+		// a light switch per gem: every gem on by default, one switched off read, written back and kept off the light
+		CHECK(std::ranges::all_of(d.gems, [](bool a_on) { return a_on; }));
+		std::stringstream gemsIn("lightblackstar=0\nLightPetty=off\n");
+		Settings          g;
+		CHECK(ReadSettings(gemsIn, g) == 2 && !g.gems[static_cast<std::size_t>(GemSwitch::kBlackStar)] &&
+			  !g.gems[static_cast<std::size_t>(GemSwitch::kPetty)] && g.gems[static_cast<std::size_t>(GemSwitch::kAzurasStar)]);
+		std::stringstream gemsOut;
+		WriteSettings(g, gemsOut);
+		CHECK(gemsOut.str().find("LightBlackStar=0\n") != std::string::npos && gemsOut.str().find("LightAzurasStar=1\n") != std::string::npos);
+		Look blackStar{ Family::kStar, Kind::kStar, kBlackStarRgb };
+		blackStar.blackStar = true;
+		const Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		const Look cairn{ Family::kSoulCairn, Kind::kNamed, kBlackStarRgb };  // the portal's bowl
+		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
+		CHECK(SwitchOf(GameLook(Kind::kGreater, false)) == GemSwitch::kGreater && SwitchOf(GameLook(Kind::kGrand, true)) == GemSwitch::kBlack);
+		CHECK(!GemLit(blackStar, g) && GemLit(azura, g) && !GemLit(GameLook(Kind::kPetty, false), g) && GemLit(GameLook(Kind::kGrand, false), g));
+		// a named quest gem on a plain gem's model (Malyn's Black Soul on the black gem's) goes by its own switch, not its size's
+		Look malyn = GameLook(Kind::kGrand, true);
+		malyn.named = true;
+		g.gems[static_cast<std::size_t>(GemSwitch::kNamed)] = false;
+		CHECK(SwitchOf(malyn) == GemSwitch::kNamed && !GemLit(malyn, g) && GemLit(GameLook(Kind::kGrand, true), g));
+		g.on = false;
+		CHECK(!GemLit(azura, g));
 		// "Stars" (his checklist 309 / 321 answers): clamped to its range, written back, and only the two stars dimmed and
 		// shortened by it
 		std::stringstream starsIn("Stars=5\n");
@@ -475,6 +510,40 @@ namespace
 		CHECK(ColorAt(grand, a) == grand.rgb);
 	}
 
+	// the menu's "Star light": a star wears its metal's color, or on Gem the gem it holds; a pale Black Star reading (the game's
+	// dark gem) wears its own purple; no other gem changes
+	void StarLightPick()
+	{
+		Settings s;
+		CHECK(!s.starGem);
+		std::stringstream in("StarGem=1\n");
+		CHECK(ReadSettings(in, s) == 1 && s.starGem);
+		std::stringstream out;
+		WriteSettings(s, out);
+		CHECK(out.str().find("StarGem=1\n") != std::string::npos);
+
+		Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		azura.gemRgb = StarGemColor(Rgb{ 157, 255, 252 }, false);
+		Look black{ Family::kStar, Kind::kStar, kBlackStarRgb };
+		black.blackStar = true;
+		black.gemRgb = StarGemColor(Rgb{ 192, 203, 255 }, true);
+		Settings metal, gem;
+		gem.starGem = true;
+		CHECK(ColorAt(azura, metal) == kAzurasStarRgb && ColorAt(azura, gem) == (Rgb{ 157, 255, 252 }));
+		CHECK(ColorAt(black, metal) == kBlackStarRgb && ColorAt(black, gem) == kBlackStarGemRgb);
+		// a colored Black Star reading (Praedy's dark star) keeps its own; none read = the game's star's gem
+		CHECK(StarGemColor(Rgb{ 114, 84, 255 }, true) == (Rgb{ 114, 84, 255 }));
+		// a pale Black Star reading of another hue (a replacer's own pale gem) keeps its own; only a pale blue-white is the game's
+		CHECK(StarGemColor(Rgb{ 252, 255, 190 }, true) == (Rgb{ 252, 255, 190 }));
+		CHECK(StarGemColor(std::nullopt, false) == kAzurasStarGemRgb && StarGemColor(std::nullopt, true) == kBlackStarGemRgb);
+		// a pale Azura's Star reading is its gem as read (only the Black Star's dark gem hides in its texture)
+		CHECK(StarGemColor(Rgb{ 252, 255, 190 }, false) == (Rgb{ 252, 255, 190 }));
+		// a star with no gem color read keeps its metal on Gem; a plain gem never changes with Star light
+		Look bare{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+		Look plain = GameLook(Kind::kGrand, false);
+		CHECK(ColorAt(bare, gem) == kAzurasStarRgb && ColorAt(plain, gem) == ColorAt(plain, metal));
+	}
+
 	// the menu's "Light color": by default a gem whose own glow is not its light's color wears its glow, on Author pick the
 	// color as found; a glow marked always (ASGO's Solar gems) on both
 	void LightColorPick()
@@ -559,9 +628,11 @@ namespace
 		CHECK(Fingerprint(big) != Fingerprint(std::span(big).first(kFingerprintHead)));
 		CHECK(std::ranges::is_sorted(kBlockedFiles, {}, &BlockedFile::hash));
 		CHECK(std::ranges::all_of(kBlockedFiles, [](const BlockedFile& f) { return f.mod < kBlockedMods.size(); }));
-		CHECK(BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
-		CHECK(BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
+		// the table may be empty: a mod whose author asks out is the only one in it
+		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.front().hash) == kBlockedMods[kBlockedFiles.front().mod]);
+		CHECK(kBlockedFiles.empty() || BlockedModOf(kBlockedFiles.back().hash) == kBlockedMods[kBlockedFiles.back().mod]);
 		CHECK(!BlockedModOf(Fingerprint(a)));
+		CHECK(!BlockedModAt(kBlockedMods.size()) && !BlockedModAt(255));
 		// the picture colors: sorted, every one found by its own fingerprint, a stranger file not
 		CHECK(std::ranges::is_sorted(kSeenColors, {}, &SeenColor::hash));
 		CHECK(SeenColorOf(kSeenColors.front().hash) == (Rgb{ kSeenColors.front().r, kSeenColors.front().g, kSeenColors.front().b }));
@@ -588,7 +659,7 @@ namespace
 		CHECK(TexturePath("clutter\\x.dds") == "clutter\\x.dds");
 		CHECK(std::ranges::is_sorted(kBlockedPaths, {}, &BlockedPath::path));
 		CHECK(std::ranges::all_of(kBlockedPaths, [](const BlockedPath& p) { return p.mod < kBlockedMods.size() && p.path == Lower(p.path); }));
-		CHECK(BlockedModOfPath(kBlockedPaths.front().path) == kBlockedMods[kBlockedPaths.front().mod]);
+		CHECK(kBlockedPaths.empty() || BlockedModOfPath(kBlockedPaths.front().path) == kBlockedMods[kBlockedPaths.front().mod]);
 		CHECK(!BlockedModOfPath("clutter\\soulgem\\soulgemgrand01.nif"));  // the game's own model is never a blocked name
 		const auto        field = [](std::string_view a_text) { return std::string(1, static_cast<char>(a_text.size())) + std::string(3, '\0') + std::string(a_text); };
 		const std::string nif = field("NiNode") + field("Textures\\Clutter\\A\\Gem.DDS") + field("textures\\clutter\\a\\gem_n.dds") +
@@ -617,6 +688,7 @@ int main()
 	SettingsText();
 	GemColorPick();
 	LightColorPick();
+	StarLightPick();
 	Permits();
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {

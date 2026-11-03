@@ -4,7 +4,7 @@
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
 // found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
-// lights' switch, Brightness, Reach, Stars, the soft pulse, Gem colors, Light color and Their Own Lights. A change is saved and
+// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, Gem colors, Light color and Their Own Lights. A change is saved and
 // applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -141,6 +141,37 @@ namespace Plugin
 				"they glow; Author pick keeps the author's color."));
 		}
 
+		// "Star light": Azura's Star and the Black Star lit in the color of their metal or of the gem they hold
+		void StarLight()
+		{
+			auto                             s = SettingsNow();
+			int                              v = s.starGem ? 1 : 0;
+			const std::array<const char*, 2> items{ T("Metal"), T("Gem") };
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Star light"), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.starGem) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.starGem = v == 1; });
+				Changed();
+			}
+			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
+		}
+
+		// "Which Gems Glow": a light switch per gem, in GemSwitch order
+		void GemSwitches()
+		{
+			constexpr std::array<const char*, Gems::kGemSwitches> kLabels{ TR_MARK("Petty soul gems"), TR_MARK("Lesser soul gems"),
+				TR_MARK("Common soul gems"), TR_MARK("Greater soul gems"), TR_MARK("Grand soul gems"), TR_MARK("Black soul gems"),
+				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems") };
+			Header(Icon::kGem, T("Which Gems Glow"));
+			for (std::size_t i = 0; i < kLabels.size(); ++i) {
+				bool v = SettingsNow().gems[i];
+				if (Checkbox(T(kLabels[i]), &v)) {
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
+					Changed();
+				}
+			}
+			MenuStyle::Tip(T("A gem switched off gets none of this mod's light; another mod's light on it stays."));
+		}
+
 		void RenderPage();
 
 		// SKSE Menu Framework calls this from its own DLL on the render thread: nothing may be thrown back across
@@ -172,7 +203,7 @@ namespace Plugin
 				}
 			}
 			for (const auto& [mod, n] : GemsBlocked()) {
-				TextColored(kMuted, "%s", Fill(T("Not lit until its author allows it - {}: {}"), mod, std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
 				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
@@ -197,7 +228,14 @@ namespace Plugin
 				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
 					T("How bright Azura's Star and the Black Star are and how far their light reaches, on top of Brightness and Reach. Turn it down when their light drowns the gems near them."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
+				GemSwitches();
+				Header(Icon::kGem, T("Colors"));
 				GemColors();
+				// shown only while a star is lit
+				if (const auto s = SettingsNow(); s.gems[static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar)] ||
+												  s.gems[static_cast<std::size_t>(Gems::GemSwitch::kBlackStar)]) {
+					StarLight();
+				}
 				// shown only where its two choices light a gem differently under the Gem colors pick
 				if (LightColorMatters(SettingsNow().gemMod)) {
 					LightColor();

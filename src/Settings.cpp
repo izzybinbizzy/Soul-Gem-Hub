@@ -23,10 +23,16 @@ namespace Plugin
 		Gems::Settings read;
 		const auto     lines = Gems::ReadSettings(in, read);
 		SetSettings(read);  // in the menu's steps of 5, as every other way in
-		const auto s = SettingsNow();
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {} ({} line(s) read)",
+		const auto  s = SettingsNow();
+		std::string off;
+		for (std::size_t i = 0; i < Gems::kGemSwitches; ++i) {
+			if (!s.gems[i]) {
+				off += (off.empty() ? "" : ", ") + std::string(Gems::kGemSwitchKeys[i]);
+			}
+		}
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {}, star light {}, gems switched off: {} ({} line(s) read)",
 			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
-			s.authorPick ? "Author pick" : "the gem's own glow", lines);
+			s.authorPick ? "Author pick" : "the gem's own glow", s.starGem ? "the gem" : "the metal", off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write

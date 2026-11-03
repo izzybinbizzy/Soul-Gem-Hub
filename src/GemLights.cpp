@@ -8,8 +8,8 @@
 // world does (a soul trapped into an empty one), and always for Azura's Star and the Black Star - and the items and pieces known
 // by their own model (the Soul Essence Gem, the Soul Cairn's gem bowl and chunks). A gem's look - its color and strength -
 // comes from the model its record wears in this load order, so it follows whatever mesh mod wins: Praedy's Soul Gems (Subtle
-// Soul Gems' copies of them too), Rustic Soul Gems (either download, once its author allows it - GemPermissions.h), or the
-// game's own gems by their size; a gem mod waiting on its author's permission stays unlit. Never a static or
+// Soul Gems' copies of them too), Rustic Soul Gems (either download), or the game's own gems by their size; a gem mod whose
+// author asked not to be supported stays unlit (GemPermissions.h). Never a static or
 // a museum display that only wears a gem's model (his rule: displays never get lit) - with RE::Light loaded, its light on one
 // is put out.
 //
@@ -115,7 +115,7 @@ namespace Plugin
 		std::unordered_map<const RE::TESBoundObject*, Gem> gGems;             // the gems this plugin lights; read on the main thread after data load
 		std::vector<std::pair<std::string, std::size_t>>   gFamilies;         // the lit gem records by look, for the menu
 		std::array<std::size_t, 4>                         gOtherLighters{};  // gem records another light mod lights too, by Gems::Owner
-		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, until its author allows it
+		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, at its author's request
 		std::string                                        gRustic;           // which Rustic Soul Gems download is loaded
 		bool                                               gRusticLit{ false };
 
@@ -392,14 +392,15 @@ namespace Plugin
 		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
 		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
-		// keeps the color its own crystal shows (his teal for Azura's Star), whatever light a replacer hangs in it
-		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star)
+		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it; a_gem: a star's gem instead, the colored
+		// part of its textures (ColorSum::Result)
+		std::optional<Gems::Rgb> ModelColor(std::string_view a_model, bool a_star, bool a_gem = false)
 		{
-			static std::map<std::pair<std::string, bool>, std::optional<Gems::Rgb>> read;
+			static std::map<std::tuple<std::string, bool, bool>, std::optional<Gems::Rgb>> read;
 			if (REL::Module::IsVR() || a_model.empty()) {
 				return std::nullopt;
 			}
-			const auto [it, added] = read.try_emplace({ Gems::NormalPath(a_model), a_star });
+			const auto [it, added] = read.try_emplace({ Gems::NormalPath(a_model), a_star, a_gem });
 			if (!added) {
 				return it->second;
 			}
@@ -441,14 +442,21 @@ namespace Plugin
 			if (const auto own = ownLight.Result(); own && !a_star && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
 				return it->second = own;
 			}
-			Gems::ColorSum glowing, all;
+			Gems::ColorSum glowing, all, body;
 			for (const auto& [name, tex] : textures) {
 				if (tex.read) {
 					all.Add(tex.sum);
-					if (tex.glows) {
-						glowing.Add(tex.sum);
-					}
+					(tex.glows ? glowing : body).Add(tex.sum);
 				}
+			}
+			// a star wears its body's color as a whole - the textures that do not glow, else all of them - never its stripes'
+			if (a_star || Gems::StarOf(a_model) != Gems::StarModel::kNone) {
+				const auto whole = body.Body();
+				const auto metal = whole ? whole : all.Body();
+				const auto gem = all.Result();
+				// both come from this one load, so the other reading is kept too
+				read.insert_or_assign({ std::get<0>(it->first), a_star, !a_gem }, a_gem ? metal : gem);
+				return it->second = a_gem ? gem : metal;
 			}
 			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
 			it->second = glow ? glow : all.Result();
@@ -1048,7 +1056,8 @@ namespace Plugin
 			tes->ForEachReferenceInRange(player, kRange, [&](RE::TESObjectREFR* a_ref) {
 				const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr;
 				const auto  it = base ? gGems.find(base) : gGems.end();
-				if (it == gGems.end() || a_ref->IsDisabled() || a_ref->IsDeleted() || !a_ref->Is3DLoaded()) {
+				// a gem switched off in the menu takes no place among the nearest: a farther one gets the light
+				if (it == gGems.end() || !Gems::GemLit(it->second.look, a_s) || a_ref->IsDisabled() || a_ref->IsDeleted() || !a_ref->Is3DLoaded()) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				if (it->second.needsSoul && a_ref->extraList.GetSoulLevel() == RE::SOUL_LEVEL::kNone) {
@@ -1251,6 +1260,9 @@ namespace Plugin
 				a_look.rgb = Gems::ShownColor(*own, a_look.kind);
 				++fromModel;
 			}
+			if (a_star) {
+				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);
+			}
 		};
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {
 			if (!gem) {
@@ -1267,15 +1279,13 @@ namespace Plugin
 			auto       look = model.empty() ? std::nullopt : Gems::LookOfModel(model, !gRustic.empty());
 			if (star) {
 				look = Gems::Look{ Gems::Family::kStar, Gems::Kind::kStar, black ? Gems::kBlackStarRgb : Gems::kAzurasStarRgb };
+				look->blackStar = black;
 			} else if (!look || look->family == Gems::Family::kSoulCairn) {
 				look = Gems::GameLook(KindOfCapacity(gem->GetMaximumCapacity()), gem->CanHoldNPCSoul());
 			}
-			// a star's picture rows were keyed by the other star's model, so Azura's Star reads its own textures; the Black Star
-			// keeps its purple
-			if (!black) {
-				readColor(*look, model, star, namedId(gem));
-			}
-			look->ownColor = namedId(gem) != 0;  // on a plain model too (a kGame look): it keeps its own color under the pick
+			// a star's picture rows were keyed by the other star's model, so both stars read their own textures (readColor)
+			readColor(*look, model, star, namedId(gem));
+			look->ownColor = look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): its own color, its own switch
 			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
 			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
 				if (const auto mod = BlockedSwap(swapped)) {
@@ -1323,7 +1333,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
-			look.ownColor = true;
+			look.ownColor = look.named = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
@@ -1358,12 +1368,15 @@ namespace Plugin
 		}));
 		gRusticLit = std::ranges::any_of(gGems, [](const auto& a_entry) { return a_entry.second.look.family == Gems::Family::kRustic; });
 		for (const auto& [mod, n] : gBlocked) {
-			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit until its author allows it", n, mod);
+			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit, at its author's request", n, mod);
 		}
 		for (const auto& [form, gem] : gGems) {
 			if (const auto* soulGem = form->As<RE::TESModel>(); soulGem && form->Is(RE::FormType::SoulGem) && Gems::ColorFromModel(gem.look.family)) {
 				const char* model = soulGem->GetModel();
 				SKSE::log::info("  {:08X} {} | {} | {},{},{}", form->GetFormID(), form->GetName(), model ? model : "", gem.look.rgb[0], gem.look.rgb[1], gem.look.rgb[2]);
+				if (const auto& g = gem.look.gemRgb) {
+					SKSE::log::info("    its gem (Star light on Gem): {},{},{}", (*g)[0], (*g)[1], (*g)[2]);
+				}
 			}
 		}
 	}

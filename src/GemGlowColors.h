@@ -22,15 +22,15 @@ namespace Gems
 	};
 
 	// sorted by hash
-	inline constexpr std::array<GlowColor, 28> kGlowColors{ {
+	inline constexpr std::array<GlowColor, 25> kGlowColors{ {
 		{ 0x04980932A3766E73ULL, 143, 108, 255, false },  // ultimate SoulGemPettyFilled ultimatesoulgems\soulgem_petty_d.dds
 		{ 0x105529C39D10A3F0ULL, 122, 38, 255, false },   // crystalline SoulGemCommonFilled clutter\soulgem\soulgemcommon0_transluc.dds
 		{ 0x1852BA467D3D2A5CULL, 137, 51, 255, false },   // ultimate SoulGemBlackFilled ultimatesoulgems\soulgem_black_d.dds
 		{ 0x2DF0183A9FF756CFULL, 2, 255, 176, false },    // crystalline SoulGemGreaterFilled clutter\soulgem\soulgemgreater0_transluc.dds
-		{ 0x3A2A9A2A5F582607ULL, 93, 90, 255, false },    // ultimate SoulGemGrandFilled ultimatesoulgems\soulgemgrand_d.dds
 		{ 0x4B75952D945390F2ULL, 174, 38, 255, false },   // ultimate SoulGemLesserFilled ultimatesoulgems\soulgem_lesser_d.dds
 		{ 0x525812FD20B3F621ULL, 255, 38, 52, false },    // spherical SoulGemBlackFilled psq\egggem\eggblack.dds
 		{ 0x56E73D042E91A944ULL, 255, 38, 46, false },    // crystalline SoulGemPettyFilled clutter\soulgem\soulgempetty0_transluc.dds
+		{ 0x5B0E156703FD840DULL, 255, 122, 123, true },   // crystalline asgo patch SoulGem05GrandFilled_05Grand_Solar textures\asgo\clutter\soulgem\soulgemgrand_solar.dds
 		{ 0x627BEFB7B458DFC6ULL, 255, 119, 82, true },    // asgo SoulGem03CommonFilled_03Common_Solar textures\asgo\clutter\soulgem\soulgemcommon_solar.dds
 		{ 0x6E4D84C2D8ED21F4ULL, 38, 100, 255, false },   // animated SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01_filled.nif
 		{ 0x6E7BAA800E90690BULL, 173, 104, 255, false },  // praedy MGRArniel02SoulGem praedythxvi\soulgems\mp\arniel.dds
@@ -42,12 +42,9 @@ namespace Gems
 		{ 0x9AEF2B0884366194ULL, 141, 38, 255, false },   // better SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
 		{ 0x9C58FABC821BDB69ULL, 199, 121, 255, false },  // enhanced DLC1VQ04SoulGemShards meshes\dlc01\clutter\dlc01soulgembowlfull.nif
 		{ 0xB0EA3AF8535358D8ULL, 255, 42, 126, false },   // enhanced SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
-		{ 0xB0ECEC48C8938C35ULL, 130, 74, 255, false },   // better SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
-		{ 0xB108CE169C1963A6ULL, 122, 122, 255, false },  // ultimate SoulGemGreaterFilled ultimatesoulgems\soulgem_greater_d.dds
 		{ 0xB6C64EF57B52C580ULL, 255, 18, 254, false },   // spherical SoulGemGrandFilled psq\egggem\egggrand.dds
 		{ 0xB6E491C0A6FA65B3ULL, 255, 187, 67, false },   // crystalline SoulGemLesserFilled clutter\soulgem\soulgemlesser0.dds
 		{ 0xB9945A77D43DF692ULL, 192, 110, 255, false },  // enhanced SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
-		{ 0xCCFD6905D0B80E0FULL, 93, 107, 255, false },   // ultimate SoulGemCommonFilled ultimatesoulgems\soulgem_common_d.dds
 		{ 0xCF869D2AB8519CE7ULL, 156, 111, 255, false },  // enhanced SoulGemGreaterFilled clutter\soulgem\soulgemgreater.dds
 		{ 0xEEE40CAC3954722BULL, 170, 24, 255, false },   // praedy SoulGemBlackFilled praedythxvi\soulgems\mp\multiparallaxpurple.dds
 		{ 0xFA4A7C418E0D8599ULL, 238, 143, 255, false },  // enhanced SoulGemCommonFilled meshes\clutter\soulgem\soulgemcommon01_filled.nif
