@@ -163,13 +163,15 @@ namespace Plugin
 				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems") };
 			Header(Icon::kGem, T("Which Gems Glow"));
 			for (std::size_t i = 0; i < kLabels.size(); ++i) {
-				bool v = SettingsNow().gems[i];
-				if (Checkbox(T(kLabels[i]), &v)) {
+				bool       v = SettingsNow().gems[i];
+				const bool changed = Checkbox(T(kLabels[i]), &v);
+				// a hover tip belongs to the item just drawn, so each switch carries its own
+				MenuStyle::Tip(T("A gem switched off gets none of this mod's light; another mod's light on it stays."));
+				if (changed) {
 					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
 					Changed();
 				}
 			}
-			MenuStyle::Tip(T("A gem switched off gets none of this mod's light; another mod's light on it stays."));
 		}
 
 		void RenderPage();
