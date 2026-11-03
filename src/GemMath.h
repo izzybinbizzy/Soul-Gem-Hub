@@ -757,6 +757,7 @@ namespace Gems
 	// reflection, or all at the PBR gem paths), or none. Texture BYTES cannot tell it: every texture pack differs, and Animated
 	// Soul Gems ships meshes of its own over a byte copy of the game's texture (another reflection map). A file a gem mod's
 	// picture row knows (the game's own files aside) means that mod's look: its rows answer.
+	// The engine's plain black filler (Kanjs' models name it beside the game's textures) carries no color, so the layout ignores it.
 	// a_textures: every texture path the model names (TexturePath form); a_prints: its color textures' and its own fingerprints
 	[[nodiscard]] inline std::optional<Rgb> GameGlowOf(std::string_view a_model, std::span<const std::string> a_textures,
 		std::span<const std::uint64_t> a_prints)
@@ -766,7 +767,7 @@ namespace Gems
 		const auto modFile = [](std::uint64_t a_print) {
 			return std::ranges::find(kGameGemFiles, a_print) == kGameGemFiles.end() && SeenColorOf(a_print).has_value();
 		};
-		auto       colors = a_textures | std::views::filter([](const std::string& a_path) { return ColorTexture(a_path); });
+		auto       colors = a_textures | std::views::filter([](const std::string& a_path) { return ColorTexture(a_path) && a_path != "black.dds"; });
 		const bool classic = std::ranges::all_of(colors, gameDiffuse) && std::ranges::find(a_textures, "cubemaps\\chitin_e.dds") != a_textures.end();
 		if (std::ranges::empty(colors) || !(classic || std::ranges::all_of(colors, pbr)) || std::ranges::any_of(a_prints, modFile)) {
 			return std::nullopt;

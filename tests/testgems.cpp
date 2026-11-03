@@ -608,6 +608,10 @@ namespace
 		const std::array<std::uint64_t, 2> gameModel{ 0x7F3555FAF7E28371ULL, 0x72BA88B6D473B38FULL };
 		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, retexture) == kGameGlows[2].rgb);
 		CHECK(GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", classic, gameModel) == kGameGlows[2].rgb);
+		// Kanjs' models: the game's layout plus the engine's black filler
+		auto kanjsSet = classic;
+		kanjsSet.insert(kanjsSet.begin(), "black.dds");
+		CHECK(GameGlowOf("clutter\\soulgem\\soulgempetty01.nif", kanjsSet, retexture) == kGameGlows[0].rgb);
 		CHECK(GameGlowOf("meshes\\clutter\\soulgem\\soulgemgrand01.nif", pbrSet, retexture) == kGameGlows[4].rgb);
 		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", animatedSet, gameModel));
 		CHECK(!GameGlowOf("Clutter\\SoulGem\\SoulGemCommon01.nif", praedySet, retexture));
