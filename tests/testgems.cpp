@@ -670,7 +670,7 @@ namespace
 		                        field("textures\\clutter\\a\\gem.dds");
 		const auto        named = TexturesNamed(std::span(reinterpret_cast<const std::uint8_t*>(nif.data()), nif.size()));
 		CHECK(named.size() == 2 && named[0] == "clutter\\a\\gem.dds" && named[1] == "clutter\\a\\gem_n.dds");
-		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds"));
+		CHECK(ColorTexture("textures\\clutter\\a\\gem.dds") && !ColorTexture("clutter\\a\\gem_n.dds") && !ColorTexture("cubemaps\\shinyglass_e.dds") && !ColorTexture("textures\\black.dds"));
 		CHECK(TexturesNamed({}).empty());
 		// a path followed by one 32-126 characters long: that length's first byte is printable (')' for 41), which a scan of
 		// printable runs glued onto the path before it and lost it (the audit's H1, Animated Filled Soul Gems' gem models)
