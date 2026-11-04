@@ -7,11 +7,14 @@
 
 #include "GemMath.h"
 
+#include <array>
+#include <cstdint>
 #include <cstdio>
 #include <format>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -237,6 +240,24 @@ namespace
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
 		const Rgb starPale{ 157, 255, 252 };
 		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
+		// every light keeps its hue and top channel, its saturation lifted to s (2 - s); grey and pure colors stay as they are
+		const auto satOf = [](const Rgb& a_c) {
+			const int top = (std::max)({ a_c[0], a_c[1], a_c[2] }), bottom = (std::min)({ a_c[0], a_c[1], a_c[2] });
+			return top > 0 ? static_cast<double>(top - bottom) / top : 0.0;
+		};
+		const Rgb rustBlack{ 168, 175, 255 };
+		const Rgb richBlack = Richer(rustBlack);
+		CHECK(richBlack[2] == 255 && std::abs(satOf(richBlack) - satOf(rustBlack) * (2.0 - satOf(rustBlack))) < 0.01);
+		CHECK(richBlack[0] < richBlack[1] && richBlack[1] < richBlack[2]);  // the hue's channel order kept
+		CHECK(Richer(Rgb{ 200, 200, 200 }) == (Rgb{ 200, 200, 200 }) && Richer(Rgb{ 0, 0, 0 }) == (Rgb{ 0, 0, 0 }));
+		CHECK(Richer(Rgb{ 255, 0, 0 }) == (Rgb{ 255, 0, 0 }) && Richer(Rgb{ 0, 232, 255 }) == (Rgb{ 0, 232, 255 }));
+		CHECK(satOf(Richer(paleCyan)) > satOf(paleCyan) && satOf(Richer(teal)) >= satOf(teal));
+		{
+			Look look{};
+			look.kind = Kind::kGrand;
+			look.rgb = paleCyan;
+			CHECK(ColorAt(look, Settings{}) == Richer(FoundColor(look, Settings{})) && ColorAt(look, Settings{}) != paleCyan);
+		}
 		// each star's default is its body's color: the Black Star a cool white (blue on top), Azura's Star a pale aqua
 		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > 200 && kBlackStarRgb[1] > 200);
 		CHECK(kAzurasStarRgb[1] > kAzurasStarRgb[0] && kAzurasStarRgb[2] > kAzurasStarRgb[0] && kAzurasStarRgb[0] > 200);
@@ -302,6 +323,25 @@ namespace
 		CHECK((CairnEyeColorOf(0x2B8D94EE2E85315DULL) == Rgb{ 252, 168, 255 }));
 		CHECK(!CairnEyeColorOf(0x369A766BBF5EF72CULL) && !SeenColorOf(0x2B8D94EE2E85315DULL));
 		CHECK((SeenColorOf(0x369A766BBF5EF72CULL) == Rgb{ 232, 173, 255 }));
+		// the game's own Azura's Star texture: its metal a little more teal than its reading; the Black Star's texture, none
+		CHECK((StarEyeColorOf(0x3F25E706DF4BF1D9ULL) == Rgb{ 184, 255, 253 }) && !SeenColorOf(0x3F25E706DF4BF1D9ULL));
+		CHECK(!StarEyeColorOf(0x7223424CEA9747D1ULL) && !StarEyeColorOf(0x2B8D94EE2E85315DULL));
+		CHECK((*StarEyeColorOf(0x3F25E706DF4BF1D9ULL))[0] < kAzurasStarRgb[0] && (*StarEyeColorOf(0x3F25E706DF4BF1D9ULL))[1] == 255);
+		// the colors set by eye on his gem color page are laid onto the generated tables: a regen that loses one fails here
+		constexpr std::array<std::pair<std::uint64_t, Rgb>, 9> byEye{ { { 0xB0ECEC48C8938C35ULL, { 169, 107, 255 } },
+			{ 0xFEE719CDD30DD0A9ULL, { 169, 107, 255 } }, { 0x40F7CB51AF04EE0CULL, { 98, 213, 255 } },
+			{ 0x7BC926C7EA564A46ULL, { 11, 149, 255 } }, { 0x792501A608331F18ULL, { 72, 167, 255 } },
+			{ 0x28C1994DF9E895DBULL, { 106, 201, 255 } }, { 0x8F446D95A1428120ULL, { 80, 206, 255 } },
+			{ 0x5D22ACF84C7D75B6ULL, { 102, 213, 255 } }, { 0x5AC6A6D3E9FFDBD5ULL, { 44, 202, 255 } } } };
+		for (const auto& [print, rgb] : byEye) {
+			CHECK(SeenColorOf(print) == rgb);
+		}
+		// Better's common texture went teal; its Soul Cairn pieces keep their blue
+		CHECK((CairnEyeColorOf(0x40F7CB51AF04EE0CULL) == Rgb{ 98, 169, 255 }));
+		const auto* enhancedGrand = GlowColorOf(0x8EE44DE6FF690A05ULL);
+		const auto* enhancedBlack = GlowColorOf(0xB0EA3AF8535358D8ULL);
+		CHECK(enhancedGrand && enhancedGrand->r == 74 && enhancedGrand->g == 88 && enhancedGrand->b == 255);
+		CHECK(enhancedBlack && enhancedBlack->r == 45 && enhancedBlack->g == 103 && enhancedBlack->b == 255);
 		CHECK(ReLightKeyed("_pgpatcher_dups\\1\\dlc01\\clutter\\dlc01soulgemchunk01.nif"));
 		CHECK(ReLightKeyed("clutter\\soulgem\\soulgemgrand01fullcommon.nif"));
 		CHECK(!ReLightKeyed("_pgpatcher_dups\\1\\clutter\\soulgem\\soulgemcommon01.nif"));
@@ -484,19 +524,19 @@ namespace
 		const Look cairn{ Family::kSoulCairn, Kind::kCairn, { 4, 5, 6 } };
 		const Look rustic{ Family::kRustic, Kind::kLesser, { 7, 8, 9 } };
 		Settings   a;
-		CHECK(ColorAt(grand, a) == grand.rgb && ColorAt(star, a) == star.rgb);  // Automatic: the color found at data load
+		CHECK(FoundColor(grand, a) == grand.rgb && FoundColor(star, a) == star.rgb);  // Automatic: the color found at data load
 		a.gemMod = praedy;
 		a.authorPick = true;  // the pick's own colors; its glow set is LightColorPick's
 		const auto& rgb = GemModAt(praedy)->rgb;
-		CHECK(ColorAt(grand, a) == rgb[static_cast<std::size_t>(Kind::kGrand)]);
-		CHECK(ColorAt(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
-		CHECK(ColorAt(rustic, a) == rgb[static_cast<std::size_t>(Kind::kLesser)]);
-		CHECK(ColorAt(star, a) == star.rgb && ColorAt(named, a) == named.rgb && ColorAt(cairn, a) == cairn.rgb);
+		CHECK(FoundColor(grand, a) == rgb[static_cast<std::size_t>(Kind::kGrand)]);
+		CHECK(FoundColor(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
+		CHECK(FoundColor(rustic, a) == rgb[static_cast<std::size_t>(Kind::kLesser)]);
+		CHECK(FoundColor(star, a) == star.rgb && FoundColor(named, a) == named.rgb && FoundColor(cairn, a) == cairn.rgb);
 		// a named quest gem on a plain model (FindGems builds it as the game's look for its size) keeps its own color too
 		Look plainNamed = GameLook(Kind::kPetty, true);
 		plainNamed.rgb = { 10, 20, 30 };
 		plainNamed.ownColor = true;
-		CHECK(ColorAt(plainNamed, a) == plainNamed.rgb);
+		CHECK(FoundColor(plainNamed, a) == plainNamed.rgb);
 		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
 		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
 			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);
@@ -507,7 +547,7 @@ namespace
 		std::stringstream one(std::format("GemMod={}\n", praedy));
 		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
 		a.gemMod = 99;  // out of range: Automatic
-		CHECK(ColorAt(grand, a) == grand.rgb);
+		CHECK(FoundColor(grand, a) == grand.rgb);
 	}
 
 	// the menu's "Star light": a star wears its metal's color, or on Gem the gem it holds; a pale Black Star reading (the game's
@@ -529,8 +569,8 @@ namespace
 		black.gemRgb = StarGemColor(Rgb{ 192, 203, 255 }, true);
 		Settings metal, gem;
 		gem.starGem = true;
-		CHECK(ColorAt(azura, metal) == kAzurasStarRgb && ColorAt(azura, gem) == (Rgb{ 157, 255, 252 }));
-		CHECK(ColorAt(black, metal) == kBlackStarRgb && ColorAt(black, gem) == kBlackStarGemRgb);
+		CHECK(FoundColor(azura, metal) == kAzurasStarRgb && FoundColor(azura, gem) == (Rgb{ 157, 255, 252 }));
+		CHECK(FoundColor(black, metal) == kBlackStarRgb && FoundColor(black, gem) == kBlackStarGemRgb);
 		// a colored Black Star reading (Praedy's dark star) keeps its own; none read = the game's star's gem
 		CHECK(StarGemColor(Rgb{ 114, 84, 255 }, true) == (Rgb{ 114, 84, 255 }));
 		// a pale Black Star reading of another hue (a replacer's own pale gem) keeps its own; only a pale blue-white is the game's
@@ -541,7 +581,7 @@ namespace
 		// a star with no gem color read keeps its metal on Gem; a plain gem never changes with Star light
 		Look bare{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 		Look plain = GameLook(Kind::kGrand, false);
-		CHECK(ColorAt(bare, gem) == kAzurasStarRgb && ColorAt(plain, gem) == ColorAt(plain, metal));
+		CHECK(FoundColor(bare, gem) == kAzurasStarRgb && FoundColor(plain, gem) == FoundColor(plain, metal));
 	}
 
 	// the menu's "Light color": by default a gem whose own glow is not its light's color wears its glow, on Author pick the
@@ -565,15 +605,15 @@ namespace
 		solar.glowAlways = true;
 		Settings d, author;
 		author.authorPick = true;
-		CHECK(ColorAt(praedyBlack, d) == *praedyBlack.glow && ColorAt(praedyBlack, author) == praedyBlack.rgb);
-		CHECK(ColorAt(plain, d) == plain.rgb && ColorAt(plain, author) == plain.rgb);  // no own glow listed: one color
-		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
+		CHECK(FoundColor(praedyBlack, d) == *praedyBlack.glow && FoundColor(praedyBlack, author) == praedyBlack.rgb);
+		CHECK(FoundColor(plain, d) == plain.rgb && FoundColor(plain, author) == plain.rgb);  // no own glow listed: one color
+		CHECK(FoundColor(solar, d) == *solar.glow && FoundColor(solar, author) == *solar.glow);
 		// with a gem mod picked: its glow set by default, its colors on Author pick; a gem keeping its own color keeps its glow
 		const int praedy = GemModIndex("praedy");
 		d.gemMod = author.gemMod = praedy;
 		const auto* pick = GemModAt(praedy);
-		CHECK(ColorAt(plain, d) == pick->glow[static_cast<std::size_t>(Kind::kGrand)] && ColorAt(plain, author) == pick->rgb[static_cast<std::size_t>(Kind::kGrand)]);
-		CHECK(ColorAt(solar, d) == *solar.glow && ColorAt(solar, author) == *solar.glow);
+		CHECK(FoundColor(plain, d) == pick->glow[static_cast<std::size_t>(Kind::kGrand)] && FoundColor(plain, author) == pick->rgb[static_cast<std::size_t>(Kind::kGrand)]);
+		CHECK(FoundColor(solar, d) == *solar.glow && FoundColor(solar, author) == *solar.glow);
 		// the menu offers Light color for a picked gem mod whose glow set differs (Praedy's black gem), never for Automatic
 		CHECK(PickHasOwnGlow(praedy) == (pick->glow != pick->rgb) && PickHasOwnGlow(praedy) && !PickHasOwnGlow(0));
 		// a pick recolors only the six sizes' plain gems; Light color shows where its two choices differ under the pick

@@ -548,11 +548,11 @@ namespace Plugin
 			return std::nullopt;
 		}
 
-		// a Soul Cairn piece's color set by eye (GemMath.h kCairnEyeColors), by the files SeenColor reads
-		std::optional<Gems::Rgb> CairnEyeColor(std::string_view a_model)
+		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads
+		std::optional<Gems::Rgb> EyeColor(std::string_view a_model, std::optional<Gems::Rgb> (*a_of)(std::uint64_t) noexcept)
 		{
 			for (const auto print : PrintsOf(a_model)) {
-				if (const auto eye = Gems::CairnEyeColorOf(print)) {
+				if (const auto eye = a_of(print)) {
 					return eye;
 				}
 			}
@@ -759,7 +759,7 @@ namespace Plugin
 				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && look->family == Gems::Family::kNamed))) {
 					continue;
 				}
-				if (const auto eye = look->kind == Gems::Kind::kCairn ? CairnEyeColor(path) : std::nullopt) {
+				if (const auto eye = look->kind == Gems::Kind::kCairn ? EyeColor(path, Gems::CairnEyeColorOf) : std::nullopt) {
 					look->rgb = *eye;
 				} else if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
 					look->rgb = *seen;
@@ -1253,6 +1253,9 @@ namespace Plugin
 			}
 			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
+				++fromPicture;
+			} else if (const auto eye = a_star ? EyeColor(a_model, Gems::StarEyeColorOf) : std::nullopt) {
+				a_look.rgb = *eye;
 				++fromPicture;
 			} else if (!Gems::ColorFromModel(a_look.family)) {
 				return;
