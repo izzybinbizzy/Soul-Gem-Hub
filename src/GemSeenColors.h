@@ -62,7 +62,7 @@ namespace Gems
 	} };
 
 	// sorted by hash
-	inline constexpr std::array<SeenColor, 127> kSeenColors{ {
+	inline constexpr std::array<SeenColor, 133> kSeenColors{ {
 		{ 0x02F912752DC3276AULL, 137, 121, 255 },  // praedy DA01MalynsBlackSoul meshes\clutter\soulgem\soulgemmalyn.nif
 		{ 0x04980932A3766E73ULL, 164, 216, 255 },  // ultimate SoulGemPettyFilled ultimatesoulgems\soulgem_petty_d.dds
 		{ 0x07E5D9DA932F5ED5ULL, 255, 146, 177 },  // praedy MGRArniel02SoulGem meshes\clutter\soulgem\soulgemarniel.nif
@@ -82,6 +82,7 @@ namespace Gems
 		{ 0x26279EDA138D266CULL, 255, 218, 7 },    // spherical SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01.nif
 		{ 0x26BECDFA54BEE7CAULL, 70, 187, 255 },   // praedy SoulGemLesserFilled praedythxvi\soulgems\soulgemlesser\soulgemlesser.dds
 		{ 0x2845E22886E17E1FULL, 255, 146, 177 },  // praedy MGRArniel02SoulGem praedythxvi\soulgems\soulgemarniel\arniel.dds
+		{ 0x28C1994DF9E895DBULL, 106, 201, 255 },  // animatedfilled SoulGemCommonFilled meshes\seasparrow\clutter\soulgem\filled\soulgemcommon.nif
 		{ 0x2AD8D594484F0984ULL, 63, 166, 255 },   // praedy SoulGemGreaterFilled praedythxvi\soulgems\soulgemgreater\soulgemgreater.dds
 		{ 0x2AE3693AED9C7192ULL, 56, 112, 255 },   // animated SoulGemCommonFilled meshes\clutter\soulgem\soulgemcommon01_filled.nif
 		{ 0x2DF0183A9FF756CFULL, 17, 229, 255 },   // crystalline SoulGemGreaterFilled clutter\soulgem\soulgemgreater0_transluc.dds
@@ -93,7 +94,7 @@ namespace Gems
 		{ 0x38B07F60716D368FULL, 16, 228, 255 },   // spherical SoulGemGreaterFilled psq\egggem\egggreater.dds
 		{ 0x3A2A9A2A5F582607ULL, 96, 177, 255 },   // ultimate SoulGemGrandFilled ultimatesoulgems\soulgemgrand_d.dds
 		{ 0x3CE5F8F2CB137059ULL, 163, 176, 255 },  // game SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01.nif
-		{ 0x40F7CB51AF04EE0CULL, 98, 169, 255 },   // better DLC1VQ04SoulGemShards clutter\soulgem\soulgemcommon.dds
+		{ 0x40F7CB51AF04EE0CULL, 98, 213, 255 },   // better DLC1VQ04SoulGemShards clutter\soulgem\soulgemcommon.dds
 		{ 0x42E11346D968E957ULL, 255, 175, 178 },  // crystalline SoulGemPettyFilled clutter\soulgem\soulgempettysubsurf0.dds
 		{ 0x42F11B5FEC34A40BULL, 168, 211, 255 },  // praedy FFRiften14SoulGem praedythxvi\soulgems\mp\wylandriah.dds
 		{ 0x43AB341282BD6B17ULL, 172, 136, 255 },  // ultimate SoulGemBlackFilled ultimatesoulgems\soulgem_black_g.dds
@@ -106,7 +107,9 @@ namespace Gems
 		{ 0x56E73D042E91A944ULL, 255, 175, 178 },  // crystalline SoulGemPettyFilled clutter\soulgem\soulgempetty0_transluc.dds
 		{ 0x570CE8CB859D1E3BULL, 164, 216, 255 },  // ultimate SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01_full.nif
 		{ 0x5A6030DA7F1AB2D8ULL, 102, 130, 255 },  // crystalline DLC1VQ04SoulGemShards clutter\soulgem\soulgemblack0_transluc.dds
+		{ 0x5AC6A6D3E9FFDBD5ULL, 44, 202, 255 },   // animatedfilled SoulGemBlackFilled meshes\seasparrow\clutter\soulgem\filled\soulgemblack.nif
 		{ 0x5CD6FA6E63E8AB49ULL, 109, 205, 255 },  // ultimate SoulGemCommonFilled meshes\clutter\soulgem\soulgemcommon01_full.nif
+		{ 0x5D22ACF84C7D75B6ULL, 102, 213, 255 },  // animatedfilled SoulGemGrandFilled meshes\seasparrow\clutter\soulgem\filled\soulgemgrand.nif
 		{ 0x60E74FBCB615F872ULL, 63, 166, 255 },   // praedy SoulGemGreaterFilled meshes\clutter\soulgem\soulgemgreater01full.nif
 		{ 0x61A962CCD94E78E4ULL, 96, 177, 255 },   // ultimate SoulGemGrandFilled meshes\clutter\soulgem\soulgemgrand01_full.nif
 		{ 0x668CAD7A761B15C2ULL, 255, 183, 230 },  // morrowind SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
@@ -125,10 +128,12 @@ namespace Gems
 		{ 0x762D4924848F05A0ULL, 168, 211, 255 },  // praedy FFRiften14SoulGem meshes\clutter\soulgem\soulgemwylandriah.nif
 		{ 0x780FA902B48DB8C7ULL, 125, 108, 255 },  // praedy SoulGemBlackFilled praedythxvi\soulgems\soulgemblack\soulgemblack.dds
 		{ 0x789DEE4E79A83E41ULL, 184, 214, 255 },  // enhanced SoulGemGreaterFilled meshes\clutter\soulgem\soulgemgreater01_filled.nif
+		{ 0x792501A608331F18ULL, 72, 167, 255 },   // animatedfilled SoulGemLesserFilled meshes\seasparrow\clutter\soulgem\filled\soulgemlesser.nif
 		{ 0x793799766B8677D5ULL, 77, 203, 255 },   // animated SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01_filled.nif
 		{ 0x7946C9087AC9C2C3ULL, 184, 131, 255 },  // animatedfilled SoulGemBlackFilled meshes\clutter\soulgem\soulgemblack01.nif (game file)
 		{ 0x79DBC78CA18DB188ULL, 235, 255, 241 },  // crystalline SoulGemLesserFilled clutter\soulgem\soulgemlesser0_transluc.dds
 		{ 0x7ABC2AEF8153D19CULL, 92, 50, 255 },    // praedy DLC1VQ04SoulGemShards meshes\dlc01\clutter\dlc01soulgembowlfull.nif
+		{ 0x7BC926C7EA564A46ULL, 11, 149, 255 },   // animatedfilled SoulGemPettyFilled meshes\seasparrow\clutter\soulgem\filled\soulgempetty.nif
 		{ 0x7CDEDFC109783138ULL, 223, 208, 255 },  // praedy DLC1VQSoulEssenceGemFull praedythxvi\soulgems\mp\db.dds
 		{ 0x85E0D6464293F1B4ULL, 235, 255, 241 },  // crystalline SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01_full.nif
 		{ 0x87C747657B4CD85AULL, 188, 187, 255 },  // enhanced SoulGemLesserFilled clutter\soulgem\soulgemlesser.dds
@@ -136,6 +141,7 @@ namespace Gems
 		{ 0x8A6E8857B92A0CA6ULL, 57, 113, 255 },   // animated SoulGemGrandFilled meshes\clutter\soulgem\soulgemgrand01_filled.nif
 		{ 0x8D607B1480ADF203ULL, 255, 215, 124 },  // morrowind SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
 		{ 0x8EE44DE6FF690A05ULL, 165, 204, 255 },  // enhanced SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
+		{ 0x8F446D95A1428120ULL, 80, 206, 255 },   // animatedfilled SoulGemGreaterFilled meshes\seasparrow\clutter\soulgem\filled\soulgemgreater.nif
 		{ 0x8F64473DB36CF862ULL, 255, 215, 124 },  // morrowind SoulGemGrandFilled meshes\clutter\soulgem\soulgemgrand01.nif
 		{ 0x9100535579BF3B25ULL, 196, 132, 255 },  // ultimate SoulGemLesserFilled ultimatesoulgems\soulgem_lesser_m.dds
 		{ 0x91E0A9E7847FB0FDULL, 75, 178, 255 },   // praedy SoulGemPettyFilled praedythxvi\soulgems\soulgempetty\soulgempetty.dds
@@ -153,7 +159,7 @@ namespace Gems
 		{ 0xAC4D19867F3D3991ULL, 16, 228, 255 },   // spherical SoulGemGreaterFilled meshes\clutter\soulgem\soulgemgreater01.nif
 		{ 0xACA08866A6FF488CULL, 152, 210, 255 },  // animated DLC1VQ04SoulGemShards meshes\dlc01\clutter\dlc01soulgembowlfull.nif (game file)
 		{ 0xB0EA3AF8535358D8ULL, 255, 113, 183 },  // enhanced SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
-		{ 0xB0ECEC48C8938C35ULL, 189, 197, 255 },  // better SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
+		{ 0xB0ECEC48C8938C35ULL, 169, 107, 255 },  // better SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
 		{ 0xB108CE169C1963A6ULL, 3, 233, 255 },    // ultimate SoulGemGreaterFilled ultimatesoulgems\soulgem_greater_d.dds
 		{ 0xB2F2D191E1CC3C69ULL, 223, 208, 255 },  // praedy DLC1VQSoulEssenceGemFull praedythxvi\soulgems\soulgemdb\dlc01soultrapdb.dds
 		{ 0xB3D173159DCC1900ULL, 168, 211, 255 },  // praedy FFRiften14SoulGem praedythxvi\soulgems\soulgemwylandriah\wylandriah.dds
@@ -188,7 +194,7 @@ namespace Gems
 		{ 0xF8793F1A69F68608ULL, 57, 181, 255 },   // praedy SoulGemCommonFilled praedythxvi\soulgems\soulgemcommon\soulgemcommon.dds
 		{ 0xFA4A7C418E0D8599ULL, 226, 205, 255 },  // enhanced SoulGemCommonFilled meshes\clutter\soulgem\soulgemcommon01_filled.nif
 		{ 0xFDE96866E2FDFE7FULL, 72, 137, 255 },   // better SoulGemLesserFilled meshes\clutter\soulgem\soulgemlesser01.nif
-		{ 0xFEE719CDD30DD0A9ULL, 189, 197, 255 },  // better SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01.nif
+		{ 0xFEE719CDD30DD0A9ULL, 169, 107, 255 },  // better SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01.nif
 		{ 0xFFA1CC02926CB782ULL, 54, 177, 255 },   // crystalline SoulGemGrandFilled meshes\clutter\soulgem\soulgemgrand01_full.nif
 	} };
 }

@@ -717,14 +717,30 @@ namespace Gems
 		return Rgb{ it->r, it->g, it->b };
 	}
 
-	// a Soul Cairn piece's color set by eye, by a file its model reads: Morrowind-Style Soulgems' common gem texture dresses the bowl
-	// and chunks pink-lavender - the Soul Cairn's pieces only, its common gem keeps its own row
-	inline constexpr std::array<SeenColor, 1> kCairnEyeColors{ { { 0x2B8D94EE2E85315DULL, 252, 168, 255 } } };
+	// a color set by eye in a small table keyed by a file's fingerprint, or none
+	[[nodiscard]] inline std::optional<Rgb> EyeColorIn(std::span<const SeenColor> a_table, std::uint64_t a_fingerprint) noexcept
+	{
+		const auto it = std::ranges::find(a_table, a_fingerprint, &SeenColor::hash);
+		return it == a_table.end() ? std::nullopt : std::optional(Rgb{ it->r, it->g, it->b });
+	}
+
+	// a Soul Cairn piece's color set by eye, by a file its model reads, where the gem sharing that texture wears another: Morrowind-
+	// Style Soulgems' bowl and chunks pink-lavender, Better Soul Gems' keep the blue its common gem wore before that gem went teal
+	inline constexpr std::array<SeenColor, 2> kCairnEyeColors{ { { 0x2B8D94EE2E85315DULL, 252, 168, 255 },
+		{ 0x40F7CB51AF04EE0CULL, 98, 169, 255 } } };
 
 	[[nodiscard]] inline std::optional<Rgb> CairnEyeColorOf(std::uint64_t a_fingerprint) noexcept
 	{
-		const auto it = std::ranges::find(kCairnEyeColors, a_fingerprint, &SeenColor::hash);
-		return it == kCairnEyeColors.end() ? std::nullopt : std::optional(Rgb{ it->r, it->g, it->b });
+		return EyeColorIn(kCairnEyeColors, a_fingerprint);
+	}
+
+	// a star's metal color set by eye, by its own color texture: the game's own Azura's Star a little more teal than its texture
+	// reads - a star in another mod's texture keeps its own reading
+	inline constexpr std::array<SeenColor, 1> kStarEyeColors{ { { 0x3F25E706DF4BF1D9ULL, 184, 255, 253 } } };
+
+	[[nodiscard]] inline std::optional<Rgb> StarEyeColorOf(std::uint64_t a_fingerprint) noexcept
+	{
+		return EyeColorIn(kStarEyeColors, a_fingerprint);
 	}
 
 	// a known gem file's own glow, listed where it is not the color its light wears, or none
@@ -948,9 +964,26 @@ namespace Gems
 		return sized && !a_look.ownColor && a_look.kind <= Kind::kBlack;
 	}
 
-	// the color a gem's light wears: the picked gem mod's color for its size when a pick recolors it, else the color found for it
-	// at data load. "Light color": by default a gem's own glow where it differs from that color, on Author pick the color as found
-	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
+	// A light keeps its hue and its brightest channel, its saturation lifted to s (2 - s): read beside the gems' own glow, the lights
+	// found for them were paler than the gems, and the floor takes about a sixth more off. A grey light has no hue to keep
+	[[nodiscard]] inline Rgb Richer(const Rgb& a_rgb) noexcept
+	{
+		const int top = (std::max)({ a_rgb[0], a_rgb[1], a_rgb[2] }), bottom = (std::min)({ a_rgb[0], a_rgb[1], a_rgb[2] });
+		if (top <= 0 || top == bottom) {
+			return a_rgb;
+		}
+		// each channel's distance below the top grows by the new saturation over the old one, s (2 - s) / s
+		const double grow = 2.0 - static_cast<double>(top - bottom) / top;
+		Rgb          out{};
+		for (std::size_t i = 0; i < 3; ++i) {
+			out[i] = static_cast<std::uint8_t>(std::clamp(std::round(top - (top - a_rgb[i]) * grow), 0.0, 255.0));
+		}
+		return out;
+	}
+
+	// the color found for a gem's light: the picked gem mod's color for its size when a pick recolors it, else the color found for
+	// it at data load. "Light color": by default a gem's own glow where it differs from that color, on Author pick the color as found
+	[[nodiscard]] inline Rgb FoundColor(const Look& a_look, const Settings& a_s) noexcept
 	{
 		if (a_look.kind == Kind::kStar) {
 			return a_s.starGem && a_look.gemRgb ? *a_look.gemRgb : a_look.rgb;
@@ -961,6 +994,9 @@ namespace Gems
 		}
 		return (a_s.authorPick ? pick->rgb : pick->glow)[static_cast<std::size_t>(a_look.kind)];
 	}
+
+	// the color a gem's light wears: the color found for it, richer
+	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept { return Richer(FoundColor(a_look, a_s)); }
 
 	// whether "Light color" changes anything: a_glows = lit gems whose own glow is worn on the default choice only, a_glowsKept =
 	// those of them no pick recolors; under a pick, also the pick's own glow set where it differs from its colors

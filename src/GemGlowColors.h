@@ -38,11 +38,11 @@ namespace Gems
 		{ 0x793799766B8677D5ULL, 55, 110, 255, false },   // animated SoulGemPettyFilled meshes\clutter\soulgem\soulgempetty01_filled.nif
 		{ 0x87C747657B4CD85AULL, 176, 106, 255, false },  // enhanced SoulGemLesserFilled clutter\soulgem\soulgemlesser.dds
 		{ 0x8D607B1480ADF203ULL, 255, 101, 66, false },   // morrowind SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
-		{ 0x8EE44DE6FF690A05ULL, 90, 74, 255, false },    // enhanced SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
+		{ 0x8EE44DE6FF690A05ULL, 74, 88, 255, false },    // enhanced SoulGemGrandFilled clutter\soulgem\soulgemgrand.dds
 		{ 0x931CD2576ACB9F34ULL, 255, 122, 123, true },   // asgo SoulGem05GrandFilled_05Grand_Solar textures\asgo\clutter\soulgem\soulgemgrand_solar.dds
 		{ 0x9AEF2B0884366194ULL, 141, 38, 255, false },   // better SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
 		{ 0x9C58FABC821BDB69ULL, 199, 121, 255, false },  // enhanced DLC1VQ04SoulGemShards meshes\dlc01\clutter\dlc01soulgembowlfull.nif
-		{ 0xB0EA3AF8535358D8ULL, 255, 42, 126, false },   // enhanced SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
+		{ 0xB0EA3AF8535358D8ULL, 45, 103, 255, false },   // enhanced SoulGemBlackFilled clutter\soulgem\soulgemblack.dds
 		{ 0xB6C64EF57B52C580ULL, 255, 18, 254, false },   // spherical SoulGemGrandFilled psq\egggem\egggrand.dds
 		{ 0xB6E491C0A6FA65B3ULL, 255, 187, 67, false },   // crystalline SoulGemLesserFilled clutter\soulgem\soulgemlesser0.dds
 		{ 0xB9945A77D43DF692ULL, 192, 110, 255, false },  // enhanced SoulGemPettyFilled clutter\soulgem\soulgempetty.dds
