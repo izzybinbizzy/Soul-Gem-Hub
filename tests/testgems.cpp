@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <initializer_list>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -257,6 +258,17 @@ namespace
 			look.kind = Kind::kGrand;
 			look.rgb = paleCyan;
 			CHECK(ColorAt(look, Settings{}) == Richer(FoundColor(look, Settings{})) && ColorAt(look, Settings{}) != paleCyan);
+			// a star on Metal and on Gem, a Gem colors pick on both Light color choices: each wears its found color, richer
+			Look star{ Family::kStar, Kind::kStar, kAzurasStarRgb };
+			star.gemRgb = Rgb{ 157, 255, 252 };
+			Settings metal, gemChoice, pick, pickAuthor;
+			gemChoice.starGem = true;
+			pick.gemMod = pickAuthor.gemMod = GemModIndex("praedy");
+			pickAuthor.authorPick = true;
+			for (const auto* s : { &metal, &gemChoice, &pick, &pickAuthor }) {
+				CHECK(ColorAt(star, *s) == Richer(FoundColor(star, *s)) && ColorAt(look, *s) == Richer(FoundColor(look, *s)));
+			}
+			CHECK(ColorAt(star, metal) != kAzurasStarRgb && ColorAt(look, pick) != FoundColor(look, pick));
 		}
 		// each star's default is its body's color: the Black Star a cool white (blue on top), Azura's Star a pale aqua
 		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > 200 && kBlackStarRgb[1] > 200);

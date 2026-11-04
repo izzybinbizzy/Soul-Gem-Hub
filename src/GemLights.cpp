@@ -1376,7 +1376,10 @@ namespace Plugin
 		for (const auto& [form, gem] : gGems) {
 			if (const auto* soulGem = form->As<RE::TESModel>(); soulGem && form->Is(RE::FormType::SoulGem) && Gems::ColorFromModel(gem.look.family)) {
 				const char* model = soulGem->GetModel();
-				SKSE::log::info("  {:08X} {} | {} | {},{},{}", form->GetFormID(), form->GetName(), model ? model : "", gem.look.rgb[0], gem.look.rgb[1], gem.look.rgb[2]);
+				// the color its light wears on the default settings, then the color found for it
+				const auto worn = Gems::ColorAt(gem.look, Gems::Settings{});
+				SKSE::log::info("  {:08X} {} | {} | {},{},{}", form->GetFormID(), form->GetName(), model ? model : "", worn[0], worn[1], worn[2]);
+				SKSE::log::info("    found: {},{},{}", gem.look.rgb[0], gem.look.rgb[1], gem.look.rgb[2]);
 				if (const auto& g = gem.look.gemRgb) {
 					SKSE::log::info("    its gem (Star light on Gem): {},{},{}", (*g)[0], (*g)[1], (*g)[2]);
 				}
