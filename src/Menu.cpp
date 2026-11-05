@@ -4,7 +4,7 @@
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
 // found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
-// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, Gem colors, Light color and Their Own Lights. A change is saved and
+// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, the color choices, Light color and Their Own Lights. A change is saved and
 // applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -105,24 +105,29 @@ namespace Plugin
 			MenuStyle::Tip(a_tip);
 		}
 
-		// "Gem colors": Automatic, or one gem mod's colors on every soul gem - for a gem mod the automatic reading misses
-		void GemColors()
+		// a gem mod's two-way color, offered only while that gem mod is loaded (the gem mod itself is found, never picked)
+		void ColorChoices()
 		{
-			auto                     s = SettingsNow();
-			int                      v = s.gemMod;
-			std::vector<const char*> items{ T("Automatic") };
-			for (const auto& pick : Gems::kGemModPicks) {
-				items.push_back(pick.name.data());  // a string literal: ends in a zero
+			// GemMath.h kColorChoiceTexts' words, here for their translation: the label, then the two sides
+			constexpr std::array<std::array<const char*, 3>, Gems::kColorChoices> kWords{ {
+				{ TR_MARK("NeV-P Extreme Crystals"), TR_MARK("Gem color"), TR_MARK("Flare glow") },
+				{ TR_MARK("Remastered Remastered black gem"), TR_MARK("Blue"), TR_MARK("Pink") },
+				{ TR_MARK("Rustic black gem"), TR_MARK("Blue"), TR_MARK("Green") },
+			} };
+			for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
+				if (!ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1))) {
+					continue;
+				}
+				const auto                       s = SettingsNow();
+				int                              v = s.second[i] ? 1 : 0;
+				const std::array<const char*, 2> items{ T(kWords[i][1]), T(kWords[i][2]) };
+				SetNextItemWidth(260.0f);
+				if (Combo(T(kWords[i][0]), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.second[i]) {
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.second[i] = v == 1; });
+					Changed();
+				}
+				MenuStyle::Tip(T("The color these gems light up in."));
 			}
-			SetNextItemWidth(260.0f);
-			if (Combo(T("Gem colors"), &v, items.data(), static_cast<int>(items.size())) && v != s.gemMod) {
-				UpdateSettings([&](Gems::Settings& a_s) { a_s.gemMod = v; });
-				Changed();
-			}
-			MenuStyle::Tip(T(
-				"Automatic finds each gem's color from the mod that dresses it. If your gems glow in the wrong color, pick your "
-				"gem mod: every plain soul gem of the six sizes then wears that mod's colors (the stars, the named quest gems and "
-				"gems in textures of their own keep theirs)."));
 		}
 
 		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
@@ -232,14 +237,14 @@ namespace Plugin
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemSwitches();
 				Header(Icon::kGem, T("Colors"));
-				GemColors();
+				ColorChoices();
 				// shown only while a star is lit
 				if (const auto s = SettingsNow(); s.gems[static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar)] ||
 												  s.gems[static_cast<std::size_t>(Gems::GemSwitch::kBlackStar)]) {
 					StarLight();
 				}
-				// shown only where its two choices light a gem differently under the Gem colors pick
-				if (LightColorMatters(SettingsNow().gemMod)) {
+				// shown only where its two choices light a gem differently
+				if (LightColorMatters()) {
 					LightColor();
 				}
 				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light can be:

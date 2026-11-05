@@ -231,11 +231,11 @@ namespace
 		// the light a model read gives: a colored texture as it is (the game's grand crystal's teal, never its glow's violet)
 		const Rgb teal{ 83, 255, 234 };
 		CHECK(ShownColor(teal, Kind::kGrand) == teal);
-		// a pale gem (the game's soulgemcommon texture, 154,241,255) wears a pale blue (his "more paler blue")
+		// a pale gem (the game's soulgemcommon texture, 154,241,255) wears its own color too - no pull toward pale blue
 		const Rgb paleCyan{ 154, 241, 255 };
 		CHECK(IsPale(paleCyan) && !IsPale(Rgb{ 255, 38, 25 }) && !IsPale(Rgb{ 0, 0, 0 }));
-		CHECK(ShownColor(paleCyan, Kind::kCommon) == (Rgb{ 152, 210, 255 }));
-		CHECK(ShownColor(Rgb{ 255, 200, 230 }, Kind::kPetty)[2] == 255);  // a pale pink pastel turns blue-white, blue on top
+		CHECK(ShownColor(paleCyan, Kind::kCommon) == paleCyan);
+		CHECK(ShownColor(Rgb{ 255, 200, 230 }, Kind::kPetty) == (Rgb{ 255, 200, 230 }));
 		// a black-soul gem keeps its own purple, a star its own texture's color, pale or not
 		const Rgb lilac{ 184, 132, 255 };
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
@@ -258,17 +258,21 @@ namespace
 			look.kind = Kind::kGrand;
 			look.rgb = paleCyan;
 			CHECK(ColorAt(look, Settings{}) == Richer(FoundColor(look, Settings{})) && ColorAt(look, Settings{}) != paleCyan);
-			// a star on Metal and on Gem, a Gem colors pick on both Light color choices: each wears its found color, richer
+			// a star on Metal and on Gem, a color choice on both sides, both Light color choices: each wears its found color, richer
 			Look star{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 			star.gemRgb = Rgb{ 157, 255, 252 };
-			Settings metal, gemChoice, pick, pickAuthor;
+			Look chosen = look;
+			ApplyHisColor(chosen, *HisColorOf(0xEF44C3E71611A925ULL));
+			Settings metal, gemChoice, other, otherAuthor;
 			gemChoice.starGem = true;
-			pick.gemMod = pickAuthor.gemMod = GemModIndex("praedy");
-			pickAuthor.authorPick = true;
-			for (const auto* s : { &metal, &gemChoice, &pick, &pickAuthor }) {
-				CHECK(ColorAt(star, *s) == Richer(FoundColor(star, *s)) && ColorAt(look, *s) == Richer(FoundColor(look, *s)));
+			other.second.fill(true);
+			otherAuthor = other;
+			otherAuthor.authorPick = true;
+			for (const auto* s : { &metal, &gemChoice, &other, &otherAuthor }) {
+				CHECK(ColorAt(star, *s) == Richer(FoundColor(star, *s)) && ColorAt(look, *s) == Richer(FoundColor(look, *s)) &&
+					  ColorAt(chosen, *s) == Richer(FoundColor(chosen, *s)));
 			}
-			CHECK(ColorAt(star, metal) != kAzurasStarRgb && ColorAt(look, pick) != FoundColor(look, pick));
+			CHECK(ColorAt(star, metal) != kAzurasStarRgb && ColorAt(chosen, other) != FoundColor(chosen, other));
 		}
 		// each star's default is its body's color: the Black Star a cool white (blue on top), Azura's Star a pale aqua
 		CHECK(kBlackStarRgb[2] == 255 && kBlackStarRgb[0] > 200 && kBlackStarRgb[1] > 200);
@@ -421,8 +425,8 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 11 + kGemSwitches);
-		CHECK(out.str().find("GemMod=auto\n") != std::string::npos && back.gemMod == 0);
+		CHECK(ReadSettings(again, back) == 10 + kGemSwitches + kColorChoices);
+		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
@@ -504,62 +508,56 @@ namespace
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}
 
-	// the menu's "Gem colors" pick (his checklist 239, 1.1): Automatic by default, a gem mod's colors on every soul gem of the six
-	// sizes when one is picked, and the stars, named gems and Soul Cairn never
-	void GemColorPick()
+	// his color calls (2.x of the menu: the gem mod is found, never picked): a fixed color, or a two-way choice per gem mod whose
+	// empty side keeps the color found; an old file's GemMod line is a key this version does not know
+	void HisColorCalls()
 	{
-		CHECK(!kGemModPicks.empty());
-		bool keysOk = true;
-		for (std::size_t i = 0; i < kGemModPicks.size(); ++i) {
-			const auto& p = kGemModPicks[i];
-			keysOk = keysOk && p.key == Lower(p.key) && GemModIndex(p.key) == static_cast<int>(i) + 1 && GemModAt(static_cast<int>(i) + 1) == &p &&
-			         std::ranges::find(kBlockedMods, p.name) == kBlockedMods.end();  // never a mod waiting on its author
-		}
-		CHECK(keysOk);
-		CHECK(GemModIndex("auto") == 0 && GemModIndex("") == 0 && GemModIndex("Mlp") == 0);
-		CHECK(!GemModAt(0) && !GemModAt(-1) && !GemModAt(static_cast<int>(kGemModPicks.size()) + 1));
-		const int praedy = GemModIndex("PRAEDY");
-		CHECK(praedy > 0 && GemModAt(praedy)->name == "Praedy's Soul Gems");
-
 		Settings          s;
-		std::stringstream in("GemMod=Praedy\n");
-		CHECK(ReadSettings(in, s) == 1 && s.gemMod == praedy);
+		std::stringstream old("GemMod=praedy\nGemMod=3\n");
+		CHECK(ReadSettings(old, s) == 0 && s.second == (std::array<bool, kColorChoices>{}));
+		std::stringstream in("ColorNeVP=1\ncolorrusticblack=yes\n");
+		CHECK(ReadSettings(in, s) == 2 && s.second[0] && !s.second[1] && s.second[2]);
 		std::stringstream out;
 		WriteSettings(s, out);
-		CHECK(out.str().find("GemMod=praedy\n") != std::string::npos);
-		std::stringstream odd("GemMod=a gem mod this version does not know\n");
-		CHECK(ReadSettings(odd, s) == 1 && s.gemMod == 0);
+		CHECK(out.str().find("ColorNeVP=1\nColorRemasteredBlack=0\nColorRusticBlack=1\n") != std::string::npos);
 
-		const Look grand = GameLook(Kind::kGrand, false), black = GameLook(Kind::kPetty, true);
-		const Look star{ Family::kStar, Kind::kStar, kAzurasStarRgb };
-		const Look named{ Family::kNamed, Kind::kNamed, { 1, 2, 3 } };
-		const Look cairn{ Family::kSoulCairn, Kind::kCairn, { 4, 5, 6 } };
-		const Look rustic{ Family::kRustic, Kind::kLesser, { 7, 8, 9 } };
-		Settings   a;
-		CHECK(FoundColor(grand, a) == grand.rgb && FoundColor(star, a) == star.rgb);  // Automatic: the color found at data load
-		a.gemMod = praedy;
-		a.authorPick = true;  // the pick's own colors; its glow set is LightColorPick's
-		const auto& rgb = GemModAt(praedy)->rgb;
-		CHECK(FoundColor(grand, a) == rgb[static_cast<std::size_t>(Kind::kGrand)]);
-		CHECK(FoundColor(black, a) == rgb[static_cast<std::size_t>(Kind::kBlack)]);
-		CHECK(FoundColor(rustic, a) == rgb[static_cast<std::size_t>(Kind::kLesser)]);
-		CHECK(FoundColor(star, a) == star.rgb && FoundColor(named, a) == named.rgb && FoundColor(cairn, a) == cairn.rgb);
-		// a named quest gem on a plain model (FindGems builds it as the game's look for its size) keeps its own color too
-		Look plainNamed = GameLook(Kind::kPetty, true);
-		plainNamed.rgb = { 10, 20, 30 };
-		plainNamed.ownColor = true;
-		CHECK(FoundColor(plainNamed, a) == plainNamed.rgb);
+		// the measured table: sorted, every row found by its fingerprint, nothing for a file it does not list
+		CHECK(std::ranges::is_sorted(kMeasuredColors, {}, &MeasuredColor::hash) && !MeasuredColorOf(0));
+		bool measuredOk = true;
+		for (const auto& row : kMeasuredColors) {
+			measuredOk = measuredOk && MeasuredColorOf(row.hash) == (Rgb{ row.r, row.g, row.b });
+		}
+		CHECK(measuredOk);
+		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
+		bool rowsOk = true;
+		for (const auto& row : kHisColors) {
+			rowsOk = rowsOk && HisColorOf(row.model) == &row && (row.choice != ColorChoice::kNone || (row.first && !row.second));
+		}
+		CHECK(rowsOk && !HisColorOf(0) && kColorChoiceTexts.size() == kColorChoices);
+
+		const Rgb found{ 1, 2, 3 };
+		Look      mlp = GameLook(Kind::kCommon, false);
+		mlp.rgb = found;
+		mlp.glow = Rgb{ 9, 9, 9 };
+		ApplyHisColor(mlp, *HisColorOf(0x0FA73CA86BC804F3ULL));
+		Settings d, second;
+		second.second.fill(true);
+		CHECK(FoundColor(mlp, d) == (Rgb{ 255, 224, 109 }) && FoundColor(mlp, second) == (Rgb{ 255, 224, 109 }) && !mlp.glow);
+		Look nevp = GameLook(Kind::kGrand, false);
+		nevp.rgb = found;
+		ApplyHisColor(nevp, *HisColorOf(0xAD06DD431D6CAE34ULL));
+		CHECK(FoundColor(nevp, d) == (Rgb{ 238, 247, 255 }) && FoundColor(nevp, second) == (Rgb{ 112, 172, 255 }));
+		Look remrem = GameLook(Kind::kBlack, true);
+		remrem.rgb = found;
+		ApplyHisColor(remrem, *HisColorOf(0x83B296B357133540ULL));
+		CHECK(FoundColor(remrem, d) == (Rgb{ 69, 83, 255 }) && FoundColor(remrem, second) == found);
+		// one choice moves only its own gem mod's gems
+		Settings onlyRustic;
+		onlyRustic.second[2] = true;
+		CHECK(FoundColor(remrem, onlyRustic) == (Rgb{ 69, 83, 255 }) && FoundColor(nevp, onlyRustic) == (Rgb{ 238, 247, 255 }));
 		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
 		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
 			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);
-		// GemMod as DevBench numbers it reads too; a number past the last gem mod is Automatic
-		std::stringstream number(std::format("GemMod={}\nGemMod={}\n", praedy, kGemModPicks.size() + 1));
-		Settings          n;
-		CHECK(ReadSettings(number, n) == 2 && n.gemMod == 0);
-		std::stringstream one(std::format("GemMod={}\n", praedy));
-		CHECK(ReadSettings(one, n) == 1 && n.gemMod == praedy && GemModName(praedy) == "Praedy's Soul Gems" && GemModName(0) == "Automatic");
-		a.gemMod = 99;  // out of range: Automatic
-		CHECK(FoundColor(grand, a) == grand.rgb);
 	}
 
 	// the menu's "Star light": a star wears its metal's color, or on Gem the gem it holds; a pale Black Star reading (the game's
@@ -612,7 +610,6 @@ namespace
 		praedyBlack.glow = Rgb{ 233, 120, 255 };
 		Look plain = GameLook(Kind::kGrand, false);
 		Look solar{ Family::kGame, Kind::kGrand, { 255, 194, 65 } };
-		solar.ownColor = true;
 		solar.glow = Rgb{ 255, 110, 80 };
 		solar.glowAlways = true;
 		Settings d, author;
@@ -620,20 +617,6 @@ namespace
 		CHECK(FoundColor(praedyBlack, d) == *praedyBlack.glow && FoundColor(praedyBlack, author) == praedyBlack.rgb);
 		CHECK(FoundColor(plain, d) == plain.rgb && FoundColor(plain, author) == plain.rgb);  // no own glow listed: one color
 		CHECK(FoundColor(solar, d) == *solar.glow && FoundColor(solar, author) == *solar.glow);
-		// with a gem mod picked: its glow set by default, its colors on Author pick; a gem keeping its own color keeps its glow
-		const int praedy = GemModIndex("praedy");
-		d.gemMod = author.gemMod = praedy;
-		const auto* pick = GemModAt(praedy);
-		CHECK(FoundColor(plain, d) == pick->glow[static_cast<std::size_t>(Kind::kGrand)] && FoundColor(plain, author) == pick->rgb[static_cast<std::size_t>(Kind::kGrand)]);
-		CHECK(FoundColor(solar, d) == *solar.glow && FoundColor(solar, author) == *solar.glow);
-		// the menu offers Light color for a picked gem mod whose glow set differs (Praedy's black gem), never for Automatic
-		CHECK(PickHasOwnGlow(praedy) == (pick->glow != pick->rgb) && PickHasOwnGlow(praedy) && !PickHasOwnGlow(0));
-		// a pick recolors only the six sizes' plain gems; Light color shows where its two choices differ under the pick
-		Look bowl{ Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } };
-		CHECK(PickRecolors(plain) && PickRecolors(praedyBlack) && !PickRecolors(solar) && !PickRecolors(bowl));
-		const int animated = GemModIndex("animatedfilled");
-		CHECK(!LightColorShown(0, 0, 0) && LightColorShown(0, 1, 0) && LightColorShown(praedy, 0, 0));
-		CHECK(animated > 0 && !PickHasOwnGlow(animated) && !LightColorShown(animated, 5, 0) && LightColorShown(animated, 5, 1));
 		// the glow table: sorted, found by its fingerprint, nothing for a file it does not list
 		CHECK(std::ranges::is_sorted(kGlowColors, {}, &GlowColor::hash));
 		bool found = true;
@@ -742,7 +725,7 @@ int main()
 	Owners();
 	Tokens();
 	SettingsText();
-	GemColorPick();
+	HisColorCalls();
 	LightColorPick();
 	StarLightPick();
 	Permits();

@@ -548,6 +548,20 @@ namespace Plugin
 			return std::nullopt;
 		}
 
+		// the color measured off the gem's own pictures, by the first of its files the table lists (textures first, then the model)
+		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
+		{
+			if (a_model.empty()) {
+				return std::nullopt;
+			}
+			for (const auto print : PrintsOf(a_model)) {
+				if (const auto measured = Gems::MeasuredColorOf(print)) {
+					return measured;
+				}
+			}
+			return std::nullopt;
+		}
+
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads
 		std::optional<Gems::Rgb> EyeColor(std::string_view a_model, std::optional<Gems::Rgb> (*a_of)(std::uint64_t) noexcept)
 		{
@@ -855,7 +869,8 @@ namespace Plugin
 			std::chrono::steady_clock::time_point at;
 		};
 		std::unordered_map<RE::FormID, Retry> gRetryAt;
-		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 }, gWithGlowKept{ 0 };
+		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 };
+		std::atomic<std::uint32_t>            gChoices{ 0 };  // a bit per ColorChoice whose gem mod is loaded (the menu offers it)
 		float                                 gClock = 0.0f, gSinceScan = kScanEvery;
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
@@ -1229,6 +1244,7 @@ namespace Plugin
 		const auto*                                               azurasStar = dh->LookupForm(kAzurasStar, "Skyrim.esm");
 		const auto*                                               blackStar = dh->LookupForm(kBlackStar, "Skyrim.esm");
 		std::size_t                                               records = 0, lit = 0, fromModel = 0, fromPicture = 0, fromSwap = 0, withGlow = 0;
+		std::array<bool, Gems::kColorChoices + 1>                 choicesFound{};  // ColorChoice order, kNone first
 		std::vector<std::pair<const RE::TESForm*, std::uint32_t>> named;
 		for (const auto& n : Gems::kNamedGems) {
 			if (const auto* form = dh->LookupForm(n.id, n.plugin)) {
@@ -1251,7 +1267,13 @@ namespace Plugin
 					a_look.glow = GameGlow(a_model);
 				}
 			}
-			if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
+			if (const auto measured = a_star || a_named ? std::nullopt : MeasuredColor(a_model)) {
+				// the color the game shows for this gem, measured off its own pictures: its light wears it, not another glow
+				a_look.rgb = *measured;
+				a_look.glow.reset();
+				a_look.glowAlways = false;
+				++fromPicture;
+			} else if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
 				++fromPicture;
 			} else if (const auto eye = a_star ? EyeColor(a_model, Gems::StarEyeColorOf) : std::nullopt) {
@@ -1265,6 +1287,14 @@ namespace Plugin
 			}
 			if (a_star) {
 				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);
+				return;
+			}
+			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
+			// named quest gem keeps its own color
+			const auto& prints = PrintsOf(a_model);
+			if (const auto* his = a_named || prints.empty() ? nullptr : Gems::HisColorOf(prints.back())) {
+				Gems::ApplyHisColor(a_look, *his);
+				choicesFound[static_cast<std::size_t>(his->choice)] = true;
 			}
 		};
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {
@@ -1288,7 +1318,7 @@ namespace Plugin
 			}
 			// a star's picture rows were keyed by the other star's model, so both stars read their own textures (readColor)
 			readColor(*look, model, star, namedId(gem));
-			look->ownColor = look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): its own color, its own switch
+			look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): its own light switch
 			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
 			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
 				if (const auto mod = BlockedSwap(swapped)) {
@@ -1299,7 +1329,6 @@ namespace Plugin
 				SetGlow(*look, SwapGlow(swapped));
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
-					look->ownColor = true;
 					++fromSwap;
 				}
 			}
@@ -1336,7 +1365,7 @@ namespace Plugin
 			}
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
-			look.ownColor = look.named = true;
+			look.named = true;
 			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
@@ -1366,9 +1395,11 @@ namespace Plugin
 		// a glow worn on both choices (ASGO's Solar gems) gives the menu's Light color nothing to switch
 		const auto ownGlow = [](const Gem& a_gem) { return a_gem.look.glow.has_value() && !a_gem.look.glowAlways; };
 		gWithGlow = static_cast<std::size_t>(std::ranges::count_if(gGems, [&](const auto& a_entry) { return ownGlow(a_entry.second); }));
-		gWithGlowKept = static_cast<std::size_t>(std::ranges::count_if(gGems, [&](const auto& a_entry) {
-			return ownGlow(a_entry.second) && !Gems::PickRecolors(a_entry.second.look);
-		}));
+		std::uint32_t choices = 0;
+		for (std::size_t i = 1; i < choicesFound.size(); ++i) {
+			choices |= choicesFound[i] ? 1u << i : 0u;
+		}
+		gChoices = choices;
 		gRusticLit = std::ranges::any_of(gGems, [](const auto& a_entry) { return a_entry.second.look.family == Gems::Family::kRustic; });
 		for (const auto& [mod, n] : gBlocked) {
 			SKSE::log::info("gems: {} record(s) wear {}'s files - not lit, at its author's request", n, mod);
@@ -1431,7 +1462,8 @@ namespace Plugin
 	std::array<std::size_t, 4>                       GemsOtherLighters() { return gOtherLighters; }
 	std::size_t                                      GemsOtherLightsPutOut() { return gPutOutNow.load(); }
 	std::size_t                                      GemParticleConfigs() { return gParticleTextures.size(); }
-	bool                                             LightColorMatters(int a_gemMod) { return Gems::LightColorShown(a_gemMod, gWithGlow.load(), gWithGlowKept.load()); }
+	bool                                             LightColorMatters() { return gWithGlow.load() > 0; }
+	bool                                             ColorChoiceFound(Gems::ColorChoice a_choice) { return (gChoices.load() >> static_cast<std::uint32_t>(a_choice)) & 1u; }
 	std::string                                      RusticFound() { return gRusticLit ? gRustic : std::string(); }
 
 	std::string GlowNow(RE::FormID a_ref)
@@ -1467,7 +1499,7 @@ namespace Plugin
 			}
 			const auto& d = kept.light->GetLightRuntimeData();
 			const auto& p = kept.light->world.translate;
-			const auto  rgb = Gems::ColorAt(kept.gem->look, s);  // the color it wears now (the menu's "Gem colors" pick)
+			const auto  rgb = Gems::ColorAt(kept.gem->look, s);  // the color it wears now (the menu's color choices)
 			lights.push_back({ { "ref", std::format("0x{:08X}", id) }, { "family", std::string(Gems::FamilyName(kept.gem->look.family)) },
 				{ "kind", static_cast<int>(kept.gem->look.kind) }, { "rgb", { rgb[0], rgb[1], rgb[2] } }, { "fade", d.fade }, { "radius", d.radius.x },
 				{ "at", { std::round(p.x), std::round(p.y), std::round(p.z) } } });

@@ -81,14 +81,15 @@ namespace Plugin
 	[[nodiscard]] std::size_t GemLightCount();
 	// what the load order dresses its filled gems in, for the menu: family name -> count of filled gem records
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
-	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();                    // mod -> gem records unlit until its author allows it
-	[[nodiscard]] std::string                                      RusticFound();                    // "Sorted", "Unsorted", "both", or "" when none of its gems is lit
-	[[nodiscard]] std::array<std::size_t, 4>                       GemsOtherLighters();              // gem records another light mod lights too, by Gems::Owner
-	[[nodiscard]] std::size_t                                      GemsOtherLightsPutOut();          // placed gems near the player whose other light is put out for ours
-	[[nodiscard]] std::size_t                                      GemParticleConfigs();             // Data\ParticleLights configs found at data load
-	[[nodiscard]] bool                                             LightColorMatters(int a_gemMod);  // "Light color" changes a lit gem under this Gem colors pick
-	[[nodiscard]] std::string                                      GemsReport();                     // for DevBench (JSON)
-	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);        // main thread: the glow each lit shape of a placed gem shows now (JSON)
+	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();                                 // mod -> gem records unlit until its author allows it
+	[[nodiscard]] std::string                                      RusticFound();                                 // "Sorted", "Unsorted", "both", or "" when none of its gems is lit
+	[[nodiscard]] std::array<std::size_t, 4>                       GemsOtherLighters();                           // gem records another light mod lights too, by Gems::Owner
+	[[nodiscard]] std::size_t                                      GemsOtherLightsPutOut();                       // placed gems near the player whose other light is put out for ours
+	[[nodiscard]] std::size_t                                      GemParticleConfigs();                          // Data\ParticleLights configs found at data load
+	[[nodiscard]] bool                                             LightColorMatters();                           // "Light color" changes a lit gem
+	[[nodiscard]] bool                                             ColorChoiceFound(Gems::ColorChoice a_choice);  // its gem mod is loaded: the menu offers it
+	[[nodiscard]] std::string                                      GemsReport();                                  // for DevBench (JSON)
+	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);                     // main thread: the glow each lit shape of a placed gem shows now (JSON)
 
 	// ------------------------------------------------------------------ Menu.cpp / DevBench.cpp
 	void RegisterMenu();
