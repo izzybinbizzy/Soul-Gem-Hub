@@ -1269,9 +1269,7 @@ namespace Plugin
 			}
 			if (const auto measured = a_star || a_named ? std::nullopt : MeasuredColor(a_model)) {
 				// the color the game shows for this gem, measured off its own pictures: its light wears it, not another glow
-				a_look.rgb = *measured;
-				a_look.glow.reset();
-				a_look.glowAlways = false;
+				Gems::WearFixedColor(a_look, *measured);
 				++fromPicture;
 			} else if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
@@ -1279,11 +1277,11 @@ namespace Plugin
 			} else if (const auto eye = a_star ? EyeColor(a_model, Gems::StarEyeColorOf) : std::nullopt) {
 				a_look.rgb = *eye;
 				++fromPicture;
-			} else if (!Gems::ColorFromModel(a_look.family)) {
-				return;
-			} else if (const auto own = ModelColor(a_model, a_star)) {
-				a_look.rgb = Gems::ShownColor(*own, a_look.kind);
-				++fromModel;
+			} else if (Gems::ColorFromModel(a_look.family)) {
+				if (const auto own = ModelColor(a_model, a_star)) {
+					a_look.rgb = Gems::ShownColor(*own, a_look.kind);
+					++fromModel;
+				}
 			}
 			if (a_star) {
 				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);

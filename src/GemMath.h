@@ -226,8 +226,9 @@ namespace Gems
 		kNeVP,    // NeV-P Extreme Crystals: the gem's color or its flare glow
 		kRemRem,  // Remastered Remastered's black gem: blue or pink
 		kRustic,  // Rustic Soul Gems' black gem: blue or green
+		kCount,
 	};
-	inline constexpr std::size_t kColorChoices = 3;
+	inline constexpr std::size_t kColorChoices = static_cast<std::size_t>(ColorChoice::kCount) - 1;
 
 	struct Look
 	{
@@ -772,14 +773,20 @@ namespace Gems
 	}
 
 	// a look takes his call: its first color now, the other kept for the menu's choice; its own glow no longer applies
+	// a color that stands over the gem's own glow: its light wears it on every Light color choice
+	inline void WearFixedColor(Look& a_look, const Rgb& a_rgb) noexcept
+	{
+		a_look.rgb = a_rgb;
+		a_look.glow.reset();
+		a_look.glowAlways = false;
+	}
+
 	inline void ApplyHisColor(Look& a_look, const HisColor& a_his) noexcept
 	{
 		const Rgb found = a_look.rgb;
-		a_look.rgb = a_his.first.value_or(found);
+		WearFixedColor(a_look, a_his.first.value_or(found));
 		a_look.second = a_his.second.value_or(found);
 		a_look.choice = a_his.choice;
-		a_look.glow.reset();
-		a_look.glowAlways = false;
 	}
 
 	[[nodiscard]] inline std::optional<Rgb> StarEyeColorOf(std::uint64_t a_fingerprint) noexcept
@@ -973,12 +980,12 @@ namespace Gems
 	// each color choice's key in Settings.ini and DevBench, and the menu's words for it and its two sides (Menu.cpp translates them)
 	struct ColorChoiceText
 	{
-		std::string_view key, label, first, second;
+		std::string_view key, first, second;
 	};
 	inline constexpr std::array<ColorChoiceText, kColorChoices> kColorChoiceTexts{ {
-		{ "ColorNeVP", "NeV-P Extreme Crystals", "Gem color", "Flare glow" },
-		{ "ColorRemasteredBlack", "Remastered Remastered black gem", "Blue", "Pink" },
-		{ "ColorRusticBlack", "Rustic black gem", "Blue", "Green" },
+		{ "ColorNeVP", "Gem color", "Flare glow" },
+		{ "ColorRemasteredBlack", "Blue", "Pink" },
+		{ "ColorRusticBlack", "Blue", "Green" },
 	} };
 
 	// A light keeps its hue and its brightest channel, its saturation lifted to s (2 - s): read beside the gems' own glow, the lights
