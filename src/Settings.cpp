@@ -30,9 +30,15 @@ namespace Plugin
 				off += (off.empty() ? "" : ", ") + std::string(Gems::kGemSwitchKeys[i]);
 			}
 		}
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, gem colors {}, light color {}, star light {}, gems switched off: {} ({} line(s) read)",
-			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", Gems::GemModName(s.gemMod),
-			s.authorPick ? "Author pick" : "the gem's own glow", s.starGem ? "the gem" : "the metal", off.empty() ? "none" : off, lines);
+		std::string second;
+		for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
+			if (s.second[i]) {
+				second += (second.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key);
+			}
+		}
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, light color {}, star light {}, color choices on their other side: {}, gems switched off: {} ({} line(s) read)",
+			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
+			s.starGem ? "the gem" : "the metal", second.empty() ? "none" : second, off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write
@@ -81,7 +87,6 @@ namespace Plugin
 			a_s.brightness = std::clamp((std::clamp(a_s.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
 			a_s.reach = std::clamp((std::clamp(a_s.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
 			a_s.stars = std::clamp((std::clamp(a_s.stars, Gems::kStarsMin, Gems::kStarsMax) + 2) / 5 * 5, Gems::kStarsMin, Gems::kStarsMax);
-			a_s.gemMod = Gems::GemModAt(a_s.gemMod) ? a_s.gemMod : 0;
 		}
 	}
 

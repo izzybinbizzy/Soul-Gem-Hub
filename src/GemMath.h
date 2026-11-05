@@ -6,13 +6,13 @@
 //   text      Lower, SameText, Trim, BareName - a model path as the plugin compares it
 //   light     CutoffFor, IslReach, PlainAt - Illuminated's LightMath.h, the same numbers; KeyAt - Truman's KeyframeSequence maths
 //   gems      which gem a model is, its color (ColorSum: off its texture pixels) and its strength
-//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's "Gem colors" and "Light color"
+//   settings  SoulGemHub\Settings.ini as one table, its reader and its writer; ColorAt - the menu's color choices and "Light color"
 //   permits   Fingerprint, BlockedModOf - the gem mods not lit until their authors allow it (GemPermissions.h)
 
 #pragma once
 
 #include "GemGlowColors.h"
-#include "GemModPicks.h"
+#include "GemMeasuredColors.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
 
@@ -219,12 +219,24 @@ namespace Gems
 
 	using Rgb = std::array<std::uint8_t, 3>;
 
+	// a two-way color choice the menu offers for one gem mod's gems (his calls, kHisColors), in Settings::second order
+	enum class ColorChoice : std::uint8_t
+	{
+		kNone,
+		kNeVP,    // NeV-P Extreme Crystals: the gem's color or its flare glow
+		kRemRem,  // Remastered Remastered's black gem: blue or pink
+		kRustic,  // Rustic Soul Gems' black gem: blue or green
+		kCount,
+	};
+	inline constexpr std::size_t kColorChoices = static_cast<std::size_t>(ColorChoice::kCount) - 1;
+
 	struct Look
 	{
 		Family             family{ Family::kGame };
 		Kind               kind{ Kind::kGrand };
 		Rgb                rgb{ 255, 255, 255 };
-		bool               ownColor{ false };    // keeps its color under the "Gem colors" pick: a named quest gem on any model, a gem in its own swapped textures
+		ColorChoice        choice{ ColorChoice::kNone };  // its mod's two-way color choice: rgb is the first, second the other
+		Rgb                second{ 255, 255, 255 };
 		std::optional<Rgb> glow{};               // its own glow where that is not rgb (GemGlowColors.h): the "Light color" default
 		bool               glowAlways{ false };  // that glow on "Author pick" too
 		bool               blackStar{ false };   // a star: the Black Star (its own light switch), else Azura's Star
@@ -468,13 +480,9 @@ namespace Gems
 		return name.ends_with("_n") || name.ends_with("_msn") || name.ends_with("_normal");
 	}
 
-	// The light a gem read off its model wears: its textures' color (ColorSum), steady - never its glow's animated tint, which swung
-	// the game's crystals violet (his "more paler blue") and Praedy's pink. A pale gem (the game's blue-white crystals, Morrowind-
-	// Style's pastels) wears a pale blue; a black-soul gem and a star keep their own color whatever it is (a purple gem keeps a
-	// purple light). Pale = its weakest channel at least kPaleShare of its strongest
+	// The light a gem read off its model wears: its textures' color (ColorSum), steady - never its glow's animated tint. Pale = its
+	// weakest channel at least kPaleShare of its strongest (the Black Star's gem reading only)
 	inline constexpr double kPaleShare = 0.5;
-	inline constexpr Rgb    kPaleBlue{ 150, 190, 255 };
-	inline constexpr double kPaleBlueShare = 0.6;
 
 	[[nodiscard]] inline bool IsPale(const Rgb& a_rgb) noexcept
 	{
@@ -495,24 +503,8 @@ namespace Gems
 		return a_black && IsPale(c) && c[2] >= (std::max)(c[0], c[1]) ? own : c;
 	}
 
-	[[nodiscard]] inline Rgb PaleBlue(const Rgb& a_texture) noexcept
-	{
-		std::array<double, 3> mix{};
-		for (std::size_t i = 0; i < 3; ++i) {
-			mix[i] = a_texture[i] * (1.0 - kPaleBlueShare) + kPaleBlue[i] * kPaleBlueShare;
-		}
-		const double top = (std::max)({ mix[0], mix[1], mix[2] });
-		Rgb          out{};
-		for (std::size_t i = 0; i < 3; ++i) {
-			out[i] = static_cast<std::uint8_t>((std::min)(255.0, std::round(mix[i] * 255.0 / top)));
-		}
-		return out;
-	}
-
-	[[nodiscard]] inline Rgb ShownColor(const Rgb& a_texture, Kind a_kind) noexcept
-	{
-		return a_kind != Kind::kBlack && a_kind != Kind::kStar && IsPale(a_texture) ? PaleBlue(a_texture) : a_texture;
-	}
+	// a gem read off its own model wears the color read, pale or not - no pull toward pale blue (he wants each gem's own color)
+	[[nodiscard]] inline Rgb ShownColor(const Rgb& a_texture, [[maybe_unused]] Kind a_kind) noexcept { return a_texture; }
 
 	// the game's own look for a gem of this size (a_black: it holds black souls)
 	[[nodiscard]] inline Look GameLook(Kind a_size, bool a_black) noexcept
@@ -738,6 +730,77 @@ namespace Gems
 	// reads - a star in another mod's texture keeps its own reading
 	inline constexpr std::array<SeenColor, 1> kStarEyeColors{ { { 0x3F25E706DF4BF1D9ULL, 184, 255, 253 } } };
 
+	// His color calls on gem mods no close picture had read, keyed by the gem's own MODEL fingerprint. A row with a choice gives
+	// the menu two colors for that mod; an empty side keeps the color found for the gem. Each color is that gem's lit-room color,
+	// its own glow alone in the dark, or one hue cluster of that glow.
+	struct HisColor
+	{
+		std::uint64_t      model{ 0 };
+		ColorChoice        choice{ ColorChoice::kNone };
+		std::optional<Rgb> first{};   // the default
+		std::optional<Rgb> second{};  // the menu's other side (with a choice only)
+	};
+	inline constexpr std::array<HisColor, 12> kHisColors{ {
+		// MultiLayer Parallax: the yellow common gem in its own yellow glow, the purple black gem in its lit-room purple
+		{ 0x0FA73CA86BC804F3ULL, ColorChoice::kNone, Rgb{ 255, 224, 109 }, std::nullopt },
+		{ 0x5F778791314ED928ULL, ColorChoice::kNone, Rgb{ 179, 149, 255 }, std::nullopt },
+		// Remastered Remastered's black gem (and its non-ENB patch's): its own blue glow by default, or the pink found for it
+		{ 0x83B296B357133540ULL, ColorChoice::kRemRem, Rgb{ 69, 83, 255 }, std::nullopt },
+		{ 0x6EF0B85853AE79FAULL, ColorChoice::kRemRem, Rgb{ 69, 83, 255 }, std::nullopt },
+		// Rustic's black gem (and Rudy HQ's Rustic patch's): the blue of its glow by default, or the green of it
+		{ 0xEF44C3E71611A925ULL, ColorChoice::kRustic, Rgb{ 90, 158, 255 }, Rgb{ 119, 255, 176 } },
+		{ 0xD2F7DD7556D48362ULL, ColorChoice::kRustic, Rgb{ 90, 158, 255 }, Rgb{ 119, 255, 176 } },
+		// NeV-P Extreme Crystals: the gem's body color under a white light by default, or its flare effect's glow in the dark
+		{ 0x45DB22C948A5CD42ULL, ColorChoice::kNeVP, Rgb{ 255, 242, 184 }, Rgb{ 196, 239, 255 } },  // petty
+		{ 0xD10837D75B463783ULL, ColorChoice::kNeVP, Rgb{ 227, 255, 222 }, Rgb{ 205, 255, 232 } },  // lesser
+		{ 0x3E42F44E140870B7ULL, ColorChoice::kNeVP, Rgb{ 217, 223, 255 }, Rgb{ 180, 230, 255 } },  // common
+		{ 0x5D4ADD91C377A27EULL, ColorChoice::kNeVP, Rgb{ 208, 240, 255 }, Rgb{ 168, 235, 255 } },  // greater
+		{ 0xAD06DD431D6CAE34ULL, ColorChoice::kNeVP, Rgb{ 238, 247, 255 }, Rgb{ 112, 172, 255 } },  // grand
+		{ 0x8B71C96E1B769D60ULL, ColorChoice::kNeVP, Rgb{ 243, 226, 255 }, Rgb{ 85, 102, 255 } },   // black
+	} };
+
+	// the color the game shows for a gem, measured off its own pictures (GemMeasuredColors.h), by one of its files' fingerprints
+	[[nodiscard]] inline std::optional<Rgb> MeasuredColorOf(std::uint64_t a_fingerprint) noexcept
+	{
+		const auto it = std::ranges::lower_bound(kMeasuredColors, a_fingerprint, {}, &MeasuredColor::hash);
+		return it == kMeasuredColors.end() || it->hash != a_fingerprint ? std::nullopt : std::optional(Rgb{ it->r, it->g, it->b });
+	}
+
+	// the measured color of the first of a gem's files the table lists (its textures, then its model); GemLights.cpp readColor
+	// takes it before the seen table, which stays the named quest gems' and the fallback's
+	[[nodiscard]] inline std::optional<Rgb> MeasuredColorIn(std::span<const std::uint64_t> a_prints) noexcept
+	{
+		for (const auto print : a_prints) {
+			if (const auto measured = MeasuredColorOf(print)) {
+				return measured;
+			}
+		}
+		return std::nullopt;
+	}
+
+	[[nodiscard]] inline const HisColor* HisColorOf(std::uint64_t a_model) noexcept
+	{
+		const auto it = std::ranges::find(kHisColors, a_model, &HisColor::model);
+		return it == kHisColors.end() ? nullptr : &*it;
+	}
+
+	// a look takes his call: its first color now, the other kept for the menu's choice; its own glow no longer applies
+	// a color that stands over the gem's own glow: its light wears it on every Light color choice
+	inline void WearFixedColor(Look& a_look, const Rgb& a_rgb) noexcept
+	{
+		a_look.rgb = a_rgb;
+		a_look.glow.reset();
+		a_look.glowAlways = false;
+	}
+
+	inline void ApplyHisColor(Look& a_look, const HisColor& a_his) noexcept
+	{
+		const Rgb found = a_look.rgb;
+		WearFixedColor(a_look, a_his.first.value_or(found));
+		a_look.second = a_his.second.value_or(found);
+		a_look.choice = a_his.choice;
+	}
+
 	[[nodiscard]] inline std::optional<Rgb> StarEyeColorOf(std::uint64_t a_fingerprint) noexcept
 	{
 		return EyeColorIn(kStarEyeColors, a_fingerprint);
@@ -911,13 +974,13 @@ namespace Gems
 		int  stars{ 50 };        // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
 		bool pulse{ true };      // the soft pulse
 		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
-		bool                           theirsEmissive{ false };                                             // Emissive Soul Gems' Light Placer lights
-		bool                           theirsLightPlacer{ false };                                          // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
-		bool                           theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
-		int                            gemMod{ 0 };                                                         // "Gem colors": 0 = Automatic, else kGemModPicks[gemMod - 1] colors every gem of the six sizes
-		bool                           authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
-		bool                           starGem{ false };                                                    // "Star light": false = a star's metal (its body), true = the gem it holds
-		std::array<bool, kGemSwitches> gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
+		bool                            theirsEmissive{ false };                                             // Emissive Soul Gems' Light Placer lights
+		bool                            theirsLightPlacer{ false };                                          // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
+		bool                            theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		std::array<bool, kColorChoices> second{};                                                            // a color choice on its other side (ColorChoice order, kNone left out)
+		bool                            authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
+		bool                            starGem{ false };                                                    // "Star light": false = a star's metal (its body), true = the gem it holds
+		std::array<bool, kGemSwitches>  gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
 	};
 
 	// whether this gem gets our light: the gems switch and its own (a gem switched off keeps any other mod's light on it)
@@ -926,43 +989,16 @@ namespace Gems
 		return a_s.on && a_s.gems[static_cast<std::size_t>(SwitchOf(a_look))];
 	}
 
-	// the "Gem colors" pick a Settings.ini value names (a kGemModPicks key, any case); 0 = Automatic, also for a value this
-	// version does not know
-	[[nodiscard]] inline int GemModIndex(std::string_view a_key) noexcept
+	// each color choice's key in Settings.ini and DevBench, and the menu's words for it and its two sides (Menu.cpp translates them)
+	struct ColorChoiceText
 	{
-		for (std::size_t i = 0; i < kGemModPicks.size(); ++i) {
-			if (SameText(a_key, kGemModPicks[i].key)) {
-				return static_cast<int>(i) + 1;
-			}
-		}
-		return 0;
-	}
-
-	[[nodiscard]] inline const GemModPick* GemModAt(int a_index) noexcept
-	{
-		return a_index >= 1 && static_cast<std::size_t>(a_index) <= kGemModPicks.size() ? &kGemModPicks[static_cast<std::size_t>(a_index) - 1] : nullptr;
-	}
-
-	[[nodiscard]] inline std::string_view GemModName(int a_index) noexcept
-	{
-		const auto* pick = GemModAt(a_index);
-		return pick ? pick->name : std::string_view("Automatic");
-	}
-
-	// a picked gem mod whose own glow differs from its colors at some size: "Light color" then changes what that pick shows
-	[[nodiscard]] inline bool PickHasOwnGlow(int a_index) noexcept
-	{
-		const auto* pick = GemModAt(a_index);
-		return pick && pick->glow != pick->rgb;
-	}
-
-	// a gem the "Gem colors" pick recolors: a soul gem of the six sizes (the game's or a replacer's, Praedy's, Rustic's) - never a
-	// star, a named quest gem (on any model), a gem in its own swapped textures or a Soul Cairn piece, which keep their own
-	[[nodiscard]] inline bool PickRecolors(const Look& a_look) noexcept
-	{
-		const bool sized = a_look.family == Family::kGame || a_look.family == Family::kPraedys || a_look.family == Family::kRustic;
-		return sized && !a_look.ownColor && a_look.kind <= Kind::kBlack;
-	}
+		std::string_view key, first, second;
+	};
+	inline constexpr std::array<ColorChoiceText, kColorChoices> kColorChoiceTexts{ {
+		{ "ColorNeVP", "Gem color", "Flare glow" },
+		{ "ColorRemasteredBlack", "Blue", "Pink" },
+		{ "ColorRusticBlack", "Blue", "Green" },
+	} };
 
 	// A light keeps its hue and its brightest channel, its saturation lifted to s (2 - s): read beside the gems' own glow, the lights
 	// found for them were paler than the gems, and the floor takes about a sixth more off. A grey light has no hue to keep
@@ -981,29 +1017,21 @@ namespace Gems
 		return out;
 	}
 
-	// the color found for a gem's light: the picked gem mod's color for its size when a pick recolors it, else the color found for
-	// it at data load. "Light color": by default a gem's own glow where it differs from that color, on Author pick the color as found
+	// the color found for a gem's light at data load; its mod's color choice on its other side wears the other color. "Light
+	// color": by default a gem's own glow where it differs from that color, on Author pick the color as found
 	[[nodiscard]] inline Rgb FoundColor(const Look& a_look, const Settings& a_s) noexcept
 	{
 		if (a_look.kind == Kind::kStar) {
 			return a_s.starGem && a_look.gemRgb ? *a_look.gemRgb : a_look.rgb;
 		}
-		const auto* pick = GemModAt(a_s.gemMod);
-		if (!pick || !PickRecolors(a_look)) {
-			return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
+		if (a_look.choice != ColorChoice::kNone) {
+			return a_s.second[static_cast<std::size_t>(a_look.choice) - 1] ? a_look.second : a_look.rgb;
 		}
-		return (a_s.authorPick ? pick->rgb : pick->glow)[static_cast<std::size_t>(a_look.kind)];
+		return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
 	}
 
 	// the color a gem's light wears: the color found for it, richer
 	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept { return Richer(FoundColor(a_look, a_s)); }
-
-	// whether "Light color" changes anything: a_glows = lit gems whose own glow is worn on the default choice only, a_glowsKept =
-	// those of them no pick recolors; under a pick, also the pick's own glow set where it differs from its colors
-	[[nodiscard]] inline bool LightColorShown(int a_gemMod, std::size_t a_glows, std::size_t a_glowsKept) noexcept
-	{
-		return GemModAt(a_gemMod) ? PickHasOwnGlow(a_gemMod) || a_glowsKept > 0 : a_glows > 0;
-	}
 
 	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
 	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that
@@ -1059,13 +1087,6 @@ namespace Gems
 			const auto key = Trim(text.substr(0, eq));
 			auto       val = Trim(text.substr(eq + 1));
 			val = Trim(val.substr(0, val.find_first_of(";#")));
-			if (SameText(key, "GemMod")) {  // a gem mod's key (as written here), or its number in the menu's order (as DevBench takes it)
-				int n = 0;
-				const auto [end, ec] = std::from_chars(val.data(), val.data() + val.size(), n);
-				a_out.gemMod = ec == std::errc{} && end == val.data() + val.size() && GemModAt(n) ? n : GemModIndex(val);
-				++lines;
-				continue;
-			}
 			const auto read = SettingNumber(val);
 			if (!read) {
 				continue;
@@ -1095,6 +1116,9 @@ namespace Gems
 			} else if (const auto it = std::ranges::find_if(kGemSwitchKeys, [&](std::string_view a_k) { return SameText(key, a_k); });
 				it != kGemSwitchKeys.end()) {
 				a_out.gems[static_cast<std::size_t>(it - kGemSwitchKeys.begin())] = v != 0;
+			} else if (const auto c = std::ranges::find_if(kColorChoiceTexts, [&](const ColorChoiceText& a_c) { return SameText(key, a_c.key); });
+				c != kColorChoiceTexts.end()) {
+				a_out.second[static_cast<std::size_t>(c - kColorChoiceTexts.begin())] = v != 0;
 			} else {
 				--lines;  // a key this version does not know
 			}
@@ -1104,15 +1128,16 @@ namespace Gems
 
 	inline void WriteSettings(const Settings& a_s, std::ostream& a_out)
 	{
-		const auto* pick = GemModAt(a_s.gemMod);
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
-			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0) << "\nGemMod="
-			  << (pick ? pick->key : std::string_view("auto")) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0)
-			  << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\n";
+			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0)
+			  << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\n";
 		for (std::size_t i = 0; i < kGemSwitches; ++i) {
 			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';
+		}
+		for (std::size_t i = 0; i < kColorChoices; ++i) {
+			a_out << kColorChoiceTexts[i].key << '=' << (a_s.second[i] ? 1 : 0) << '\n';
 		}
 	}
 }
