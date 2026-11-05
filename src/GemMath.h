@@ -766,6 +766,18 @@ namespace Gems
 		return it == kMeasuredColors.end() || it->hash != a_fingerprint ? std::nullopt : std::optional(Rgb{ it->r, it->g, it->b });
 	}
 
+	// the measured color of the first of a gem's files the table lists (its textures, then its model); GemLights.cpp readColor
+	// takes it before the seen table, which stays the named quest gems' and the fallback's
+	[[nodiscard]] inline std::optional<Rgb> MeasuredColorIn(std::span<const std::uint64_t> a_prints) noexcept
+	{
+		for (const auto print : a_prints) {
+			if (const auto measured = MeasuredColorOf(print)) {
+				return measured;
+			}
+		}
+		return std::nullopt;
+	}
+
 	[[nodiscard]] inline const HisColor* HisColorOf(std::uint64_t a_model) noexcept
 	{
 		const auto it = std::ranges::find(kHisColors, a_model, &HisColor::model);

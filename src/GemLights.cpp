@@ -551,15 +551,7 @@ namespace Plugin
 		// the color measured off the gem's own pictures, by the first of its files the table lists (textures first, then the model)
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
-			if (a_model.empty()) {
-				return std::nullopt;
-			}
-			for (const auto print : PrintsOf(a_model)) {
-				if (const auto measured = Gems::MeasuredColorOf(print)) {
-					return measured;
-				}
-			}
-			return std::nullopt;
+			return a_model.empty() ? std::nullopt : Gems::MeasuredColorIn(PrintsOf(a_model));
 		}
 
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads

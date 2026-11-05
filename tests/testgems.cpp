@@ -528,6 +528,11 @@ namespace
 			measuredOk = measuredOk && MeasuredColorOf(row.hash) == (Rgb{ row.r, row.g, row.b });
 		}
 		CHECK(measuredOk);
+		// a file both tables list (Animated Filled's petty gem): the measured color is what a plain gem wears, the seen row stays for
+		// the named quest gems and the fallback; the first listed file of a gem decides
+		const std::array<std::uint64_t, 2> pettyFiles{ 0x7BC926C7EA564A46ULL, 0 };
+		CHECK(MeasuredColorIn(pettyFiles) == (Rgb{ 217, 242, 255 }) && SeenColorOf(0x7BC926C7EA564A46ULL) == (Rgb{ 11, 149, 255 }));
+		CHECK(!MeasuredColorIn(std::array<std::uint64_t, 1>{ 0 }));
 		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
 		bool rowsOk = true;
 		for (const auto& row : kHisColors) {
