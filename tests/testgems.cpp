@@ -241,14 +241,15 @@ namespace
 		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
 		const Rgb starPale{ 157, 255, 252 };
 		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
-		// every light keeps its hue and top channel, its saturation lifted to s (2 - s); grey and pure colors stay as they are
+		// every light keeps its hue and top channel, its saturation lifted to 1 - (1 - s)^3; grey and pure colors stay as they are
 		const auto satOf = [](const Rgb& a_c) {
 			const int top = (std::max)({ a_c[0], a_c[1], a_c[2] }), bottom = (std::min)({ a_c[0], a_c[1], a_c[2] });
 			return top > 0 ? static_cast<double>(top - bottom) / top : 0.0;
 		};
-		const Rgb rustBlack{ 168, 175, 255 };
-		const Rgb richBlack = Richer(rustBlack);
-		CHECK(richBlack[2] == 255 && std::abs(satOf(richBlack) - satOf(rustBlack) * (2.0 - satOf(rustBlack))) < 0.01);
+		const Rgb    rustBlack{ 168, 175, 255 };
+		const Rgb    richBlack = Richer(rustBlack);
+		const double rustSat = satOf(rustBlack);
+		CHECK(richBlack[2] == 255 && std::abs(satOf(richBlack) - (1.0 - (1.0 - rustSat) * (1.0 - rustSat) * (1.0 - rustSat))) < 0.01);
 		CHECK(richBlack[0] < richBlack[1] && richBlack[1] < richBlack[2]);  // the hue's channel order kept
 		CHECK(Richer(Rgb{ 200, 200, 200 }) == (Rgb{ 200, 200, 200 }) && Richer(Rgb{ 0, 0, 0 }) == (Rgb{ 0, 0, 0 }));
 		CHECK(Richer(Rgb{ 255, 0, 0 }) == (Rgb{ 255, 0, 0 }) && Richer(Rgb{ 0, 232, 255 }) == (Rgb{ 0, 232, 255 }));

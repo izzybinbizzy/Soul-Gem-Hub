@@ -1000,16 +1000,17 @@ namespace Gems
 		{ "ColorRusticBlack", "Blue", "Green" },
 	} };
 
-	// A light keeps its hue and its brightest channel, its saturation lifted to s (2 - s): read beside the gems' own glow, the lights
-	// found for them were paler than the gems, and the floor takes about a sixth more off. A grey light has no hue to keep
+	// A light keeps its hue and its brightest channel, its saturation lifted to 1 - (1 - s)^3: at s (2 - s) the floor pools still
+	// read paler than the gems (his eye, the 1.2 gem GIFs). A grey light has no hue to keep
 	[[nodiscard]] inline Rgb Richer(const Rgb& a_rgb) noexcept
 	{
 		const int top = (std::max)({ a_rgb[0], a_rgb[1], a_rgb[2] }), bottom = (std::min)({ a_rgb[0], a_rgb[1], a_rgb[2] });
 		if (top <= 0 || top == bottom) {
 			return a_rgb;
 		}
-		// each channel's distance below the top grows by the new saturation over the old one, s (2 - s) / s
-		const double grow = 2.0 - static_cast<double>(top - bottom) / top;
+		// each channel's distance below the top grows by the new saturation over the old one
+		const double s = static_cast<double>(top - bottom) / top;
+		const double grow = (1.0 - (1.0 - s) * (1.0 - s) * (1.0 - s)) / s;
 		Rgb          out{};
 		for (std::size_t i = 0; i < 3; ++i) {
 			out[i] = static_cast<std::uint8_t>(std::clamp(std::round(top - (top - a_rgb[i]) * grow), 0.0, 255.0));
