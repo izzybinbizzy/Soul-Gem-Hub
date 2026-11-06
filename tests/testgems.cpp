@@ -251,6 +251,7 @@ namespace
 		const double rustSat = satOf(rustBlack);
 		CHECK(richBlack[2] == 255 && std::abs(satOf(richBlack) - (1.0 - (1.0 - rustSat) * (1.0 - rustSat) * (1.0 - rustSat))) < 0.01);
 		CHECK(richBlack[0] < richBlack[1] && richBlack[1] < richBlack[2]);  // the hue's channel order kept
+		CHECK(richBlack == (Rgb{ 73, 88, 255 }));                           // and the exact result, so a hue shift fails too
 		CHECK(Richer(Rgb{ 200, 200, 200 }) == (Rgb{ 200, 200, 200 }) && Richer(Rgb{ 0, 0, 0 }) == (Rgb{ 0, 0, 0 }));
 		CHECK(Richer(Rgb{ 255, 0, 0 }) == (Rgb{ 255, 0, 0 }) && Richer(Rgb{ 0, 232, 255 }) == (Rgb{ 0, 232, 255 }));
 		CHECK(satOf(Richer(paleCyan)) > satOf(paleCyan) && satOf(Richer(teal)) >= satOf(teal));
