@@ -1322,9 +1322,9 @@ namespace Plugin
 				}
 				// its own textures, never the game model's glow
 				SetGlow(*look, SwapGlow(swapped));
+				look->exact = false;
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
-					look->exact = false;
 					++fromSwap;
 				}
 			}
