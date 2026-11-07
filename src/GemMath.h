@@ -242,6 +242,7 @@ namespace Gems
 		bool               blackStar{ false };   // a star: the Black Star (its own light switch), else Azura's Star
 		bool               named{ false };       // a named quest gem, on its own model or a plain gem's (its own light switch)
 		std::optional<Rgb> gemRgb{};             // a star: the color of the gem it holds, the "Star light" Gem choice
+		bool               exact{ false };       // a color taken as given (his call, an author's picture): never made richer
 	};
 
 	// the six sizes as a gem model names them, in Kind order
@@ -267,16 +268,22 @@ namespace Gems
 		Kind             kind{};
 		Rgb              rgb;
 	};
+	// the game's own gems by size, worn as given: MultiLayer Parallax's Vanilla Colors file, his calls over it - only the greater
+	// is blue, the grand the pink-purple of CS Lights for Vayura's greater and grand
+	inline constexpr std::array<Rgb, 6> kGameSetRgb{ { { 215, 176, 255 }, { 194, 137, 255 }, { 165, 81, 255 }, { 114, 125, 255 },
+		{ 220, 130, 255 }, { 156, 103, 255 } } };
+	// the game's Soul Cairn bowl and chunks, worn as given: the bright pink of CS Lights for Vayura (his call)
+	inline constexpr Rgb kGameCairnRgb{ 255, 135, 210 };
+
 	// the gems and pieces known by their own model, each in its own textures' color: the named gems' models are Praedy's Soul Gems'
-	// files (soulgemdb = the full Soul Essence Gem), sky blue like its filled gems; the Soul Cairn's bowl and chunk wear the game's
-	// soulgemcommon texture (pale blue)
+	// files (soulgemdb = the full Soul Essence Gem), sky blue like its filled gems; the Soul Cairn's bowl and chunk his pink
 	inline constexpr std::array<NamedModel, 7> kNamedModels{ {
 		{ "clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, Kind::kNamed, { 133, 194, 255 } },      // Arniel's warped gems
 		{ "clutter\\soulgem\\soulgemmalyn.nif", Family::kNamed, Kind::kNamed, { 131, 200, 255 } },       // Malyn's Black Soul Gem
 		{ "clutter\\soulgem\\soulgemwylandriah.nif", Family::kNamed, Kind::kNamed, { 134, 201, 255 } },  // Wylandriah's Soul Gem
 		{ "clutter\\soulgem\\soulgemdb.nif", Family::kNamed, Kind::kNamed, { 136, 136, 255 } },
-		{ "dlc01\\clutter\\dlc01soulgembowlfull.nif", Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } },
-		{ "dlc01\\clutter\\dlc01soulgemchunk01.nif", Family::kSoulCairn, Kind::kCairn, { 152, 210, 255 } },
+		{ "dlc01\\clutter\\dlc01soulgembowlfull.nif", Family::kSoulCairn, Kind::kCairn, { 255, 135, 210 } },
+		{ "dlc01\\clutter\\dlc01soulgemchunk01.nif", Family::kSoulCairn, Kind::kCairn, { 255, 135, 210 } },
 		{ "dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", Family::kSoulCairn, Kind::kNamed, { 170, 90, 255 } },  // the portal's bowl
 	} };
 
@@ -717,9 +724,10 @@ namespace Gems
 	}
 
 	// a Soul Cairn piece's color set by eye, by a file its model reads, where the gem sharing that texture wears another: Morrowind-
-	// Style Soulgems' bowl and chunks pink-lavender, Better Soul Gems' keep the blue its common gem wore before that gem went teal
-	inline constexpr std::array<SeenColor, 2> kCairnEyeColors{ { { 0x2B8D94EE2E85315DULL, 252, 168, 255 },
-		{ 0x40F7CB51AF04EE0CULL, 98, 169, 255 } } };
+	// Style Soulgems' bowl and chunks pink-lavender, Better Soul Gems' keep the blue its common gem wore before that gem went teal;
+	// the game's own bowl file his pink, over its picture row
+	inline constexpr std::array<SeenColor, 3> kCairnEyeColors{ { { 0x2B8D94EE2E85315DULL, 252, 168, 255 },
+		{ 0x40F7CB51AF04EE0CULL, 98, 169, 255 }, { 0xACA08866A6FF488CULL, kGameCairnRgb[0], kGameCairnRgb[1], kGameCairnRgb[2] } } };
 
 	[[nodiscard]] inline std::optional<Rgb> CairnEyeColorOf(std::uint64_t a_fingerprint) noexcept
 	{
@@ -727,8 +735,11 @@ namespace Gems
 	}
 
 	// a star's metal color set by eye, by its own color texture: the game's own Azura's Star a little more teal than its texture
-	// reads - a star in another mod's texture keeps its own reading
-	inline constexpr std::array<SeenColor, 1> kStarEyeColors{ { { 0x3F25E706DF4BF1D9ULL, 184, 255, 253 } } };
+	// reads; Azura's Star Electrified's metal the silver it shows in game (its texture reads a warm grey the richer rule turned
+	// yellow); ElSopa's Black Star the blue-grey it shows (its texture read pink, lit magenta) - a star in another mod's texture
+	// keeps its own reading
+	inline constexpr std::array<SeenColor, 3> kStarEyeColors{ { { 0x3F25E706DF4BF1D9ULL, 184, 255, 253 },
+		{ 0x1A45769125A0CA09ULL, 249, 255, 251 }, { 0xE27812D9AE3242A1ULL, 234, 240, 255 } } };
 
 	// His color calls on gem mods no close picture had read, keyed by the gem's own MODEL fingerprint. A row with a choice gives
 	// the menu two colors for that mod; an empty side keeps the color found for the gem. Each color is that gem's lit-room color,
@@ -737,10 +748,13 @@ namespace Gems
 	{
 		std::uint64_t      model{ 0 };
 		ColorChoice        choice{ ColorChoice::kNone };
-		std::optional<Rgb> first{};   // the default
-		std::optional<Rgb> second{};  // the menu's other side (with a choice only)
+		std::optional<Rgb> first{};         // the default
+		std::optional<Rgb> second{};        // the menu's other side (with a choice only)
+		bool               exact{ false };  // worn as given, the richer rule left out
 	};
-	inline constexpr std::array<HisColor, 12> kHisColors{ {
+	inline constexpr std::array<HisColor, 13> kHisColors{ {
+		// Morrowind-Style Soulgems' grand gem bright orange
+		{ 0x8F64473DB36CF862ULL, ColorChoice::kNone, Rgb{ 255, 128, 0 }, std::nullopt, true },
 		// MultiLayer Parallax: the yellow common gem in its own yellow glow, the purple black gem in its lit-room purple
 		{ 0x0FA73CA86BC804F3ULL, ColorChoice::kNone, Rgb{ 255, 224, 109 }, std::nullopt },
 		{ 0x5F778791314ED928ULL, ColorChoice::kNone, Rgb{ 179, 149, 255 }, std::nullopt },
@@ -750,13 +764,13 @@ namespace Gems
 		// Rustic's black gem (and Rudy HQ's Rustic patch's): the blue of its glow by default, or the green of it
 		{ 0xEF44C3E71611A925ULL, ColorChoice::kRustic, Rgb{ 90, 158, 255 }, Rgb{ 119, 255, 176 } },
 		{ 0xD2F7DD7556D48362ULL, ColorChoice::kRustic, Rgb{ 90, 158, 255 }, Rgb{ 119, 255, 176 } },
-		// NeV-P Extreme Crystals: the gem's body color under a white light by default, or its flare effect's glow in the dark
-		{ 0x45DB22C948A5CD42ULL, ColorChoice::kNeVP, Rgb{ 255, 242, 184 }, Rgb{ 196, 239, 255 } },  // petty
-		{ 0xD10837D75B463783ULL, ColorChoice::kNeVP, Rgb{ 227, 255, 222 }, Rgb{ 205, 255, 232 } },  // lesser
-		{ 0x3E42F44E140870B7ULL, ColorChoice::kNeVP, Rgb{ 217, 223, 255 }, Rgb{ 180, 230, 255 } },  // common
-		{ 0x5D4ADD91C377A27EULL, ColorChoice::kNeVP, Rgb{ 208, 240, 255 }, Rgb{ 168, 235, 255 } },  // greater
-		{ 0xAD06DD431D6CAE34ULL, ColorChoice::kNeVP, Rgb{ 238, 247, 255 }, Rgb{ 112, 172, 255 } },  // grand
-		{ 0x8B71C96E1B769D60ULL, ColorChoice::kNeVP, Rgb{ 243, 226, 255 }, Rgb{ 85, 102, 255 } },   // black
+		// NeV-P Extreme Crystals as its author's own pictures show each filled gem: the crystal by default, or the glow on it
+		{ 0x45DB22C948A5CD42ULL, ColorChoice::kNeVP, Rgb{ 255, 217, 101 }, Rgb{ 255, 217, 101 }, true },  // petty
+		{ 0xD10837D75B463783ULL, ColorChoice::kNeVP, Rgb{ 170, 255, 150 }, Rgb{ 219, 255, 131 }, true },  // lesser
+		{ 0x3E42F44E140870B7ULL, ColorChoice::kNeVP, Rgb{ 138, 209, 255 }, Rgb{ 255, 119, 123 }, true },  // common
+		{ 0x5D4ADD91C377A27EULL, ColorChoice::kNeVP, Rgb{ 140, 148, 255 }, Rgb{ 158, 137, 255 }, true },  // greater
+		{ 0xAD06DD431D6CAE34ULL, ColorChoice::kNeVP, Rgb{ 255, 225, 160 }, Rgb{ 148, 176, 255 }, true },  // grand
+		{ 0x8B71C96E1B769D60ULL, ColorChoice::kNeVP, Rgb{ 119, 64, 255 }, Rgb{ 198, 113, 255 }, true },   // black
 	} };
 
 	// the color the game shows for a gem, measured off its own pictures (GemMeasuredColors.h), by one of its files' fingerprints
@@ -793,12 +807,20 @@ namespace Gems
 		a_look.glowAlways = false;
 	}
 
+	// a game gem wears its size's set color, as given, whatever the texture pack dressing it
+	inline void WearGameSetColor(Look& a_look) noexcept
+	{
+		WearFixedColor(a_look, SizeRgb(kGameSetRgb, a_look.kind));
+		a_look.exact = true;
+	}
+
 	inline void ApplyHisColor(Look& a_look, const HisColor& a_his) noexcept
 	{
 		const Rgb found = a_look.rgb;
 		WearFixedColor(a_look, a_his.first.value_or(found));
 		a_look.second = a_his.second.value_or(found);
 		a_look.choice = a_his.choice;
+		a_look.exact = a_his.exact;
 	}
 
 	[[nodiscard]] inline std::optional<Rgb> StarEyeColorOf(std::uint64_t a_fingerprint) noexcept
@@ -1031,8 +1053,11 @@ namespace Gems
 		return a_look.glow && (a_look.glowAlways || !a_s.authorPick) ? *a_look.glow : a_look.rgb;
 	}
 
-	// the color a gem's light wears: the color found for it, richer
-	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept { return Richer(FoundColor(a_look, a_s)); }
+	// the color a gem's light wears: the color found for it, richer - a color taken as given stays as it is
+	[[nodiscard]] inline Rgb ColorAt(const Look& a_look, const Settings& a_s) noexcept
+	{
+		return a_look.exact ? FoundColor(a_look, a_s) : Richer(FoundColor(a_look, a_s));
+	}
 
 	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
 	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that

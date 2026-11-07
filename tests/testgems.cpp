@@ -7,6 +7,7 @@
 
 #include "GemMath.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -337,6 +338,21 @@ namespace
 		CHECK(!IsDisplayScript("dunYngvildSoulgemScript"));
 		CHECK(KnownDisplay("legacyofthedragonborn.esm", 0x9212C6) && KnownDisplay("LegacyoftheDragonborn.esm", 0x01C59B));
 		CHECK(!KnownDisplay("LegacyoftheDragonborn.esm", 0x02E4E2) && !KnownDisplay("Skyrim.esm", 0x9212C6));
+		// the game's own bowl file: his pink over its picture row; any other file's bowl with no row of its own takes the same
+		CHECK(CairnEyeColorOf(0xACA08866A6FF488CULL) == kGameCairnRgb && SeenColorOf(0xACA08866A6FF488CULL));
+		CHECK(bowl->rgb == kGameCairnRgb);
+		// the game's gems: only the greater is blue, each size's color worn as given; a star past the six sizes takes the last
+		Look gameGreater = GameLook(Kind::kGreater, false);
+		WearGameSetColor(gameGreater);
+		Look gameGrand = GameLook(Kind::kGrand, false);
+		gameGrand.glow = Rgb{ 9, 9, 9 };
+		WearGameSetColor(gameGrand);
+		CHECK((gameGreater.rgb == Rgb{ 114, 125, 255 }) && (gameGrand.rgb == Rgb{ 220, 130, 255 }) && gameGrand.exact && !gameGrand.glow);
+		CHECK(ColorAt(gameGrand, Settings{}) == gameGrand.rgb);
+		// Morrowind-Style's grand model: bright orange, worn as given
+		Look mwGrand = GameLook(Kind::kGrand, false);
+		ApplyHisColor(mwGrand, *HisColorOf(0x8F64473DB36CF862ULL));
+		CHECK((ColorAt(mwGrand, Settings{}) == Rgb{ 255, 128, 0 }));
 		// Morrowind-Style's common texture: the Soul Cairn's pieces take his eye call, its common gem keeps its own row
 		CHECK((CairnEyeColorOf(0x2B8D94EE2E85315DULL) == Rgb{ 252, 168, 255 }));
 		CHECK(!CairnEyeColorOf(0x369A766BBF5EF72CULL) && !SeenColorOf(0x2B8D94EE2E85315DULL));
@@ -345,6 +361,13 @@ namespace
 		CHECK((StarEyeColorOf(0x3F25E706DF4BF1D9ULL) == Rgb{ 184, 255, 253 }) && !SeenColorOf(0x3F25E706DF4BF1D9ULL));
 		CHECK(!StarEyeColorOf(0x7223424CEA9747D1ULL) && !StarEyeColorOf(0x2B8D94EE2E85315DULL));
 		CHECK((*StarEyeColorOf(0x3F25E706DF4BF1D9ULL))[0] < kAzurasStarRgb[0] && (*StarEyeColorOf(0x3F25E706DF4BF1D9ULL))[1] == 255);
+		// Azura's Star Electrified's metal texture: silver, and still near white after the richer rule (it lit yellow from its
+		// texture's warm grey)
+		CHECK((StarEyeColorOf(0x1A45769125A0CA09ULL) == Rgb{ 249, 255, 251 }));
+		CHECK((std::ranges::min(Richer(*StarEyeColorOf(0x1A45769125A0CA09ULL))) >= 230));
+		// ElSopa's Black Star texture: the blue-grey it shows in game, blue the top channel after the richer rule (it lit magenta)
+		CHECK((StarEyeColorOf(0xE27812D9AE3242A1ULL) == Rgb{ 234, 240, 255 }));
+		CHECK((Richer(*StarEyeColorOf(0xE27812D9AE3242A1ULL))[2] == 255 && Richer(*StarEyeColorOf(0xE27812D9AE3242A1ULL))[0] < 210));
 		// the colors set by eye on his gem color page are laid onto the generated tables: a regen that loses one fails here
 		constexpr std::array<std::pair<std::uint64_t, Rgb>, 9> byEye{ { { 0xB0ECEC48C8938C35ULL, { 169, 107, 255 } },
 			{ 0xFEE719CDD30DD0A9ULL, { 169, 107, 255 } }, { 0x40F7CB51AF04EE0CULL, { 98, 213, 255 } },
@@ -553,7 +576,9 @@ namespace
 		Look nevp = GameLook(Kind::kGrand, false);
 		nevp.rgb = found;
 		ApplyHisColor(nevp, *HisColorOf(0xAD06DD431D6CAE34ULL));
-		CHECK(FoundColor(nevp, d) == (Rgb{ 238, 247, 255 }) && FoundColor(nevp, second) == (Rgb{ 112, 172, 255 }));
+		CHECK(FoundColor(nevp, d) == (Rgb{ 255, 225, 160 }) && FoundColor(nevp, second) == (Rgb{ 148, 176, 255 }));
+		// an author's color is worn as given: the richer rule leaves it, and still richens a color read by us
+		CHECK(nevp.exact && ColorAt(nevp, d) == FoundColor(nevp, d) && !mlp.exact && ColorAt(mlp, d) == Richer(FoundColor(mlp, d)));
 		Look remrem = GameLook(Kind::kBlack, true);
 		remrem.rgb = found;
 		ApplyHisColor(remrem, *HisColorOf(0x83B296B357133540ULL));
@@ -561,7 +586,7 @@ namespace
 		// one choice moves only its own gem mod's gems
 		Settings onlyRustic;
 		onlyRustic.second[2] = true;
-		CHECK(FoundColor(remrem, onlyRustic) == (Rgb{ 69, 83, 255 }) && FoundColor(nevp, onlyRustic) == (Rgb{ 238, 247, 255 }));
+		CHECK(FoundColor(remrem, onlyRustic) == (Rgb{ 69, 83, 255 }) && FoundColor(nevp, onlyRustic) == (Rgb{ 255, 225, 160 }));
 		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
 		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
 			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);

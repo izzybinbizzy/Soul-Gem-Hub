@@ -771,6 +771,7 @@ namespace Plugin
 					look->rgb = *seen;
 				}
 				SetGlow(*look, GlowOf(path));
+				look->exact = look->rgb == Gems::kGameCairnRgb;
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod }, a_others) ? 1 : 0;
 			}
 			return added;
@@ -1279,6 +1280,10 @@ namespace Plugin
 				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);
 				return;
 			}
+			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
+			if (a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
+				Gems::WearGameSetColor(a_look);
+			}
 			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
 			// named quest gem keeps its own color
 			const auto& prints = PrintsOf(a_model);
@@ -1317,6 +1322,7 @@ namespace Plugin
 				}
 				// its own textures, never the game model's glow
 				SetGlow(*look, SwapGlow(swapped));
+				look->exact = false;
 				if (const auto own = SwapColor(swapped, look->kind)) {
 					look->rgb = *own;
 					++fromSwap;
