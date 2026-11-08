@@ -861,11 +861,11 @@ namespace Plugin
 			}
 
 			// a looping dimmer on a_light, its keys still to be written; nullptr when the game could not make one
-			[[nodiscard]] RE::NiInterpController* Hang(RE::NiLight* a_light, float a_phase)
+			[[nodiscard]] RE::NiPointer<RE::NiInterpController> Hang(RE::NiLight* a_light, float a_phase)
 			{
-				auto* dimmer = Made<RE::NiInterpController>(RELOCATION_ID(72049, 73695));
-				auto* interpolator = Made<RE::NiFloatInterpolator>(RELOCATION_ID(71088, 72686));
-				auto* data = Made<RE::NiFloatData>(RELOCATION_ID(71069, 72667));
+				RE::NiPointer<RE::NiInterpController>  dimmer(Made<RE::NiInterpController>(RELOCATION_ID(72049, 73695)));
+				RE::NiPointer<RE::NiFloatInterpolator> interpolator(Made<RE::NiFloatInterpolator>(RELOCATION_ID(71088, 72686)));
+				RE::NiPointer<RE::NiFloatData>         data(Made<RE::NiFloatData>(RELOCATION_ID(71069, 72667)));
 				if (!dimmer || !interpolator || !data) {
 					return nullptr;
 				}
@@ -873,9 +873,9 @@ namespace Plugin
 				using replace_t = void(RE::NiFloatData*, RE::NiFloatKey*, std::uint32_t, RE::NiFloatData::KeyType);
 				REL::Relocation<keys_t>    newKeys{ RELOCATION_ID(72540, 74222) };
 				REL::Relocation<replace_t> replaceAnim{ RELOCATION_ID(71071, 72669) };
-				replaceAnim(data, newKeys(kKeys), kKeys, RE::NiFloatData::KeyType::kLink);
-				interpolator->floatData.reset(data);
-				dimmer->SetInterpolator(interpolator, 0);
+				replaceAnim(data.get(), newKeys(kKeys), kKeys, RE::NiFloatData::KeyType::kLink);
+				interpolator->floatData = data;
+				dimmer->SetInterpolator(interpolator.get(), 0);
 				using Flag = RE::NiTimeController::Flag;
 				dimmer->flags.reset(Flag::kCycleType_Mask);  // kCycleType_Loop is 0
 				dimmer->flags.set(Flag::kAnimType_AppInit, Flag::kComputeScaledTime);
@@ -924,6 +924,7 @@ namespace Plugin
 			std::vector<PutOutLight>                   putOut;
 			int                                        looks{ 0 };
 			bool                                       keepOut{ false };
+			bool                                       relit{ false };  // placed in a cell again: its owner may have put a light back in the place we took it from
 			bool                                       hadModel{ false };
 		};
 		std::unordered_map<RE::FormID, TrackedGem> gNearGems;  // the main thread's
@@ -994,7 +995,7 @@ namespace Plugin
 				return;
 			}
 			if (!a_kept.dimmer) {
-				a_kept.dimmer.reset(Dimmer::Hang(a_kept.light.get(), a_kept.phase));
+				a_kept.dimmer = Dimmer::Hang(a_kept.light.get(), a_kept.phase);
 			}
 			auto* interpolator = a_kept.dimmer ? netimmerse_cast<RE::NiFloatInterpolator*>(a_kept.dimmer->GetInterpolator(0)) : nullptr;
 			auto* keys = interpolator && interpolator->floatData ? interpolator->floatData->keys : nullptr;
@@ -1075,12 +1076,13 @@ namespace Plugin
 				other->SetAppCulled(true);
 				auto* light = netimmerse_cast<RE::NiLight*>(other.get());
 				auto* bs = light ? a_scene->GetLight(light) : nullptr;
-				// a removal of ours still queued is the same place: never removed twice
-				if (bs && bs != out->bs.get()) {
+				// a removal of ours still queued is the same place: never removed twice, unless its owner has just put it back
+				if (bs && (a_gem.relit || bs != out->bs.get())) {
 					out->bs.reset(bs);
 					a_scene->RemoveLight(out->bs);
 				}
 			}
+			a_gem.relit = false;
 		}
 
 		// each as it was - only while the gem still wears that model: a light of an old model would come back as a ghost
@@ -1185,6 +1187,7 @@ namespace Plugin
 					auto& tracked = gNearGems[n.id];
 					if (n.relit) {
 						tracked.looks = 0;  // its other lights are read and put out again
+						tracked.relit = true;
 					}
 					gWaitLooks = kWaitLooks;
 				}
@@ -1312,8 +1315,8 @@ namespace Plugin
 				ours += hung ? 1 : 0;
 				if (theirs && s.who == WhoLights::kOthers) {
 					const bool placed = std::ranges::any_of(gem.others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
-					if (c.gem->ownerName && placed) {
-						CountName(byMod, *c.gem->ownerName);
+					if (placed) {
+						CountName(byMod, c.gem->ownerName ? std::string_view(*c.gem->ownerName) : std::string_view("another mod"));
 					} else {
 						CountName(byModel, Gems::FamilyName(c.gem->look.family));
 					}
@@ -1442,7 +1445,7 @@ namespace Plugin
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		// what the game announces, each only noted here - the main thread acts: a cell's load and her own cell change (a walk)
+		// what the game announces, each only noted here - the main thread acts: a cell's load (a look) and her own cell change (a walk)
 		class Watch final :
 			public RE::BSTEventSink<RE::TESCellFullyLoadedEvent>,
 			public RE::BSTEventSink<RE::BGSActorCellEvent>,
@@ -1451,7 +1454,7 @@ namespace Plugin
 		public:
 			RE::BSEventNotifyControl ProcessEvent(const RE::TESCellFullyLoadedEvent*, RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*) override
 			{
-				RequestLook(true);
+				RequestLook(false);  // the nearest again; the Load3D hook has noted every gem it brought
 				return RE::BSEventNotifyControl::kContinue;
 			}
 
@@ -1654,8 +1657,8 @@ namespace Plugin
 		using enum Gems::Owner;
 		SKSE::log::info(
 			"gems: {} soul gem record(s), {} lit always ({}), the rest when a placed gem holds a soul; {} other piece(s) by their "
-			"model; Rustic Soul Gems {}; taken over from Emissive Soul Gems {}, from other Light Placer files {}, left to "
-			"RE::Light {} (Light Placer {}, RE::Light {}); {} particle-light config(s) - a gem's own model light is put out under ours",
+			"model; Rustic Soul Gems {}; claimed by Emissive Soul Gems {}, by other Light Placer files {} (the menu's Whose Light decides), left to "
+			"RE::Light {} (Light Placer {}, RE::Light {}); {} particle-light config(s)",
 			records, lit, list.empty() ? "none" : list, pieces, gRustic.empty() ? "not loaded" : gRustic,
 			gOtherLighters[static_cast<std::size_t>(kEmissive)], gOtherLighters[static_cast<std::size_t>(kLightPlacer)],
 			gOtherLighters[static_cast<std::size_t>(kReLight)], others.lightPlacer ? "loaded" : "not loaded",
@@ -1826,7 +1829,7 @@ namespace Plugin
 			nearByModel[name] = n;
 		}
 		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
-			{ "takenOver", { { "emissiveSoulGems", gOtherLighters[1] }, { "lightPlacer", gOtherLighters[2] } } },
+			{ "claimedBy", { { "emissiveSoulGems", gOtherLighters[1] }, { "lightPlacer", gOtherLighters[2] } } },
 			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "litBy", litBy }, { "leftNearYou", { { "byMod", nearByMod }, { "byModel", nearByModel } } }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
 			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
 			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "looks", gLooks.load() }, { "walks", gWalks.load() },
