@@ -12,6 +12,7 @@
 #include "Plugin.h"
 
 #include "DevBenchGlue.h"
+#include "FrameCost.h"
 
 #include <charconv>
 
@@ -27,7 +28,7 @@ namespace Plugin
 			R"json({"description":"Soul Gem Hub - the lighting found (automatic), the settings, the soul gems this plugin lights (by look: the game's own, Praedy's, Rustic, named, stars, Soul Cairn) and those another light mod lights too (taken over from Emissive Soul Gems and other Light Placer files, left to RE::Light), the gems near the player whose other light is put out for ours, and every gem light near the player now with its color, fade, radius and place. Read only.","inputSchema":{"type":"object","properties":{}},"readOnly":true})json";
 
 		constexpr const char* kTool =
-			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), theirsEmissive / theirsLightPlacer / theirsMesh (0/1, gems Emissive Soul Gems, another Light Placer file or their own model light keep that light instead of ours), ColorNeVP / ColorRemasteredBlack / ColorRusticBlack (0/1, that gem mod's color choice: 0 = its first side, 1 = its other; the state's colorChoices lists them), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick), starGem (0/1, the Star light: 0 = the star's metal, 1 = the gem it holds), LightPetty / LightLesser / LightCommon / LightGreater / LightGrand / LightBlack / LightNamed / LightAzurasStar / LightBlackStar / LightSoulCairn (0/1, the light switch of that gem; the state's gems lists them). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","stars","pulse","theirsEmissive","theirsLightPlacer","theirsMesh","ColorNeVP","ColorRemasteredBlack","ColorRusticBlack","authorPick","starGem","LightPetty","LightLesser","LightCommon","LightGreater","LightGrand","LightBlack","LightNamed","LightAzurasStar","LightBlackStar","LightSoulCairn"]},"value":{"type":"number"}},"required":["action"]}})json";
+			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), whoLights (whose light a gem wears: 0 ours on every gem and any other light on it out, 1 the game's own look with none of ours and other mods' gem lights out, 2 another mod's where one lights the gem and ours only on the rest; 2 by default), ColorNeVP / ColorRemasteredBlack / ColorRusticBlack (0/1, that gem mod's color choice: 0 = its first side, 1 = its other; the state's colorChoices lists them), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick), starGem (0/1, the Star light: 0 = the star's metal, 1 = the gem it holds), LightPetty / LightLesser / LightCommon / LightGreater / LightGrand / LightBlack / LightNamed / LightAzurasStar / LightBlackStar / LightSoulCairn (0/1, the light switch of that gem; the state's gems lists them). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","stars","pulse","whoLights","ColorNeVP","ColorRemasteredBlack","ColorRusticBlack","authorPick","starGem","LightPetty","LightLesser","LightCommon","LightGreater","LightGrand","LightBlack","LightNamed","LightAzurasStar","LightBlackStar","LightSoulCairn"]},"value":{"type":"number"}},"required":["action"]}})json";
 
 		json SettingsJson(const Gems::Settings& a_s)
 		{
@@ -42,7 +43,7 @@ namespace Plugin
 					{ "offered", ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1)) } };
 			}
 			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "stars", a_s.stars }, { "pulse", a_s.pulse },
-				{ "theirsEmissive", a_s.theirsEmissive }, { "theirsLightPlacer", a_s.theirsLightPlacer }, { "theirsMesh", a_s.theirsMesh },
+				{ "whoLights", static_cast<int>(a_s.who) },
 				{ "authorPick", a_s.authorPick }, { "starGem", a_s.starGem }, { "colorChoices", std::move(choices) }, { "gems", std::move(gems) } };
 		}
 
@@ -56,6 +57,13 @@ namespace Plugin
 				}
 				j["lighting"] = json::parse(LightingReport(), nullptr, false);
 				j["settings"] = SettingsJson(SettingsNow());
+				j["cost"] = json::array();  // each pass's main-thread time (FrameCost.h)
+				for (const auto& s : FrameCost::Slots()) {
+					if (const char* name = s.name.load(std::memory_order_relaxed)) {
+						j["cost"].push_back({ { "pass", name }, { "usAvg", s.usAvg.load(std::memory_order_relaxed) },
+							{ "usMax", s.usMax.load(std::memory_order_relaxed) }, { "calls", s.calls.load(std::memory_order_relaxed) } });
+					}
+				}
 				return j;
 			});
 			return now ? *now : DevBenchGlue::NotRunYet();
@@ -118,12 +126,8 @@ namespace Plugin
 				change = [v](Gems::Settings& a_s) { a_s.stars = v; };
 			} else if (key == "pulse") {
 				change = [v](Gems::Settings& a_s) { a_s.pulse = v != 0; };
-			} else if (key == "theirsEmissive") {
-				change = [v](Gems::Settings& a_s) { a_s.theirsEmissive = v != 0; };
-			} else if (key == "theirsLightPlacer") {
-				change = [v](Gems::Settings& a_s) { a_s.theirsLightPlacer = v != 0; };
-			} else if (key == "theirsMesh") {
-				change = [v](Gems::Settings& a_s) { a_s.theirsMesh = v != 0; };
+			} else if (key == "whoLights") {
+				change = [v](Gems::Settings& a_s) { a_s.who = static_cast<Gems::WhoLights>(std::clamp(v, 0, 2)); };
 			} else if (const auto choice = std::ranges::find(Gems::kColorChoiceTexts, key, &Gems::ColorChoiceText::key); choice != Gems::kColorChoiceTexts.end()) {
 				const auto i = static_cast<std::size_t>(choice - Gems::kColorChoiceTexts.begin());
 				change = [v, i](Gems::Settings& a_s) { a_s.second[i] = v != 0; };
@@ -136,7 +140,7 @@ namespace Plugin
 				const auto i = static_cast<std::size_t>(it - Gems::kGemSwitchKeys.begin());
 				change = [v, i](Gems::Settings& a_s) { a_s.gems[i] = v != 0; };
 			} else {
-				auto known = json::array({ "lights", "brightness", "reach", "stars", "pulse", "theirsEmissive", "theirsLightPlacer", "theirsMesh", "authorPick", "starGem" });
+				auto known = json::array({ "lights", "brightness", "reach", "stars", "pulse", "whoLights", "authorPick", "starGem" });
 				for (const auto k : Gems::kGemSwitchKeys) {
 					known.push_back(std::string(k));
 				}
@@ -155,8 +159,8 @@ namespace Plugin
 				return *now;
 			}
 			if (!now || DevBenchGlue::Refused(*now)) {
-				// the live table holds the change already: the player's next frame takes it, whatever the task queue did
-				return json{ { "ok", true }, { "setting", key }, { "saved", saved }, { "applied", "on the next frame" },
+				// the live table holds the change already: the next look takes it, whatever the task queue did
+				return json{ { "ok", true }, { "setting", key }, { "saved", saved }, { "applied", "at the next look" },
 					{ "settings", SettingsJson(SettingsNow()) } };
 			}
 			return json{ { "ok", true }, { "setting", key }, { "saved", saved }, { "settings", *now } };

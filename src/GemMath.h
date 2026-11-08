@@ -560,7 +560,7 @@ namespace Gems
 	}
 
 	// whose other light a gem would wear: none; Emissive Soul Gems' own Light Placer file's, or another Light Placer file's
-	// (Subtle Soul Gems', CS Light's ...) - lit by us all the same, theirs put out unless the menu keeps that kind; or this
+	// (Subtle Soul Gems', CS Light's ...) - the menu's choice of whose light decides; or this
 	// mod's own RE::Light files' (RE::Light loaded) - left to RE::Light
 	enum class Owner : std::uint8_t
 	{
@@ -988,17 +988,23 @@ namespace Gems
 		return a_look.named ? GemSwitch::kNamed : static_cast<GemSwitch>(a_look.kind);  // petty .. named: the same order
 	}
 
+	// whose light a gem wears, the menu's one choice: ours on every gem and any other light on it out; the game's own look, none of
+	// ours and other mods' gem lights out; another mod's where one lights the gem, ours only where none does
+	enum class WhoLights : std::uint8_t
+	{
+		kOurs,
+		kGame,
+		kOthers,
+	};
+
 	struct Settings
 	{
-		bool on{ true };         // every soul gem light
-		int  brightness{ 100 };  // percent
-		int  reach{ 100 };       // percent
-		int  stars{ 50 };        // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
-		bool pulse{ true };      // the soft pulse
-		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
-		bool                            theirsEmissive{ false };                                             // Emissive Soul Gems' Light Placer lights
-		bool                            theirsLightPlacer{ false };                                          // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
-		bool                            theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		bool                            on{ true };                                                          // every soul gem light
+		int                             brightness{ 100 };                                                   // percent
+		int                             reach{ 100 };                                                        // percent
+		int                             stars{ 50 };                                                         // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
+		bool                            pulse{ true };                                                       // the soft pulse
+		WhoLights                       who{ WhoLights::kOthers };                                           // whose light a gem wears
 		std::array<bool, kColorChoices> second{};                                                            // a color choice on its other side (ColorChoice order, kNone left out)
 		bool                            authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
 		bool                            starGem{ false };                                                    // "Star light": false = a star's metal (its body), true = the gem it holds
@@ -1059,13 +1065,11 @@ namespace Gems
 		return a_look.exact ? FoundColor(a_look, a_s) : Richer(FoundColor(a_look, a_s));
 	}
 
-	// a gem whose other light the menu keeps: ours is not hung on it and theirs stays - only when that light is really there
-	// (GemLights.cpp OtherLights): a_placedLight, another mod's light hangs on it; a_meshLight, its model carries a light that
-	// shines in this game. A claim alone is no light: a file may claim a gem it does not light here
-	[[nodiscard]] inline bool TheirsKept(Owner a_owner, bool a_placedLight, bool a_meshLight, const Settings& a_s) noexcept
+	// whether ours goes on a gem: a_otherLight, another light really hangs on it or its model carries one that shines in this game
+	// (GemLights.cpp OtherLights) - a claim alone is no light: a file may claim a gem it does not light here
+	[[nodiscard]] inline bool OursOn(WhoLights a_who, bool a_otherLight) noexcept
 	{
-		return (a_placedLight && ((a_owner == Owner::kEmissive && a_s.theirsEmissive) || (a_owner == Owner::kLightPlacer && a_s.theirsLightPlacer))) ||
-		       (a_meshLight && a_s.theirsMesh);
+		return a_who == WhoLights::kOurs || (a_who == WhoLights::kOthers && !a_otherLight);
 	}
 
 	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
@@ -1129,12 +1133,8 @@ namespace Gems
 				a_out.stars = std::clamp(v, kStarsMin, kStarsMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
-			} else if (SameText(key, "TheirsEmissive")) {
-				a_out.theirsEmissive = v != 0;
-			} else if (SameText(key, "TheirsLightPlacer")) {
-				a_out.theirsLightPlacer = v != 0;
-			} else if (SameText(key, "TheirsMesh")) {
-				a_out.theirsMesh = v != 0;
+			} else if (SameText(key, "WhoLights")) {
+				a_out.who = static_cast<WhoLights>(std::clamp(v, 0, 2));
 			} else if (SameText(key, "AuthorPick")) {
 				a_out.authorPick = v != 0;
 			} else if (SameText(key, "StarGem")) {
@@ -1156,8 +1156,7 @@ namespace Gems
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
-			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
-			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0)
+			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nWhoLights=" << static_cast<int>(a_s.who)
 			  << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\n";
 		for (std::size_t i = 0; i < kGemSwitches; ++i) {
 			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';

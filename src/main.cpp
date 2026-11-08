@@ -9,14 +9,14 @@
 // Every soul gem in the world glows in its own color - the game's own gems, Praedy's Soul Gems, Rustic Soul Gems, Azura's
 // Star, the Black Star, the named quest gems and the Soul Cairn's gem bowl and chunks - with lights made in memory, on
 // Community Shaders (with or without Light Placer), ENB and Vanilla, the lighting found by itself. No plugin file, nothing in
-// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). Another mod's light on a gem we light
-// is put out while ours is on it (its menu's Their Own Lights gives a kind back); this mod's own RE::Light files light their gems.
+// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). A gem another mod lights keeps that
+// light and ours stays off it (its menu's one choice of whose light changes that); this mod's own RE::Light files light their gems.
 //
 // THE FILES, AND WHAT EACH ONE IS FOR (laid out as Illuminated's and Dynamic Wards')
 //   main.cpp        this file - the order of the data-load work, and the SKSE messages
 //   Plugin.h        what the files share; PCH.h what every file includes
 //   GemMath.h       game-free: the gems' looks and strengths, the light maths, the settings file - tested off the game
-//   GemLights.cpp   which forms are gems we light, and the lights themselves (once a frame, on the main thread)
+//   GemLights.cpp   which forms are gems we light, and the lights themselves (on the game's events, on the main thread)
 //   Lighting.cpp    Community Shaders, ENB or Vanilla (Illuminated's automatic detection)
 //   Settings.cpp    the settings file, read at load and saved after each change
 //   Menu.cpp        the SKSE Menu Framework page          DevBench.cpp  DevBench's inspect and control (optional)
@@ -25,6 +25,8 @@
 //   tests\testgems.cpp  the off-game tests of GemMath.h
 
 #include "Plugin.h"
+
+#include "FrameCost.h"
 #include "RuntimeGuard.h"
 #include "Translation.h"
 
@@ -37,7 +39,7 @@ namespace
 		const auto started = std::chrono::steady_clock::now();
 		ReadLighting();
 		FindGems();
-		InstallFrame();  // before the menu's steps: a throw in them leaves the gems lit
+		WatchGems();  // before the menu's steps: a throw in them leaves the gems lit
 		SKSE::log::info("{}", Translation::Load("Data/SKSE/Plugins/SoulGemHub/Translation.json"));
 		RegisterMenu();
 		SKSE::log::info("ready in {:.1f} ms", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
@@ -66,7 +68,11 @@ namespace
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
 		case SKSE::MessagingInterface::kNewGame:
-			DropGemLights();  // the gems they hang on are the old game's
+			DropGemLights();     // the gems they hang on are the old game's
+			FrameCost::Reset();  // the worst times start again with each game
+			break;
+		case SKSE::MessagingInterface::kPostLoadGame:
+			LookAfterLoad();
 			break;
 		default:
 			break;

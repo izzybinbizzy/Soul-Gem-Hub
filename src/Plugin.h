@@ -74,18 +74,26 @@ namespace Plugin
 
 	// ------------------------------------------------------------------ GemLights.cpp: the gems and their lights
 	void                      FindGems();       // data load: which forms are soul gems we light, and how each looks
-	void                      InstallFrame();   // data load: our once-a-frame work after the player's update (main thread)
+	void                      WatchGems();      // data load: the game's events that make a look
+	void                      LookAfterLoad();  // a game has loaded: one look, walking the loaded references
 	void                      DropGemLights();  // a game loads, or a new one starts
 	void                      ApplyNow();       // main thread: the settings onto every light now (the menu, DevBench)
 	void                      RefreshLights();  // main thread: the settings onto the lights already hung, even while the game is paused
 	[[nodiscard]] std::size_t GemLightCount();
 	// what the load order dresses its filled gems in, for the menu: family name -> count of filled gem records
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemFamilies();
-	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();                                 // mod -> gem records unlit until its author allows it
-	[[nodiscard]] std::string                                      RusticFound();                                 // "Sorted", "Unsorted", "both", or "" when none of its gems is lit
-	[[nodiscard]] std::array<std::size_t, 4>                       GemsOtherLighters();                           // gem records another light mod lights too, by Gems::Owner
-	[[nodiscard]] std::size_t                                      GemsOtherLightsPutOut();                       // placed gems near the player whose other light is put out for ours
-	[[nodiscard]] std::size_t                                      GemParticleConfigs();                          // Data\ParticleLights configs found at data load
+	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsBlocked();            // mod -> gem records unlit until its author allows it
+	[[nodiscard]] std::string                                      RusticFound();            // "Sorted", "Unsorted", "both", or "" when none of its gems is lit
+	[[nodiscard]] std::array<std::size_t, 4>                       GemsOtherLighters();      // gem records another light mod lights too, by Gems::Owner
+	[[nodiscard]] std::size_t                                      GemsOtherLightsPutOut();  // placed gems near the player whose other light is put out for ours
+	// the mods whose Light Placer files light our gems (named by their folder) -> the gem records each lights; the gems near her
+	// left to another mod's light at the last look, by that mod or by the look whose model carries its own light
+	struct GemsLeft
+	{
+		std::vector<std::pair<std::string, std::size_t>> byMod, byModel;
+	};
+	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsLitBy();
+	[[nodiscard]] GemsLeft                                         GemsLeftNear();
 	[[nodiscard]] bool                                             LightColorMatters();                           // "Light color" changes a lit gem
 	[[nodiscard]] bool                                             ColorChoiceFound(Gems::ColorChoice a_choice);  // its gem mod is loaded: the menu offers it
 	[[nodiscard]] std::string                                      GemsReport();                                  // for DevBench (JSON)

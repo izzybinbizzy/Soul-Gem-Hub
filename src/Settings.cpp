@@ -86,6 +86,7 @@ namespace Plugin
 		{
 			a_s.brightness = std::clamp((std::clamp(a_s.brightness, Gems::kBrightnessMin, Gems::kBrightnessMax) + 2) / 5 * 5, Gems::kBrightnessMin, Gems::kBrightnessMax);
 			a_s.reach = std::clamp((std::clamp(a_s.reach, Gems::kReachMin, Gems::kReachMax) + 2) / 5 * 5, Gems::kReachMin, Gems::kReachMax);
+			a_s.who = static_cast<Gems::WhoLights>(std::clamp(static_cast<int>(a_s.who), 0, 2));
 			a_s.stars = std::clamp((std::clamp(a_s.stars, Gems::kStarsMin, Gems::kStarsMax) + 2) / 5 * 5, Gems::kStarsMin, Gems::kStarsMax);
 		}
 	}
