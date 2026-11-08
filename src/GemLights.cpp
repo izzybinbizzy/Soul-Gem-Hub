@@ -1258,7 +1258,7 @@ namespace Plugin
 				auto* ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(id);
 				if (!ref || !ref->Is3DLoaded()) {
 					const bool had = gem.hadModel;
-					noModelYet += ref && !had ? 1 : 0;
+					noModelYet += ref && !had && !ref->IsDisabled() && !ref->IsDeleted() ? 1 : 0;
 					gem = {};  // unloaded: every light of the old model went with it
 					gem.hadModel = had;
 					continue;
@@ -1710,7 +1710,7 @@ namespace Plugin
 		REL::Relocation<std::uintptr_t> vtbl{ RE::TESObjectREFR::VTABLE[0] };
 		Load3D::func = vtbl.write_vfunc(0x6A, Load3D::thunk);
 		Release3D::func = vtbl.write_vfunc(0x6B, Release3D::thunk);
-		SetParentCell::func = vtbl.write_vfunc(0x98, SetParentCell::thunk);
+		SetParentCell::func = vtbl.write_vfunc(REL::Relocate(0x98, 0x98, 0x99), SetParentCell::thunk);
 		SKSE::log::info("the lights follow the game's own calls and events (a gem placed in a cell too); the soft pulse is run by the game");
 	}
 
