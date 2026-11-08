@@ -445,17 +445,18 @@ namespace
 		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nTheirsLightPlacer=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
 		CHECK(ReadSettings(in, s) == 5);
 		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
-		CHECK(!s.theirsEmissive && s.theirsLightPlacer && !s.theirsMesh);
+		CHECK(s.theirsEmissive && s.theirsLightPlacer && s.theirsMesh);  // an old file's Theirs lines (no Defaults=2) leave the defaults on
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 10 + kGemSwitches + kColorChoices);
+		CHECK(ReadSettings(again, back) == 11 + kGemSwitches + kColorChoices);
+		CHECK(out.str().find("Defaults=2\n") != std::string::npos);
 		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
-		CHECK(!back.theirsEmissive && back.theirsLightPlacer && !back.theirsMesh);
+		CHECK(back.theirsEmissive && back.theirsLightPlacer && back.theirsMesh);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
@@ -464,6 +465,11 @@ namespace
 		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
 		Settings          h;
 		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
+		// the step-aside defaults: an old file's 0s are not read, a file written with Defaults=2 is
+		std::stringstream oldFile("TheirsEmissive=0\nTheirsMesh=0\n"), newFile("Defaults=2\nTheirsEmissive=0\nTheirsMesh=0\n");
+		Settings          o, n;
+		CHECK(ReadSettings(oldFile, o) == 2 && o.theirsEmissive && o.theirsMesh);
+		CHECK(ReadSettings(newFile, n) == 3 && !n.theirsEmissive && n.theirsLightPlacer && !n.theirsMesh);
 		// a light switch per gem: every gem on by default, one switched off read, written back and kept off the light
 		CHECK(std::ranges::all_of(d.gems, [](bool a_on) { return a_on; }));
 		std::stringstream gemsIn("lightblackstar=0\nLightPetty=off\n");
@@ -515,18 +521,23 @@ namespace
 			const auto atFull = ShownAt(Kind::kStar, true, false, atReach), atHalf = ShownAt(Kind::kStar, true, false, halfStars);
 			CHECK(atHalf.fade < atFull.fade && atHalf.radius < atFull.radius);
 		}
-		CHECK(!d.theirsEmissive && !d.theirsLightPlacer && !d.theirsMesh);  // ours on every gem by default (his pick)
+		CHECK(d.theirsEmissive && d.theirsLightPlacer && d.theirsMesh);  // another mod's light stays by default (his step-aside order)
 		// "Use their light": each switch keeps only its own kind of other light
-		Settings t;
+		const auto none = [] {
+			Settings x;
+			x.theirsEmissive = x.theirsLightPlacer = x.theirsMesh = false;
+			return x;
+		}();
+		Settings t = none;
 		CHECK(!TheirsKept(Owner::kEmissive, true, true, t) && !TheirsKept(Owner::kLightPlacer, true, false, t));
 		t.theirsEmissive = true;
 		CHECK(TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kThisMod, true, false, t));
 		// the audit's M3: Emissive Soul Gems' model with no light of his on it (his mod not installed) keeps OUR light
 		CHECK(!TheirsKept(Owner::kEmissive, false, false, t));
-		t = {};
+		t = none;
 		t.theirsLightPlacer = true;
 		CHECK(TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, false, false, t));
-		t = {};
+		t = none;
 		t.theirsMesh = true;
 		CHECK(TheirsKept(Owner::kThisMod, false, true, t) && !TheirsKept(Owner::kThisMod, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t));
 		std::stringstream low("Brightness=1\nReach=-5\n");

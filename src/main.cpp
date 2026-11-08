@@ -25,6 +25,8 @@
 //   tests\testgems.cpp  the off-game tests of GemMath.h
 
 #include "Plugin.h"
+
+#include "FrameCost.h"
 #include "RuntimeGuard.h"
 #include "Translation.h"
 
@@ -66,7 +68,8 @@ namespace
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
 		case SKSE::MessagingInterface::kNewGame:
-			DropGemLights();  // the gems they hang on are the old game's
+			DropGemLights();     // the gems they hang on are the old game's
+			FrameCost::Reset();  // the worst times start again with each game
 			break;
 		default:
 			break;

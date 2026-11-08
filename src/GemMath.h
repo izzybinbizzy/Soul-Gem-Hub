@@ -995,10 +995,11 @@ namespace Gems
 		int  reach{ 100 };       // percent
 		int  stars{ 50 };        // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
 		bool pulse{ true };      // the soft pulse
-		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone)
-		bool                            theirsEmissive{ false };                                             // Emissive Soul Gems' Light Placer lights
-		bool                            theirsLightPlacer{ false };                                          // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
-		bool                            theirsMesh{ false };                                                 // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
+		// "Use their light": gems another mod lights keep that light and get none of ours (our sliders then leave them alone) - on by
+		// default since his step-aside order, the menu naming whose light it is
+		bool                            theirsEmissive{ true };                                              // Emissive Soul Gems' Light Placer lights
+		bool                            theirsLightPlacer{ true };                                           // any other Light Placer file's (Subtle Soul Gems', CS Light's ...)
+		bool                            theirsMesh{ true };                                                  // a light in the gem's own model (an ENB or particle light: Praedy's, Subtle's, Rudy's ...)
 		std::array<bool, kColorChoices> second{};                                                            // a color choice on its other side (ColorChoice order, kNone left out)
 		bool                            authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
 		bool                            starGem{ false };                                                    // "Star light": false = a star's metal (its body), true = the gem it holds
@@ -1092,12 +1093,18 @@ namespace Gems
 		return ec == std::errc{} && end == a_value.data() + a_value.size() ? std::optional(v) : std::nullopt;
 	}
 
+	// a file written before the Their Own Lights switches defaulted on carries the old default's 0s: its three lines are read only
+	// from a file that names this version
+	inline constexpr int kDefaultsVersion = 2;
+
 	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a note after a value (; or #) is
 	// left out; a value that does not read keeps the one it had; every number clamped to its slider. Returns the key lines read.
 	inline std::size_t ReadSettings(std::istream& a_in, Settings& a_out)
 	{
-		std::size_t lines = 0;
-		std::string line;
+		std::size_t                        lines = 0;
+		std::string                        line;
+		int                                defaults = 0;
+		std::array<std::optional<bool>, 3> theirs{};  // Emissive, Light Placer, the gem's own model light
 		while (a_in && std::getline(a_in, line)) {
 			auto text = Trim(line);
 			if (text.starts_with("\xEF\xBB\xBF")) {
@@ -1129,12 +1136,14 @@ namespace Gems
 				a_out.stars = std::clamp(v, kStarsMin, kStarsMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
+			} else if (SameText(key, "Defaults")) {
+				defaults = v;
 			} else if (SameText(key, "TheirsEmissive")) {
-				a_out.theirsEmissive = v != 0;
+				theirs[0] = v != 0;
 			} else if (SameText(key, "TheirsLightPlacer")) {
-				a_out.theirsLightPlacer = v != 0;
+				theirs[1] = v != 0;
 			} else if (SameText(key, "TheirsMesh")) {
-				a_out.theirsMesh = v != 0;
+				theirs[2] = v != 0;
 			} else if (SameText(key, "AuthorPick")) {
 				a_out.authorPick = v != 0;
 			} else if (SameText(key, "StarGem")) {
@@ -1149,13 +1158,18 @@ namespace Gems
 				--lines;  // a key this version does not know
 			}
 		}
+		if (defaults >= kDefaultsVersion) {
+			a_out.theirsEmissive = theirs[0].value_or(a_out.theirsEmissive);
+			a_out.theirsLightPlacer = theirs[1].value_or(a_out.theirsLightPlacer);
+			a_out.theirsMesh = theirs[2].value_or(a_out.theirsMesh);
+		}
 		return lines;
 	}
 
 	inline void WriteSettings(const Settings& a_s, std::ostream& a_out)
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
-			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
+			  << "[Settings]\nDefaults=" << kDefaultsVersion << "\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nTheirsEmissive=" << (a_s.theirsEmissive ? 1 : 0)
 			  << "\nTheirsLightPlacer=" << (a_s.theirsLightPlacer ? 1 : 0) << "\nTheirsMesh=" << (a_s.theirsMesh ? 1 : 0)
 			  << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\n";

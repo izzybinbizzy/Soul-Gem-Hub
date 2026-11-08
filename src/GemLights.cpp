@@ -31,6 +31,8 @@
 
 #include "Plugin.h"
 
+#include "FrameCost.h"
+
 #include <DirectXTex.h>
 #include <nlohmann/json.hpp>
 
@@ -108,9 +110,10 @@ namespace Plugin
 		// ---------------------------------------------------------- the gems, found once at data load
 		struct Gem
 		{
-			Gems::Look  look;
-			bool        needsSoul{ false };              // an empty gem record: lit only when the placed gem holds a soul
-			Gems::Owner owner{ Gems::Owner::kThisMod };  // the light mod that would light it (the menu may leave it to that one)
+			Gems::Look         look;
+			bool               needsSoul{ false };              // an empty gem record: lit only when the placed gem holds a soul
+			Gems::Owner        owner{ Gems::Owner::kThisMod };  // the light mod that would light it (the menu may leave it to that one)
+			const std::string* ownerName{ nullptr };            // that mod's name for the menu: the Light Placer folder its file sits in
 		};
 		std::unordered_map<const RE::TESBoundObject*, Gem> gGems;             // the gems this plugin lights; read on the main thread after data load
 		std::vector<std::pair<std::string, std::size_t>>   gFamilies;         // the lit gem records by look, for the menu
@@ -118,13 +121,18 @@ namespace Plugin
 		std::vector<std::pair<std::string, std::size_t>>   gBlocked;          // gem records left unlit by their mod, at its author's request
 		std::string                                        gRustic;           // which Rustic Soul Gems download is loaded
 		bool                                               gRusticLit{ false };
+		// the mods whose Light Placer files light our gems (each name's address stays put for the gems that point at it) and the gem
+		// records each lights, for the menu - written at data load only
+		std::unordered_set<std::string>                  gOwnerNames;
+		std::vector<std::pair<std::string, std::size_t>> gLitBy;
 
 		// What Light Placer's configs claim (models by their whole path as NormalPath writes it, formIDs tokens in lower case), read
 		// once when Light Placer is loaded: whose light a gem would wear (put out while ours is on it, unless the menu keeps that
 		// kind). Emissive Soul Gems' own file's models apart, so its switch is offered only when it is installed
 		struct Claims
 		{
-			std::unordered_set<std::string> models, forms, emissive;
+			std::unordered_map<std::string, std::string> models, forms;  // -> the mod whose file claims it
+			std::unordered_set<std::string>              emissive;
 		};
 
 		// a file's extension in lower case, as wide text: path::string() throws on a name the ANSI code page cannot show
@@ -159,6 +167,9 @@ namespace Plugin
 				std::ifstream in(it->path(), std::ios::binary);
 				const auto    doc = nlohmann::json::parse(in, nullptr, false, true);  // no exceptions; a comment does not drop the file
 				const bool    emissive = Lower(Utf8(it->path().stem())) == "emissive soul gems";
+				// Light Placer's own layout is LightPlacer\<mod>\<file>.json: the folder names the mod; a file straight in it, itself
+				const auto rel = it->path().lexically_relative(root);
+				const auto owner = emissive ? std::string("Emissive Soul Gems") : Utf8(rel.has_parent_path() ? *rel.begin() : rel.stem());
 				++files;
 				if (!doc.is_array()) {
 					if (doc.is_discarded()) {
@@ -184,7 +195,7 @@ namespace Plugin
 							if (models && emissive) {
 								out.emissive.insert(name);
 							}
-							into->insert(std::move(name));
+							into->try_emplace(std::move(name), owner);  // the first file read keeps it
 						}
 					}
 				}
@@ -221,17 +232,22 @@ namespace Plugin
 		}
 
 		// which file claims this form: by its model's whole path, or a formIDs token ("SoulGemGrandFilled", "0x2E4FF~Skyrim.esm" ...)
-		[[nodiscard]] Gems::Claim Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model)
+		[[nodiscard]] Gems::Claim Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model, std::string& a_mod)
 		{
 			const auto path = Gems::NormalPath(a_model);
 			if (a_claims.emissive.contains(path)) {
+				a_mod = "Emissive Soul Gems";
 				return Gems::Claim::kEmissive;
 			}
-			if (a_claims.models.contains(path)) {
+			if (const auto m = a_claims.models.find(path); m != a_claims.models.end()) {
+				a_mod = m->second;
 				return Gems::Claim::kOther;
 			}
-			if (const char* id = EditorIdOf(a_form); id && *id && a_claims.forms.contains(Lower(id))) {
-				return Gems::Claim::kOther;
+			if (const char* id = EditorIdOf(a_form); id && *id) {
+				if (const auto f = a_claims.forms.find(Lower(id)); f != a_claims.forms.end()) {
+					a_mod = f->second;
+					return Gems::Claim::kOther;
+				}
 			}
 			const auto* file = a_form->GetFile(0);
 			if (!file) {
@@ -239,8 +255,12 @@ namespace Plugin
 			}
 			const auto plugin = Lower(file->GetFilename());
 			const auto local = a_form->GetLocalFormID();
-			const bool byId = std::ranges::any_of(a_claims.forms, [&](const std::string& a_token) { return Gems::TokenNamesForm(a_token, plugin, local); });
-			return byId ? Gems::Claim::kOther : Gems::Claim::kNone;
+			const auto byId = std::ranges::find_if(a_claims.forms, [&](const auto& a_token) { return Gems::TokenNamesForm(a_token.first, plugin, local); });
+			if (byId == a_claims.forms.end()) {
+				return Gems::Claim::kNone;
+			}
+			a_mod = byId->second;
+			return Gems::Claim::kOther;
 		}
 
 		// ---------------------------------------------------------- a gem model's own color, read once per model at data load
@@ -732,8 +752,9 @@ namespace Plugin
 				CountName(gBlocked, *mod);
 				return false;
 			}
-			const auto claim = a_others.lightPlacer ? Claimed(a_others.claims, a_form, a_model) : Gems::Claim::kNone;
-			const auto owner = Gems::OwnerOf(a_model, a_gem.look.family, claim, a_others.reLight);
+			std::string mod;
+			const auto  claim = a_others.lightPlacer ? Claimed(a_others.claims, a_form, a_model, mod) : Gems::Claim::kNone;
+			const auto  owner = Gems::OwnerOf(a_model, a_gem.look.family, claim, a_others.reLight);
 			if (owner != Gems::Owner::kThisMod) {
 				++gOtherLighters[static_cast<std::size_t>(owner)];
 			}
@@ -742,6 +763,10 @@ namespace Plugin
 			}
 			auto gem = a_gem;
 			gem.owner = owner;
+			if (owner != Gems::Owner::kThisMod && !mod.empty()) {
+				gem.ownerName = &*gOwnerNames.insert(mod).first;
+				CountName(gLitBy, mod);
+			}
 			gGems.insert_or_assign(a_form, std::move(gem));
 			return true;
 		}
@@ -772,7 +797,7 @@ namespace Plugin
 				}
 				SetGlow(*look, GlowOf(path));
 				look->exact = look->rgb == Gems::kGameCairnRgb;
-				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod }, a_others) ? 1 : 0;
+				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod, nullptr }, a_others) ? 1 : 0;
 			}
 			return added;
 		}
@@ -865,6 +890,32 @@ namespace Plugin
 		std::atomic<std::size_t>              gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 };
 		std::atomic<std::uint32_t>            gChoices{ 0 };  // a bit per ColorChoice whose gem mod is loaded (the menu offers it)
 		float                                 gClock = 0.0f, gSinceScan = kScanEvery;
+		// the gems near her left to another mod's light at the last look, for the menu (drawn on the render thread): by the mod
+		// whose Light Placer file lights them, or by the look whose model carries its own light
+		std::mutex                                       gLeftLock;
+		std::vector<std::pair<std::string, std::size_t>> gLeftByMod, gLeftByModel;  // gLeftLock
+
+		// the gem references loaded near her, kept as they load (TESObjectLoadedEvent - any thread, queued; an unload is not
+		// queued: a gem moved by a script may come back with no second load event, seen as 7 of 18 moved gems missed): a look
+		// sorts only these; a full walk at a load, after the lights come back on and every 40th look (10 s) catches what an event
+		// missed (measured 2026-11-08: the walk of every reference in range cost 89-125 us four times a second)
+		std::mutex                               gLoadedLock;
+		std::vector<std::pair<RE::FormID, bool>> gLoadedQueue;  // gLoadedLock
+		std::unordered_set<RE::FormID>           gNearGems;     // the main thread's
+		int                                      gFullLookIn = 0;
+
+		class LoadedWatch final : public RE::BSTEventSink<RE::TESObjectLoadedEvent>
+		{
+		public:
+			RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* a_event, RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override
+			{
+				if (a_event && a_event->loaded) {
+					std::lock_guard lock(gLoadedLock);
+					gLoadedQueue.emplace_back(a_event->formID, true);
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
+		};
 
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
 		{
@@ -1061,29 +1112,64 @@ namespace Plugin
 			};
 			std::vector<Candidate> candidates;
 			const auto             here = player->GetPosition();
-			tes->ForEachReferenceInRange(player, kRange, [&](RE::TESObjectREFR* a_ref) {
+			// the loads since the last look: a gem loaded joins; one gone drops out below, one out of range or unloaded at the next
+			// full walk
+			{
+				std::lock_guard lock(gLoadedLock);
+				for (const auto& [loadedId, loaded] : gLoadedQueue) {
+					auto*       ref = loaded ? RE::TESForm::LookupByID<RE::TESObjectREFR>(loadedId) : nullptr;
+					const auto* base = ref ? ref->GetBaseObject() : nullptr;
+					if (base && gGems.contains(base)) {
+						gNearGems.insert(loadedId);
+					}
+				}
+				gLoadedQueue.clear();
+			}
+			const auto consider = [&](RE::TESObjectREFR* a_ref) {
 				const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr;
 				const auto  it = base ? gGems.find(base) : gGems.end();
 				// a gem switched off in the menu takes no place among the nearest: a farther one gets the light
 				if (it == gGems.end() || !Gems::GemLit(it->second.look, a_s) || a_ref->IsDisabled() || a_ref->IsDeleted() || !a_ref->Is3DLoaded()) {
-					return RE::BSContainer::ForEachResult::kContinue;
+					return;
 				}
 				if (it->second.needsSoul && a_ref->extraList.GetSoulLevel() == RE::SOUL_LEVEL::kNone) {
-					return RE::BSContainer::ForEachResult::kContinue;
+					return;
 				}
 				auto*      model = a_ref->Get3D();
 				auto*      root = model ? model->AsNode() : nullptr;
 				const auto id = a_ref->GetFormID();
 				if (!root) {
-					return RE::BSContainer::ForEachResult::kContinue;
+					return;
 				}
 				// a gem that holds our light already counts as a fifth nearer, so two gems at the kMaxLights edge do not swap lights
 				// four times a second as she walks
 				const auto held = gKept.find(id);
 				const bool lit = held != gKept.end() && held->second.light && held->second.root.get() == root;
 				candidates.push_back({ a_ref, id, root, &it->second, a_ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f) });
-				return RE::BSContainer::ForEachResult::kContinue;
-			});
+			};
+			if (gFullLookIn-- <= 0) {
+				gFullLookIn = 40;
+				gNearGems.clear();
+				tes->ForEachReferenceInRange(player, kRange, [&](RE::TESObjectREFR* a_ref) {
+					if (const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr; base && gGems.contains(base)) {
+						gNearGems.insert(a_ref->GetFormID());
+					}
+					consider(a_ref);
+					return RE::BSContainer::ForEachResult::kContinue;
+				});
+			} else {
+				for (auto gem = gNearGems.begin(); gem != gNearGems.end();) {
+					auto* ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(*gem);
+					if (!ref) {
+						gem = gNearGems.erase(gem);
+						continue;
+					}
+					if (ref->GetPosition().GetSquaredDistance(here) <= kRange * kRange) {
+						consider(ref);
+					}
+					++gem;
+				}
+			}
 			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem in reach;
 			// a farther gem is let go below and takes a light again when it is among the nearest
 			std::ranges::sort(candidates, {}, &Candidate::distance);
@@ -1094,8 +1180,9 @@ namespace Plugin
 				const Candidate*                           c{ nullptr };
 				std::vector<RE::NiPointer<RE::NiAVObject>> others;
 			};
-			std::vector<Lit> lit;
-			std::size_t      looked = 0;
+			std::vector<Lit>                                 lit;
+			std::size_t                                      looked = 0;
+			std::vector<std::pair<std::string, std::size_t>> byMod, byModel;  // the gems left to another mod's light, for the menu
 			for (const auto& c : candidates) {
 				if (lit.size() == kMaxLights || ++looked > kMostLooked) {
 					break;
@@ -1110,9 +1197,18 @@ namespace Plugin
 				const bool meshLight = std::ranges::any_of(others, [](const auto& a_other) { return !netimmerse_cast<RE::NiLight*>(a_other.get()); });
 				if (!Gems::TheirsKept(c.gem->owner, placedLight, meshLight, a_s)) {
 					lit.push_back({ &c, std::move(others) });
+				} else if (c.gem->ownerName && Gems::TheirsKept(c.gem->owner, placedLight, false, a_s)) {
+					CountName(byMod, *c.gem->ownerName);
+				} else {
+					CountName(byModel, Gems::FamilyName(c.gem->look.family));
 				}
 			}
 			gOnShowNow = onShow;
+			{
+				std::lock_guard lock(gLeftLock);
+				gLeftByMod = std::move(byMod);
+				gLeftByModel = std::move(byModel);
+			}
 			std::size_t putOut = 0;
 			for (auto& l : lit) {
 				const bool others = !l.others.empty();
@@ -1130,14 +1226,16 @@ namespace Plugin
 
 		void Frame(float a_delta)
 		{
-			auto*      scene = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
-			const auto s = SettingsNow();
+			const FrameCost::Scope all{ 0, "frame, all of ours" };
+			auto*                  scene = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
+			const auto             s = SettingsNow();
 			if (!std::isfinite(a_delta) || a_delta < 0.0f) {
 				a_delta = 0.0f;  // one NaN would stop the scan and the pulse until the next load
 			}
 			gSinceDisplays += a_delta;
 			if (gSinceDisplays >= kDisplayEvery) {
 				gSinceDisplays = 0.0f;
+				const FrameCost::Scope c{ 2, "displays (once a second)" };
 				DarkenDisplays();
 			}
 			if (!scene) {
@@ -1146,14 +1244,26 @@ namespace Plugin
 			if (!s.on) {
 				DropAll(scene);
 				gPutOutNow = 0;
+				{
+					std::lock_guard lock(gLoadedLock);
+					gLoadedQueue.clear();
+				}
+				gFullLookIn = 0;  // a full walk when the lights come back on
+				{
+					std::lock_guard lock(gLeftLock);
+					gLeftByMod.clear();
+					gLeftByModel.clear();
+				}
 				return;
 			}
 			gClock = std::fmod(gClock + a_delta, 3600.0f);
 			gSinceScan += a_delta;
 			if (gSinceScan >= kScanEvery) {
 				gSinceScan = 0.0f;
+				const FrameCost::Scope c{ 1, "scan (four times a second)" };
 				Scan(scene, s);
 			}
+			const FrameCost::Scope lit{ 3, "lit gems (their other lights and the pulse)" };
 			std::erase_if(gKept, [&](auto& a_entry) {
 				auto& kept = a_entry.second;
 				if (!kept.light || !kept.root || !kept.root->parent) {  // picked up or unloaded since the last look
@@ -1329,7 +1439,7 @@ namespace Plugin
 				}
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
-			const bool taken = Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod }, others);
+			const bool taken = Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod, nullptr }, others);
 			withGlow += taken && look->glow ? 1 : 0;
 			if (taken && always) {
 				++lit;
@@ -1362,7 +1472,7 @@ namespace Plugin
 			auto look = Gems::LookOfModel(path, !gRustic.empty()).value_or(Gems::GameLook(n.kind, false));
 			readColor(look, path, false, n.id);
 			look.named = true;
-			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod }, others) ? 1 : 0;
+			pieces += Take(bound, path, Gem{ look, false, Gems::Owner::kThisMod, nullptr }, others) ? 1 : 0;
 		}
 		gDisplays.clear();
 		if (others.reLight) {
@@ -1422,6 +1532,10 @@ namespace Plugin
 		if (auto* ui = RE::UI::GetSingleton()) {
 			ui->AddEventSink<RE::MenuOpenCloseEvent>(&mainMenu);
 		}
+		static LoadedWatch loaded;
+		if (auto* events = RE::ScriptEventSourceHolder::GetSingleton()) {
+			events->AddEventSink<RE::TESObjectLoadedEvent>(&loaded);
+		}
 		SKSE::log::info("lights follow the player's update (Actor::Update)");
 	}
 
@@ -1430,6 +1544,8 @@ namespace Plugin
 		DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
 		gRetryAt.clear();
 		gSinceScan = kScanEvery;  // look around at once in the next game
+		gFullLookIn = 0;          // with a full walk
+		gNearGems.clear();
 		gSinceDisplays = kDisplayEvery;
 	}
 
@@ -1457,10 +1573,16 @@ namespace Plugin
 	std::vector<std::pair<std::string, std::size_t>> GemsBlocked() { return gBlocked; }
 	std::array<std::size_t, 4>                       GemsOtherLighters() { return gOtherLighters; }
 	std::size_t                                      GemsOtherLightsPutOut() { return gPutOutNow.load(); }
-	std::size_t                                      GemParticleConfigs() { return gParticleTextures.size(); }
-	bool                                             LightColorMatters() { return gWithGlow.load() > 0; }
-	bool                                             ColorChoiceFound(Gems::ColorChoice a_choice) { return (gChoices.load() >> static_cast<std::uint32_t>(a_choice)) & 1u; }
-	std::string                                      RusticFound() { return gRusticLit ? gRustic : std::string(); }
+	std::vector<std::pair<std::string, std::size_t>> GemsLitBy() { return gLitBy; }
+	GemsLeft                                         GemsLeftNear()
+	{
+		std::lock_guard lock(gLeftLock);
+		return { gLeftByMod, gLeftByModel };
+	}
+	std::size_t GemParticleConfigs() { return gParticleTextures.size(); }
+	bool        LightColorMatters() { return gWithGlow.load() > 0; }
+	bool        ColorChoiceFound(Gems::ColorChoice a_choice) { return (gChoices.load() >> static_cast<std::uint32_t>(a_choice)) & 1u; }
+	std::string RusticFound() { return gRusticLit ? gRustic : std::string(); }
 
 	std::string GlowNow(RE::FormID a_ref)
 	{
@@ -1507,9 +1629,20 @@ namespace Plugin
 		for (const auto& [name, n] : gBlocked) {
 			blocked[std::string(name)] = n;
 		}
+		nlohmann::json litBy = nlohmann::json::object(), nearByMod = nlohmann::json::object(), nearByModel = nlohmann::json::object();
+		for (const auto& [name, n] : gLitBy) {
+			litBy[name] = n;
+		}
+		const auto left = GemsLeftNear();
+		for (const auto& [name, n] : left.byMod) {
+			nearByMod[name] = n;
+		}
+		for (const auto& [name, n] : left.byModel) {
+			nearByModel[name] = n;
+		}
 		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
 			{ "takenOver", { { "emissiveSoulGems", gOtherLighters[1] }, { "lightPlacer", gOtherLighters[2] } } },
-			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
+			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "litBy", litBy }, { "leftNearYou", { { "byMod", nearByMod }, { "byModel", nearByModel } } }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
 			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
 			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "lights", lights } };
 		return out.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);

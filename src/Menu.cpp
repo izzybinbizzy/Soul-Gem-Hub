@@ -200,20 +200,29 @@ namespace Plugin
 			if (const auto rustic = RusticFound(); !rustic.empty()) {
 				TextColored(kMuted, "%s", Fill(T("Rustic Soul Gems found ({})"), T(rustic.c_str())).c_str());
 			}
-			// the gems another light mod would light: lit by this mod instead, its light put out (RE::Light keeps this mod's own files)
-			const auto  left = GemsOtherLighters();
-			const char* leftTo[] = { nullptr, TR_MARK("Taken over from Emissive Soul Gems (Light Placer): {}"),
-				TR_MARK("Taken over from other Light Placer lights: {}"), TR_MARK("Left to RE::Light (this mod's RE::Light files): {}") };
-			for (std::size_t i = 1; i < left.size(); ++i) {
-				if (left[i]) {
-					TextColored(kMuted, "%s", Fill(T(leftTo[i]), std::to_string(left[i])).c_str());
-				}
+			// the gems another light mod lights, named by the folder its Light Placer file sits in: left to that light while its switch
+			// under Their Own Lights is on (the default), else lit by this mod and theirs put out; RE::Light keeps this mod's own files
+			const auto left = GemsOtherLighters();
+			const auto now = SettingsNow();
+			for (const auto& [mod, n] : GemsLitBy()) {
+				const bool theirs = mod == "Emissive Soul Gems" ? now.theirsEmissive : now.theirsLightPlacer;
+				TextColored(kMuted, "%s", Fill(theirs ? T("Lit by {} (its own light): {}") : T("Taken over from {}: {}"), mod, std::to_string(n)).c_str());
+			}
+			if (left[3]) {
+				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (this mod's RE::Light files): {}"), std::to_string(left[3])).c_str());
 			}
 			for (const auto& [mod, n] : GemsBlocked()) {
 				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
 				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
+			}
+			const auto nearYou = GemsLeftNear();
+			for (const auto& [mod, n] : nearYou.byMod) {
+				TextColored(kMuted, "%s", Fill(T("Gems near you lit by {}: {}"), mod, std::to_string(n)).c_str());
+			}
+			for (const auto& [look, n] : nearYou.byModel) {
+				TextColored(kMuted, "%s", Fill(T("Gems near you keeping their model's own light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
@@ -256,15 +265,15 @@ namespace Plugin
 					Header(Icon::kGem, T("Their Own Lights"));
 					if (left[1]) {
 						Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
-							T("Its gems keep Emissive Soul Gems' light instead of ours. Our Brightness and Reach then leave them alone."));
+							T("On (the default): its gems keep Emissive Soul Gems' light and ours steps aside. Off: our light on them instead."));
 					}
 					if (left[2]) {
 						Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
-							T("Gems another Light Placer file lights (Subtle Soul Gems, CS Light ...) keep that light instead of ours."));
+							T("On (the default): gems another Light Placer file lights keep that light and ours steps aside - each mod is named at the top. Off: our light instead."));
 					}
 					if (meshLights) {
 						Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
-							T("A gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it instead of ours."));
+							T("On (the default): a gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it and ours steps aside. Off: our light instead."));
 					}
 				}
 			}
