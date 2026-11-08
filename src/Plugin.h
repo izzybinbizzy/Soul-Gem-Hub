@@ -74,7 +74,8 @@ namespace Plugin
 
 	// ------------------------------------------------------------------ GemLights.cpp: the gems and their lights
 	void                      FindGems();       // data load: which forms are soul gems we light, and how each looks
-	void                      InstallFrame();   // data load: our once-a-frame work after the player's update (main thread)
+	void                      WatchGems();      // data load: the game's events that make a look
+	void                      LookAfterLoad();  // a game has loaded: one look, walking the loaded references
 	void                      DropGemLights();  // a game loads, or a new one starts
 	void                      ApplyNow();       // main thread: the settings onto every light now (the menu, DevBench)
 	void                      RefreshLights();  // main thread: the settings onto the lights already hung, even while the game is paused
@@ -93,7 +94,6 @@ namespace Plugin
 	};
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsLitBy();
 	[[nodiscard]] GemsLeft                                         GemsLeftNear();
-	[[nodiscard]] std::size_t                                      GemParticleConfigs();                          // Data\ParticleLights configs found at data load
 	[[nodiscard]] bool                                             LightColorMatters();                           // "Light color" changes a lit gem
 	[[nodiscard]] bool                                             ColorChoiceFound(Gems::ColorChoice a_choice);  // its gem mod is loaded: the menu offers it
 	[[nodiscard]] std::string                                      GemsReport();                                  // for DevBench (JSON)

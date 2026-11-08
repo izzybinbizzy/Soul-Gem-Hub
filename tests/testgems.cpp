@@ -443,33 +443,34 @@ namespace
 		// ENBParticleGems: the first test build's switch (gone 2026-10-19 - a gem's own light is always left to it); an old file's
 		// line is a key this version does not know, and so is Shadows (the shadow switch is gone - shadows are the shader mod's job)
 		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nTheirsLightPlacer=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
-		CHECK(ReadSettings(in, s) == 5);
+		CHECK(ReadSettings(in, s) == 4);
 		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
-		CHECK(s.theirsEmissive && s.theirsLightPlacer && s.theirsMesh);  // an old file's Theirs lines (no Defaults=2) leave the defaults on
+		CHECK(s.who == WhoLights::kOthers);  // an old file's Theirs lines are read as nothing
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 11 + kGemSwitches + kColorChoices);
-		CHECK(out.str().find("Defaults=2\n") != std::string::npos);
+		CHECK(ReadSettings(again, back) == 8 + kGemSwitches + kColorChoices);
+		CHECK(out.str().find("WhoLights=2\n") != std::string::npos && out.str().find("Theirs") == std::string::npos && out.str().find("Defaults") == std::string::npos);
 		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
-		CHECK(back.theirsEmissive && back.theirsLightPlacer && back.theirsMesh);
+		CHECK(back.who == WhoLights::kOthers);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
 		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 50);
 		// a hand-edited file: an editor's UTF-8 mark, a note after a value, true / false and on / off words
-		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nTheirsMesh=Yes\nReach=far\n");
+		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nWhoLights=1\nReach=far\n");
 		Settings          h;
-		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.theirsMesh && h.reach == 100);
-		// the step-aside defaults: an old file's 0s are not read, a file written with Defaults=2 is
-		std::stringstream oldFile("TheirsEmissive=0\nTheirsMesh=0\n"), newFile("Defaults=2\nTheirsEmissive=0\nTheirsMesh=0\n");
-		Settings          o, n;
-		CHECK(ReadSettings(oldFile, o) == 2 && o.theirsEmissive && o.theirsMesh);
-		CHECK(ReadSettings(newFile, n) == 3 && !n.theirsEmissive && n.theirsLightPlacer && !n.theirsMesh);
+		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.who == WhoLights::kGame && h.reach == 100);
+		// the one choice of whose light: read and clamped; an old file's switches are read as nothing
+		std::stringstream oldFile("Defaults=2\nTheirsEmissive=0\nTheirsMesh=0\n"), oursFile("WhoLights=0\n"), tooBig("WhoLights=9\n");
+		Settings          o, n, big;
+		CHECK(ReadSettings(oldFile, o) == 0 && o.who == WhoLights::kOthers);
+		CHECK(ReadSettings(oursFile, n) == 1 && n.who == WhoLights::kOurs);
+		CHECK(ReadSettings(tooBig, big) == 1 && big.who == WhoLights::kOthers);
 		// a light switch per gem: every gem on by default, one switched off read, written back and kept off the light
 		CHECK(std::ranges::all_of(d.gems, [](bool a_on) { return a_on; }));
 		std::stringstream gemsIn("lightblackstar=0\nLightPetty=off\n");
@@ -521,25 +522,11 @@ namespace
 			const auto atFull = ShownAt(Kind::kStar, true, false, atReach), atHalf = ShownAt(Kind::kStar, true, false, halfStars);
 			CHECK(atHalf.fade < atFull.fade && atHalf.radius < atFull.radius);
 		}
-		CHECK(d.theirsEmissive && d.theirsLightPlacer && d.theirsMesh);  // another mod's light stays by default (his step-aside order)
-		// "Use their light": each switch keeps only its own kind of other light
-		const auto none = [] {
-			Settings x;
-			x.theirsEmissive = x.theirsLightPlacer = x.theirsMesh = false;
-			return x;
-		}();
-		Settings t = none;
-		CHECK(!TheirsKept(Owner::kEmissive, true, true, t) && !TheirsKept(Owner::kLightPlacer, true, false, t));
-		t.theirsEmissive = true;
-		CHECK(TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kThisMod, true, false, t));
-		// the audit's M3: Emissive Soul Gems' model with no light of his on it (his mod not installed) keeps OUR light
-		CHECK(!TheirsKept(Owner::kEmissive, false, false, t));
-		t = none;
-		t.theirsLightPlacer = true;
-		CHECK(TheirsKept(Owner::kLightPlacer, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t) && !TheirsKept(Owner::kLightPlacer, false, false, t));
-		t = none;
-		t.theirsMesh = true;
-		CHECK(TheirsKept(Owner::kThisMod, false, true, t) && !TheirsKept(Owner::kThisMod, true, false, t) && !TheirsKept(Owner::kEmissive, true, false, t));
+		CHECK(d.who == WhoLights::kOthers);  // another mod's light stays by default (his step-aside order)
+		// ours on a gem: always on our lights, never on the game's, only where no other light hangs on another mod's
+		CHECK(OursOn(WhoLights::kOurs, true) && OursOn(WhoLights::kOurs, false));
+		CHECK(!OursOn(WhoLights::kGame, true) && !OursOn(WhoLights::kGame, false));
+		CHECK(!OursOn(WhoLights::kOthers, true) && OursOn(WhoLights::kOthers, false));
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}

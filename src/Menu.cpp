@@ -4,7 +4,7 @@
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
 // found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
-// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, the color choices, Light color and Their Own Lights. A change is saved and
+// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, the color choices, Light color and whose light a gem wears. A change is saved and
 // applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -59,7 +59,7 @@ namespace Plugin
 			}
 		}
 
-		// the lights already hung take a moved slider at once: the per-frame update stops while the menu pauses the game, a task does not
+		// the lights already hung take a moved slider at once, while the menu pauses the game too
 		void Live()
 		{
 			static std::atomic<bool> queued{ false };
@@ -160,6 +160,23 @@ namespace Plugin
 			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
 		}
 
+		// whose light a gem wears: one choice, always shown; the default leaves a gem another mod lights to that mod
+		void WhoLightsChoice()
+		{
+			const auto                       s = SettingsNow();
+			int                              v = static_cast<int>(s.who);
+			const std::array<const char*, 3> items{ T("Use our lights"), T("Use the game's own lights"), T("Use another mod's lights") };
+			SetNextItemWidth(260.0f);
+			if (Combo(T("Whose light"), &v, items.data(), static_cast<int>(items.size())) && v != static_cast<int>(s.who)) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.who = static_cast<Gems::WhoLights>(std::clamp(v, 0, 2)); });
+				Changed();
+			}
+			MenuStyle::Tip(T(
+				"Use our lights: this mod lights every gem and any other light on it is put out. Use the game's own lights: none of this "
+				"mod's light, and other mods' lights on the gems are put out too. Use another mod's lights (the default): a gem a Light Placer "
+				"file or its own model's particle light lights keeps that light, each mod named at the top; this mod lights only the rest."));
+		}
+
 		// "Which Gems Glow": a light switch per gem, in GemSwitch order
 		void GemSwitches()
 		{
@@ -200,13 +217,15 @@ namespace Plugin
 			if (const auto rustic = RusticFound(); !rustic.empty()) {
 				TextColored(kMuted, "%s", Fill(T("Rustic Soul Gems found ({})"), T(rustic.c_str())).c_str());
 			}
-			// the gems another light mod lights, named by the folder its Light Placer file sits in: left to that light while its switch
-			// under Their Own Lights is on (the default), else lit by this mod and theirs put out; RE::Light keeps this mod's own files
+			// the gems another light mod lights, named by the folder its Light Placer file sits in, and what the choice of whose light
+			// does with them; RE::Light keeps this mod's own files
 			const auto left = GemsOtherLighters();
-			const auto now = SettingsNow();
+			const auto who = SettingsNow().who;
 			for (const auto& [mod, n] : GemsLitBy()) {
-				const bool theirs = mod == "Emissive Soul Gems" ? now.theirsEmissive : now.theirsLightPlacer;
-				TextColored(kMuted, "%s", Fill(theirs ? T("Lit by {} (its own light): {}") : T("Taken over from {}: {}"), mod, std::to_string(n)).c_str());
+				const char* line = who == Gems::WhoLights::kOthers ? T("Lit by {} (its own light): {}") :
+				                   who == Gems::WhoLights::kOurs   ? T("Taken over from {}: {}") :
+				                                                     T("Put out for the game's own look - {}: {}");
+				TextColored(kMuted, "%s", Fill(line, mod, std::to_string(n)).c_str());
 			}
 			if (left[3]) {
 				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (this mod's RE::Light files): {}"), std::to_string(left[3])).c_str());
@@ -215,7 +234,7 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out for ours: {}"), std::to_string(own)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out: {}"), std::to_string(own)).c_str());
 			}
 			const auto nearYou = GemsLeftNear();
 			for (const auto& [mod, n] : nearYou.byMod) {
@@ -256,26 +275,8 @@ namespace Plugin
 				if (LightColorMatters()) {
 					LightColor();
 				}
-				// "Use their light": a gem another mod lights keeps that light instead of ours (shown only where such a light can be:
-				// Emissive Soul Gems' or another Light Placer file claims a gem, or the lighting draws a gem's own model light)
-				const auto lighting = LightingFound();
-				// a gem's own model light shines on an ENB, or on Community Shaders when a particle-light config names its texture
-				const bool meshLights = lighting == Lighting::kEnb || (lighting == Lighting::kShaders && GemParticleConfigs() > 0);
-				if (left[1] || left[2] || meshLights) {
-					Header(Icon::kGem, T("Their Own Lights"));
-					if (left[1]) {
-						Switch(T("Use Emissive Soul Gems' own light"), &Gems::Settings::theirsEmissive,
-							T("On (the default): its gems keep Emissive Soul Gems' light and ours steps aside. Off: our light on them instead."));
-					}
-					if (left[2]) {
-						Switch(T("Use other Light Placer lights"), &Gems::Settings::theirsLightPlacer,
-							T("On (the default): gems another Light Placer file lights keep that light and ours steps aside - each mod is named at the top. Off: our light instead."));
-					}
-					if (meshLights) {
-						Switch(T("Use the gems' own glow lights"), &Gems::Settings::theirsMesh,
-							T("On (the default): a gem whose model carries a light of its own (an ENB or particle light, like Praedy's) keeps it and ours steps aside. Off: our light instead."));
-					}
-				}
+				Header(Icon::kGem, T("Whose Light"));
+				WhoLightsChoice();
 			}
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}
