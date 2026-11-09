@@ -62,6 +62,7 @@ namespace Plugin
 	[[nodiscard]] Lighting    LightingFound();  // never picked by the player (Illuminated's rule, his word)
 	[[nodiscard]] const char* LightingName(Lighting a_lighting);
 	[[nodiscard]] bool        InverseSquare();  // the lights are written in Community Shaders' inverse-square words
+	[[nodiscard]] bool        LightLimitFix();  // CommunityShaders.dll is loaded: a light of ours carries Light Limit Fix's words, inverse square or not
 	[[nodiscard]] std::string LightingReport();
 
 	// ------------------------------------------------------------------ Settings.cpp: SoulGemHub\Settings.ini, written by the menu

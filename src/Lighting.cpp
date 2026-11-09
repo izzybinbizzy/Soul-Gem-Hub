@@ -29,7 +29,7 @@ namespace Plugin
 		constexpr const char* kEnbFiles[] = { "enbseries.ini", "enblocal.ini" };
 
 		std::atomic<Lighting> gFound{ Lighting::kShaders };
-		std::atomic<bool>     gIslFiles{ false };  // Community Shaders' inverse square shader files are in Data (logged and reported only)
+		std::atomic<bool>     gIslFiles{ false };  // Community Shaders' inverse square shader is in Data: with its DLL, lights are inverse square
 		std::atomic<bool>     gCsLoaded{ false }, gEnbRunning{ false }, gEnbFiles{ false };
 
 		[[nodiscard]] bool EnbFilesLeft()
@@ -130,7 +130,14 @@ namespace Plugin
 
 	bool InverseSquare()
 	{
-		return gFound.load() == Lighting::kShaders;
+		// the DLL alone is not inverse square: without its add-on's shader or Light Limit Fix's built-in one, Community Shaders draws
+		// every light linear (1.4.6, read in its source; Dynamic Wards #36) - its flag words still read
+		return gFound.load() == Lighting::kShaders && gIslFiles.load();
+	}
+
+	bool LightLimitFix()
+	{
+		return gCsLoaded.load();
 	}
 
 	std::string LightingReport()

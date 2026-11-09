@@ -858,10 +858,11 @@ namespace Gems
 		a_look.glowAlways = false;
 	}
 
-	// a game gem wears its size's set color, as given, whatever the texture pack dressing it; a_inverseSquare: on Community Shaders
-	inline void WearGameSetColor(Look& a_look, bool a_inverseSquare) noexcept
+	// a game gem wears its size's set color, as given, whatever the texture pack dressing it; a_communityShaders: its DLL is loaded,
+	// inverse square or not (his greater and grand baby blue are ENB's and Vanilla's)
+	inline void WearGameSetColor(Look& a_look, bool a_communityShaders) noexcept
 	{
-		const bool baby = !a_inverseSquare && (a_look.kind == Kind::kGreater || a_look.kind == Kind::kGrand);
+		const bool baby = !a_communityShaders && (a_look.kind == Kind::kGreater || a_look.kind == Kind::kGrand);
 		WearFixedColor(a_look, baby ? kGameBabyBlue : SizeRgb(kGameSetRgb, a_look.kind));
 		a_look.exact = true;
 	}

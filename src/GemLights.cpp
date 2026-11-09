@@ -68,6 +68,12 @@ namespace Plugin
 				Write(a_light, { kFlag | kInitialised, std::bit_cast<std::uint32_t>(std::clamp(a_cutoff, Gems::kLowestCutoff, Gems::kHighestCutoff)) });
 				a_light->GetLightRuntimeData().ambient.blue = 0.0f;
 			}
+			// the same where Community Shaders draws linear: Initialised alone, no cutoff - an ambient color there reads as flags
+			void SetOwnLinear(RE::NiLight* a_light) noexcept
+			{
+				Write(a_light, { kInitialised, 0u });
+				a_light->GetLightRuntimeData().ambient.blue = 0.0f;
+			}
 		}
 
 		// a new light for the scene, cloned from one master made once: ReLight found that a freshly made light, attached straight
@@ -1021,6 +1027,8 @@ namespace Plugin
 			}
 			if (InverseSquare()) {
 				Isl::SetOwn(a_kept.light.get(), shown.cutoff);  // after SetLightAttenuation, which writes the same words
+			} else if (LightLimitFix()) {
+				Isl::SetOwnLinear(a_kept.light.get());
 			} else {
 				data.ambient = { data.diffuse.red * kAmbient, data.diffuse.green * kAmbient, data.diffuse.blue * kAmbient };
 			}
@@ -1660,7 +1668,7 @@ namespace Plugin
 			}
 			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
 			if (!packed && a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
-				Gems::WearGameSetColor(a_look, InverseSquare());
+				Gems::WearGameSetColor(a_look, LightLimitFix());
 			}
 			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
 			// named quest gem keeps its own color
