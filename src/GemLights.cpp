@@ -568,9 +568,43 @@ namespace Plugin
 		}
 
 		// the color measured off the gem's own pictures, by the first of its files the table lists (textures first, then the model)
+		// the color textures a gem actually wears, off its loaded model: a runtime patcher or a pack can point it elsewhere than its
+		// file names. Once per model; none on VR (the loader's address is SE / AE only)
+		const std::vector<std::uint64_t>& WornPrintsOf(std::string_view a_model)
+		{
+			static std::unordered_map<std::string, std::vector<std::uint64_t>> read;
+			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
+			if (!added || a_model.empty() || REL::Module::IsVR()) {
+				return it->second;
+			}
+			RE::NiPointer<RE::NiNode> root;
+			const std::string         path(a_model);
+			if (RE::BSModelDB::Demand(path.c_str(), root, RE::BSModelDB::DBTraits::ArgsType{}) != RE::BSResource::ErrorCode::kNone || !root) {
+				return it->second;
+			}
+			auto& worn = it->second;
+			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&worn](RE::BSGeometry* a_geometry) {
+				const char* diffuse = OwnLightShape(a_geometry) ? nullptr : DiffuseOf(a_geometry);
+				const auto  print = diffuse && *diffuse && Gems::ColorTexture(diffuse) ? TexturePrint(diffuse) : std::nullopt;
+				if (print && std::ranges::find(worn, *print) == worn.end()) {
+					worn.push_back(*print);
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+			return worn;
+		}
+
+		// a pack or a patcher dresses this gem in something else than its own files: the rows of those files do not hold for it. The game's own
+		// gems keep his set whatever dresses them
+		bool PackOnTop(std::string_view a_model)
+		{
+			const auto& named = PrintsOf(a_model);
+			return !a_model.empty() && !Gems::GameFilesIn(named) && !Gems::WearsNamed(named, WornPrintsOf(a_model));
+		}
+
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
-			return a_model.empty() ? std::nullopt : Gems::MeasuredColorIn(PrintsOf(a_model));
+			return a_model.empty() ? std::nullopt : Gems::MeasuredColorWorn(PrintsOf(a_model), WornPrintsOf(a_model));
 		}
 
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads
@@ -1597,7 +1631,8 @@ namespace Plugin
 			if (BlockedBy(a_model)) {
 				return;
 			}
-			if (!a_star && (!a_named || a_look.family == Gems::Family::kNamed)) {
+			const bool packed = !a_star && PackOnTop(a_model);
+			if (!a_star && !packed && (!a_named || a_look.family == Gems::Family::kNamed)) {
 				SetGlow(a_look, GlowOf(a_model));
 				if (!a_look.glow && a_look.family == Gems::Family::kGame) {
 					a_look.glow = GameGlow(a_model);
@@ -1607,13 +1642,13 @@ namespace Plugin
 				// the color the game shows for this gem, measured off its own pictures: its light wears it, not another glow
 				Gems::WearFixedColor(a_look, *measured);
 				++fromPicture;
-			} else if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
+			} else if (const auto seen = a_star || packed ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
 				++fromPicture;
 			} else if (const auto eye = a_star ? EyeColor(a_model, Gems::StarEyeColorOf) : std::nullopt) {
 				a_look.rgb = *eye;
 				++fromPicture;
-			} else if (Gems::ColorFromModel(a_look.family)) {
+			} else if (Gems::ColorFromModel(a_look.family) || packed) {
 				if (const auto own = ModelColor(a_model, a_star)) {
 					a_look.rgb = Gems::ShownColor(*own, a_look.kind);
 					++fromModel;
@@ -1624,13 +1659,13 @@ namespace Plugin
 				return;
 			}
 			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
-			if (a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
+			if (!packed && a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
 				Gems::WearGameSetColor(a_look, InverseSquare());
 			}
 			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
 			// named quest gem keeps its own color
 			const auto& prints = PrintsOf(a_model);
-			if (const auto* his = a_named || prints.empty() ? nullptr : Gems::HisColorOf(prints.back())) {
+			if (const auto* his = a_named || prints.empty() || packed ? nullptr : Gems::HisColorOf(prints.back())) {
 				Gems::ApplyHisColor(a_look, *his);
 				choicesFound[static_cast<std::size_t>(his->choice)] = true;
 			}

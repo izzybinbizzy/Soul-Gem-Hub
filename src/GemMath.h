@@ -814,6 +814,35 @@ namespace Gems
 		return std::nullopt;
 	}
 
+	// a row for one model wearing one texture (gem color measure.py makes the same key)
+	[[nodiscard]] constexpr std::uint64_t WornPairPrint(std::uint64_t a_model, std::uint64_t a_texture) noexcept
+	{
+		return (a_model ^ (a_texture * 0x100000001B3ULL)) * 0x100000001B3ULL;
+	}
+
+	// a_named: the files a model names, its color textures then its own; a_worn: the color textures its loaded model wears. False once a
+	// runtime patcher or a pack has pointed it elsewhere. Nothing read of the loaded model (VR): it counts as wearing what it names
+	[[nodiscard]] inline bool WearsNamed(std::span<const std::uint64_t> a_named, std::span<const std::uint64_t> a_worn) noexcept
+	{
+		return std::ranges::all_of(a_worn, [a_named](std::uint64_t a_print) { return std::ranges::find(a_named, a_print) != a_named.end(); });
+	}
+
+	// a gem's measured color by what it wears: its own files' rows while it wears them, else this model in that texture, then that texture
+	[[nodiscard]] inline std::optional<Rgb> MeasuredColorWorn(std::span<const std::uint64_t> a_named, std::span<const std::uint64_t> a_worn) noexcept
+	{
+		if (WearsNamed(a_named, a_worn)) {
+			return MeasuredColorIn(a_named);
+		}
+		if (!a_named.empty()) {
+			for (const auto print : a_worn) {
+				if (const auto measured = MeasuredColorOf(WornPairPrint(a_named.back(), print))) {
+					return measured;
+				}
+			}
+		}
+		return MeasuredColorIn(a_worn);
+	}
+
 	[[nodiscard]] inline const HisColor* HisColorOf(std::uint64_t a_model) noexcept
 	{
 		const auto it = std::ranges::find(kHisColors, a_model, &HisColor::model);
@@ -867,6 +896,12 @@ namespace Gems
 		0xD0BA24B919394013ULL };
 	inline constexpr std::array<std::string_view, 3> kGameGemDiffuses{ "clutter\\soulgem\\soulgemcommon.dds",
 		"clutter\\soulgem\\soulgemgrand.dds", "clutter\\soulgem\\soulgemblack.dds" };
+
+	// the game's own gem files among a model's: a pack over them changes nothing of his set
+	[[nodiscard]] inline bool GameFilesIn(std::span<const std::uint64_t> a_prints) noexcept
+	{
+		return std::ranges::any_of(a_prints, [](std::uint64_t a_print) { return std::ranges::find(kGameGemFiles, a_print) != kGameGemFiles.end(); });
+	}
 
 	struct GameGlow
 	{

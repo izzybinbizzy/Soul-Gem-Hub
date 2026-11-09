@@ -36,7 +36,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 238;
+	constexpr int kFloor = 243;
 
 	using namespace Gems;
 
@@ -582,6 +582,17 @@ namespace
 		const std::array<std::uint64_t, 2> gemFiles{ 0, firstRow.hash };
 		CHECK(MeasuredColorIn(gemFiles) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
 		CHECK(!MeasuredColorIn(std::array<std::uint64_t, 1>{ 0 }));
+		// what a gem wears decides: its own files' rows only while it wears them, a pack's texture its own row, an unknown pack none
+		constexpr std::uint64_t            otherFile = 0x1234;
+		const std::array<std::uint64_t, 2> ownFiles{ firstRow.hash, otherFile };
+		const std::array<std::uint64_t, 1> wearsOwn{ firstRow.hash }, wearsOther{ 0x5678 };
+		CHECK(WearsNamed(ownFiles, {}) && WearsNamed(ownFiles, wearsOwn) && !WearsNamed(ownFiles, wearsOther));
+		CHECK(MeasuredColorWorn(ownFiles, wearsOwn) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
+		CHECK(!MeasuredColorWorn(ownFiles, wearsOther));
+		const std::array<std::uint64_t, 1> noFile{ 0x9 }, packFile{ firstRow.hash };
+		CHECK(MeasuredColorWorn(noFile, packFile) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
+		CHECK(WornPairPrint(1, 2) == 0x6CD000005C805ULL);
+		CHECK(GameFilesIn(kGameGemFiles) && !GameFilesIn(noFile));
 		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
 		bool rowsOk = true;
 		for (const auto& row : kHisColors) {
