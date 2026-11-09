@@ -29,13 +29,13 @@ namespace Gems
 		{ 0x08237E0D18434091ULL, 205, 168, 255 },  // skyrimrem SoulGemLesserFilled Clutter\SoulGem\SoulGemLesser01filled.nif
 		{ 0x084FCE91EA57F97AULL, 255, 208, 251 },  // immersive SoulGemPettyFilled clutter\soulgem\soulgempetty01_full.nif
 		{ 0x08C78D6969DD19F8ULL, 158, 238, 255 },  // enhanced SoulGemCommonFilled clutter\soulgem\soulgemcommon01_filled.nif
-		{ 0x0C02D853DFBA904BULL, 0, 240, 255 },    // better SoulGemLesserFilled Clutter\SoulGem\SoulGemLesser01.nif
+		{ 0x0C02D853DFBA904BULL, 141, 225, 255 },  // better SoulGemLesserFilled Clutter\SoulGem\SoulGemLesser01.nif
 		{ 0x10AA391019B79DCAULL, 76, 115, 255 },   // crystalline, crystallinespherical SoulGemBlackFilled Clutter\SoulGem\SoulGemBlack01.nif
 		{ 0x11EAF3D22CB9864DULL, 199, 154, 255 },  // skyrimrem SoulGemCommonFilled Clutter\SoulGem\SoulGemCommon01filled.nif
 		{ 0x162BE85C089F6DB1ULL, 150, 125, 255 },  // skyking SoulGemBlackFilled clutter\soulgem\soulgemblack01filled.nif
 		{ 0x17FC5097DAED6C10ULL, 172, 128, 255 },  // crystalline, crystallinespherical SoulGemCommonFilled Clutter\SoulGem\SoulGemCommon01.nif
 		{ 0x1852BA467D3D2A5CULL, 171, 126, 255 },  // ultimate SoulGemBlackFilled clutter\soulgem\soulgemblack01_full.nif
-		{ 0x191F3845DBB278EDULL, 140, 236, 255 },  // faultier SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater_full.nif
+		{ 0x191F3845DBB278EDULL, 201, 236, 255 },  // faultier SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater_full.nif
 		{ 0x24B0521077152D6BULL, 60, 255, 243 },   // rustic SoulGemGrandFilled Clutter\SoulGem\SoulGemGrand_full.nif
 		{ 0x26BECDFA54BEE7CAULL, 51, 189, 255 },   // praedystars SoulGemLesserFilled clutter\soulgem\soulgemlesser01Full.nif
 		{ 0x2AD8D594484F0984ULL, 45, 184, 255 },   // praedystars SoulGemGreaterFilled clutter\soulgem\soulgemgreater01Full.nif
@@ -50,8 +50,8 @@ namespace Gems
 		{ 0x3C00453DA1881D80ULL, 139, 154, 255 },  // rustic SoulGemCommonFilled Clutter\SoulGem\SoulGemCommon_full.nif
 		{ 0x3C60053E3CF83039ULL, 255, 217, 101 },  // nevp SoulGemPettyFilled clutter\soulgem\soulgempetty01FX.nif
 		{ 0x3DD236878BE0E844ULL, 34, 255, 191 },   // remrem SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater01filled.nif
-		{ 0x40E64FA415FA17CFULL, 208, 246, 255 },  // faultier FFRiften14SoulGem Clutter\SoulGem\SoulGemGrand01.nif
-		{ 0x40F7CB51AF04EE0CULL, 0, 229, 255 },    // better SoulGemCommonFilled Clutter\SoulGem\SoulGemCommon01.nif
+		{ 0x40E64FA415FA17CFULL, 210, 223, 255 },  // faultier FFRiften14SoulGem Clutter\SoulGem\SoulGemGrand01.nif
+		{ 0x40F7CB51AF04EE0CULL, 137, 214, 255 },  // better SoulGemCommonFilled Clutter\SoulGem\SoulGemCommon01.nif
 		{ 0x4157F520A6891A82ULL, 131, 255, 231 },  // rustic SoulGemLesserFilled Clutter\SoulGem\SoulGemLesser_full.nif
 		{ 0x42E11346D968E957ULL, 255, 121, 129 },  // crystalline, crystallinespherical SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty01.nif
 		{ 0x4433D81024B7DAF7ULL, 119, 64, 255 },   // nevp SoulGemBlackFilled clutter\soulgem\soulgemblack01FX.nif
@@ -66,31 +66,31 @@ namespace Gems
 		{ 0x688FD34CCBB41A2EULL, 138, 209, 255 },  // nevp SoulGemCommonFilled clutter\soulgem\soulgemcommon01FX.nif
 		{ 0x69378BE933197EBEULL, 2, 212, 255 },    // crystalline, crystallinespherical SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater01.nif
 		{ 0x6D08BD9CC3B4A8B2ULL, 235, 175, 255 },  // skyking SoulGemPettyFilled clutter\soulgem\soulgempetty01filled.nif
-		{ 0x707FC1C4DA9D5792ULL, 126, 155, 255 },  // faultier SoulGemBlackFilled Clutter\soulgem\SoulGemBlack_full.nif
+		{ 0x707FC1C4DA9D5792ULL, 196, 207, 255 },  // faultier SoulGemBlackFilled Clutter\soulgem\SoulGemBlack_full.nif
 		{ 0x73250E60D263B315ULL, 170, 255, 150 },  // nevp SoulGemLesserFilled clutter\soulgem\soulgemlesser01FX.nif
 		{ 0x780FA902B48DB8C7ULL, 153, 49, 255 },   // praedystars SoulGemBlackFilled clutter\soulgem\soulgemblack01Full.nif
 		{ 0x7CE002C3F52E3A37ULL, 66, 199, 255 },   // rustic SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater_full.nif
-		{ 0x7F3555FAF7E28371ULL, 189, 209, 255 },  // faultier DLC1VQ04SoulGemShards DLC01\Clutter\DLC01SoulGemBowlFull.nif
+		{ 0x7F3555FAF7E28371ULL, 199, 205, 255 },  // faultier DLC1VQ04SoulGemShards DLC01\Clutter\DLC01SoulGemBowlFull.nif
 		{ 0x820F5224F3D0C379ULL, 164, 113, 255 },  // rustic SoulGemBlackFilled Clutter\soulgem\SoulGemBlack_full.nif
 		{ 0x83B296B357133540ULL, 69, 83, 255 },    // remrem SoulGemBlackFilled Clutter\SoulGem\SoulGemBlack01filled.nif
 		{ 0x87C747657B4CD85AULL, 160, 242, 255 },  // enhanced SoulGemLesserFilled clutter\soulgem\soulgemlesser01_filled.nif
 		{ 0x89F03D6F20278DC9ULL, 172, 185, 255 },  // vayura SoulGemGrandFilled clutter\soulgem\full\soulgemgrand01.nif
 		{ 0x8B568DF94DFCE12BULL, 72, 208, 255 },   // skyrimrem SoulGemGrandFilled Clutter\SoulGem\SoulGemGrand01filled.nif
 		{ 0x8D607B1480ADF203ULL, 255, 128, 0 },    // morrowind SoulGemGrandFilled Clutter\SoulGem\SoulGemGrand01.nif
-		{ 0x8E43299D3378B748ULL, 126, 155, 255 },  // faultier SoulGemBlackFilled Clutter\soulgem\SoulGemBlack_full.nif
+		{ 0x8E43299D3378B748ULL, 140, 154, 255 },  // skykingpbr SoulGemBlackFilled clutter\soulgem\soulgemblack01filled.nif
 		{ 0x8EE44DE6FF690A05ULL, 50, 187, 255 },   // enhanced SoulGemGrandFilled clutter\soulgem\soulgemgrand01_filled.nif
 		{ 0x91E0A9E7847FB0FDULL, 46, 194, 255 },   // praedystars SoulGemPettyFilled clutter\soulgem\soulgempetty01Full.nif
 		{ 0x96D5F3B0D024D2F2ULL, 255, 225, 160 },  // nevp SoulGemGrandFilled clutter\soulgem\soulgemgrand01FX.nif
 		{ 0x98D10883B844239BULL, 255, 149, 75 },   // mlp SoulGemPettyFilled Clutter\SoulGem\full\SoulGemPetty01.nif
 		{ 0x99054DF11F184C51ULL, 43, 147, 255 },   // crystalline, crystallinespherical SoulGemGrandFilled Clutter\SoulGem\SoulGemGrand01.nif
-		{ 0x9AEF2B0884366194ULL, 191, 0, 255 },    // better SoulGemBlackFilled Clutter\SoulGem\SoulGemBlack01.nif
+		{ 0x9AEF2B0884366194ULL, 172, 131, 255 },  // better SoulGemBlackFilled Clutter\SoulGem\SoulGemBlack01.nif
 		{ 0x9D7FCEE81C35A6F2ULL, 255, 206, 5 },    // spherical SoulGemLesserFilled Clutter\SoulGem\Filled\SoulGemLesser01.nif
-		{ 0x9DCF4B6BA39D84BFULL, 189, 209, 255 },  // faultier DA01MalynsBlackSoul Clutter\SoulGem\SoulGemBlack01.nif
+		{ 0x9DCF4B6BA39D84BFULL, 199, 210, 255 },  // faultier DA01MalynsBlackSoul Clutter\SoulGem\SoulGemBlack01.nif
 		{ 0x9F2F6A1D23C5C22FULL, 97, 119, 255 },   // morrowind SoulGemLesserFilled Clutter\SoulGem\SoulGemLesser01.nif
-		{ 0xABD44FAA82B24D2FULL, 140, 236, 255 },  // faultier SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater_full.nif
-		{ 0xAE0C5D98E200CEDFULL, 182, 232, 255 },  // faultier SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty_full.nif
+		{ 0xABD44FAA82B24D2FULL, 162, 182, 255 },  // skykingpbr SoulGemGreaterFilled clutter\soulgem\soulgemgreater01filled.nif
+		{ 0xAE0C5D98E200CEDFULL, 214, 185, 255 },  // skykingpbr SoulGemPettyFilled clutter\soulgem\soulgempetty01filled.nif
 		{ 0xB0EA3AF8535358D8ULL, 235, 90, 170 },   // enhanced SoulGemBlackFilled clutter\soulgem\soulgemblack01_filled.nif
-		{ 0xB0ECEC48C8938C35ULL, 250, 208, 255 },  // better SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty01.nif
+		{ 0xB0ECEC48C8938C35ULL, 191, 197, 255 },  // better SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty01.nif
 		{ 0xB108CE169C1963A6ULL, 0, 255, 243 },    // ultimate SoulGemGreaterFilled clutter\soulgem\soulgemgreater01_full.nif
 		{ 0xB30780001CC6B7D4ULL, 179, 149, 255 },  // mlp SoulGemBlackFilled Clutter\SoulGem\full\SoulGemBlack01.nif
 		{ 0xB5EEAA46247F0B87ULL, 187, 144, 255 },  // vayura SoulGemPettyFilled clutter\soulgem\full\soulgempetty01.nif
@@ -105,7 +105,7 @@ namespace Gems
 		{ 0xC69F1569FEE2F378ULL, 182, 85, 255 },   // skyrimrem SoulGemBlackFilled Clutter\SoulGem\SoulGemBlack01filled.nif
 		{ 0xC8AB74B37073E36EULL, 255, 54, 8 },     // spherical SoulGemPettyFilled Clutter\SoulGem\Filled\SoulGemPetty01.nif
 		{ 0xCC8C7693943058BAULL, 51, 194, 255 },   // skyrimrem SoulGemGreaterFilled Clutter\SoulGem\SoulGemGreater01filled.nif
-		{ 0xCCB7B12987245D53ULL, 182, 232, 255 },  // faultier SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty_full.nif
+		{ 0xCCB7B12987245D53ULL, 190, 225, 255 },  // faultier SoulGemPettyFilled Clutter\SoulGem\SoulGemPetty_full.nif
 		{ 0xCCDD06EB0E7F5AC6ULL, 53, 199, 255 },   // remrem SoulGemGrandFilled Clutter\SoulGem\SoulGemGrand01filled.nif
 		{ 0xCCFD6905D0B80E0FULL, 113, 208, 255 },  // ultimate SoulGemCommonFilled clutter\soulgem\soulgemcommon01_full.nif
 		{ 0xCF869D2AB8519CE7ULL, 49, 211, 255 },   // enhanced SoulGemGreaterFilled clutter\soulgem\soulgemgreater01_filled.nif
