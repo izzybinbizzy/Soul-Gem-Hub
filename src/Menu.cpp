@@ -105,25 +105,25 @@ namespace Plugin
 			MenuStyle::Tip(a_tip);
 		}
 
-		// a gem mod's two-way color, offered only while that gem mod is loaded (the gem mod itself is found, never picked)
+		// a gem mod's color choice, offered only while that gem mod is loaded (the gem mod itself is found, never picked)
 		void ColorChoices()
 		{
-			// GemMath.h kColorChoiceTexts' words, here for their translation: the label, then the two sides
-			constexpr std::array<std::array<const char*, 3>, Gems::kColorChoices> kWords{ {
-				{ TR_MARK("NeV-P Extreme Crystals"), TR_MARK("Gem color"), TR_MARK("Flare glow") },
-				{ TR_MARK("Remastered Remastered black gem"), TR_MARK("Blue"), TR_MARK("Pink") },
-				{ TR_MARK("Rustic black gem"), TR_MARK("Blue"), TR_MARK("Green") },
+			// GemMath.h kColorChoiceTexts' words, here for their translation: the label, then the sides
+			constexpr std::array<std::array<const char*, 4>, Gems::kColorChoices> kWords{ {
+				{ TR_MARK("NeV-P Extreme Crystals"), TR_MARK("Gem color"), TR_MARK("Flare glow"), "" },
+				{ TR_MARK("Remastered Remastered black gem"), TR_MARK("Blue"), TR_MARK("Pink"), "" },
+				{ TR_MARK("Rustic black gem"), TR_MARK("Purple"), TR_MARK("Green"), TR_MARK("Blue") },
 			} };
 			for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
 				if (!ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1))) {
 					continue;
 				}
 				const auto                       s = SettingsNow();
-				int                              v = s.second[i] ? 1 : 0;
-				const std::array<const char*, 2> items{ T(kWords[i][1]), T(kWords[i][2]) };
+				int                              v = s.side[i];
+				const std::array<const char*, 3> items{ T(kWords[i][1]), T(kWords[i][2]), T(kWords[i][3]) };
 				SetNextItemWidth(260.0f);
-				if (Combo(T(kWords[i][0]), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.second[i]) {
-					UpdateSettings([&](Gems::Settings& a_s) { a_s.second[i] = v == 1; });
+				if (Combo(T(kWords[i][0]), &v, items.data(), Gems::ChoiceSides(Gems::kColorChoiceTexts[i])) && v != s.side[i]) {
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.side[i] = static_cast<std::uint8_t>(v); });
 					Changed();
 				}
 				MenuStyle::Tip(T("The color these gems light up in."));

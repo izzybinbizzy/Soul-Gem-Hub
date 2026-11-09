@@ -39,7 +39,7 @@ namespace Plugin
 			json choices = json::object();
 			for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
 				const auto& text = Gems::kColorChoiceTexts[i];
-				choices[std::string(text.key)] = { { "value", a_s.second[i] ? 1 : 0 }, { "wears", std::string(a_s.second[i] ? text.second : text.first) },
+				choices[std::string(text.key)] = { { "value", static_cast<int>(a_s.side[i]) }, { "wears", std::string(Gems::SideWords(text, a_s.side[i])) },
 					{ "offered", ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1)) } };
 			}
 			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "stars", a_s.stars }, { "pulse", a_s.pulse },
@@ -130,7 +130,8 @@ namespace Plugin
 				change = [v](Gems::Settings& a_s) { a_s.who = static_cast<Gems::WhoLights>(std::clamp(v, 0, 2)); };
 			} else if (const auto choice = std::ranges::find(Gems::kColorChoiceTexts, key, &Gems::ColorChoiceText::key); choice != Gems::kColorChoiceTexts.end()) {
 				const auto i = static_cast<std::size_t>(choice - Gems::kColorChoiceTexts.begin());
-				change = [v, i](Gems::Settings& a_s) { a_s.second[i] = v != 0; };
+				const int  top = Gems::ChoiceSides(*choice) - 1;
+				change = [v, i, top](Gems::Settings& a_s) { a_s.side[i] = static_cast<std::uint8_t>(std::clamp(v, 0, top)); };
 			} else if (key == "authorPick") {
 				change = [v](Gems::Settings& a_s) { a_s.authorPick = v != 0; };
 			} else if (key == "starGem") {

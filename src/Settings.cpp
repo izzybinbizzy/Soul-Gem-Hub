@@ -32,7 +32,7 @@ namespace Plugin
 		}
 		std::string second;
 		for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
-			if (s.second[i]) {
+			if (s.side[i]) {
 				second += (second.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key);
 			}
 		}

@@ -409,10 +409,10 @@ namespace Plugin
 			return true;
 		}
 
-		// the color a gem model shows: a light shape of its own first (the light ours stands in for - Animated Filled's halo); else
-		// the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that does not glow, or an effect-shader
-		// glow shell, is left out; every lit shape when none glows), a normal map in a color slot never counted - and when those
-		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
+		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that does not
+		// glow, or an effect-shader glow shell, is left out; every lit shape when none glows), a normal map in a color slot never
+		// counted, so a gem mod with no gem texture of its own follows the texture it wears. Only when no texture carries a color: the
+		// color a grey texture's shape's emissive gives it (a cloud tile), then a light shape of its own. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
 		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
 		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it; a_gem: a star's gem instead, the colored
@@ -462,9 +462,6 @@ namespace Plugin
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			if (const auto own = ownLight.Result(); own && !a_star && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
-				return it->second = own;
-			}
 			Gems::ColorSum glowing, all, body;
 			for (const auto& [name, tex] : textures) {
 				if (tex.read) {
@@ -481,8 +478,16 @@ namespace Plugin
 				read.insert_or_assign({ std::get<0>(it->first), a_star, !a_gem }, a_gem ? metal : gem);
 				return it->second = a_gem ? gem : metal;
 			}
-			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
-			it->second = glow ? glow : all.Result();
+			if (!glowing.Colorless()) {
+				return it->second = glowing.Result();
+			}
+			if (!all.Colorless()) {
+				return it->second = all.Result();
+			}
+			const auto grey = greyGlow.Result();
+			const auto own = ownLight.Result();
+			it->second = grey ? grey : own ? own :
+			                                 all.Result();
 			return it->second;
 		}
 
@@ -1602,7 +1607,7 @@ namespace Plugin
 			}
 			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
 			if (a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
-				Gems::WearGameSetColor(a_look);
+				Gems::WearGameSetColor(a_look, InverseSquare());
 			}
 			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
 			// named quest gem keeps its own color
