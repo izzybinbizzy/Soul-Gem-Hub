@@ -907,11 +907,13 @@ namespace Plugin
 		std::mutex                                       gLeftLock;
 		std::vector<std::pair<std::string, std::size_t>> gLeftByMod, gLeftByModel;  // gLeftLock
 
-		// a light of another mod taken out, with what gives it back as it was
+		// a light of another mod taken out, with what gives it back as it was. Its place in the scene is never kept: a removed place something
+		// still holds keeps lighting every floor it touched (measured). Light Placer writes a light's culled flag back itself, never the place
 		struct PutOutLight
 		{
 			RE::NiPointer<RE::NiAVObject> object;
-			RE::NiPointer<RE::BSLight>    bs;  // its place in the scene: Light Placer writes a light's culled flag back itself, never this
+			const RE::BSLight*            removed{ nullptr };  // only compared: the place this took out, its removal maybe still queued
+			bool                          dynamic{ true }, shadow{ false }, portalStrict{ false }, affectLand{ true }, affectWater{ true };
 			bool                          wasOut{ false };
 		};
 
@@ -1070,16 +1072,22 @@ namespace Plugin
 			for (const auto& other : a_gem.others) {
 				auto out = std::ranges::find(a_gem.putOut, other, &PutOutLight::object);
 				if (out == a_gem.putOut.end()) {
-					a_gem.putOut.push_back({ other, {}, other->GetAppCulled() });
+					a_gem.putOut.emplace_back().object = other;
 					out = a_gem.putOut.end() - 1;
+					out->wasOut = other->GetAppCulled();
 				}
 				other->SetAppCulled(true);
 				auto* light = netimmerse_cast<RE::NiLight*>(other.get());
 				auto* bs = light ? a_scene->GetLight(light) : nullptr;
 				// a removal of ours still queued is the same place: never removed twice, unless its owner has just put it back
-				if (bs && (a_gem.relit || bs != out->bs.get())) {
-					out->bs.reset(bs);
-					a_scene->RemoveLight(out->bs);
+				if (bs && (a_gem.relit || bs != out->removed)) {
+					out->removed = bs;
+					out->dynamic = bs->dynamic;
+					out->shadow = bs->IsShadowLight();
+					out->portalStrict = bs->portalStrict;
+					out->affectLand = bs->affectLand;
+					out->affectWater = bs->affectWater;
+					a_scene->RemoveLight(RE::NiPointer<RE::BSLight>(bs));
 				}
 			}
 			a_gem.relit = false;
@@ -1093,8 +1101,19 @@ namespace Plugin
 				auto*       light = netimmerse_cast<RE::NiLight*>(out.object.get());
 				const auto* now = light ? a_scene->GetLight(light) : nullptr;
 				// its owner may have put it back itself meanwhile (Light Placer, at the gem's placing): never a second place
-				if (out.bs && (!now || now == out.bs.get())) {
-					a_scene->AddLight(out.bs.get());
+				if (out.removed && light && !now) {
+					RE::ShadowSceneNode::LIGHT_CREATE_PARAMS params{};
+					params.dynamic = out.dynamic;
+					params.shadowLight = out.shadow;
+					params.portalStrict = out.portalStrict;
+					params.affectLand = out.affectLand;
+					params.affectWater = out.affectWater;
+					params.neverFades = true;
+					params.fov = 90.0f;
+					params.falloff = 1.0f;
+					params.nearDistance = 5.0f;
+					params.depthBias = 1.0f;
+					a_scene->AddLight(light, params);
 				}
 			}
 			a_gem.putOut.clear();
