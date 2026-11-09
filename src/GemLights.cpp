@@ -610,7 +610,12 @@ namespace Plugin
 		// the color measured off the gem's own pictures, by what it wears (GemMath.h MeasuredColorWorn)
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
-			return a_model.empty() ? std::nullopt : Gems::MeasuredColorWorn(PrintsOf(a_model), WornPrintsOf(a_model));
+			if (a_model.empty()) {
+				return std::nullopt;
+			}
+			// the game's own gems keep his set whatever pack dresses them: a row of the pack's texture never stands over it
+			const auto& named = PrintsOf(a_model);
+			return Gems::GameFilesIn(named) ? Gems::MeasuredColorIn(named) : Gems::MeasuredColorWorn(named, WornPrintsOf(a_model));
 		}
 
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads
@@ -1575,7 +1580,11 @@ namespace Plugin
 						RequestLook(true);
 					}));
 				} else if (a_event && !a_event->opening && gGiveBackWaits.load(std::memory_order_relaxed)) {
-					static_cast<void>(Later("menu closed", []() { RequestLook(false); }));
+					// the removal queue may have waited out the pause: a fresh set of looks, or one look at the close could miss it
+					static_cast<void>(Later("menu closed", []() {
+						gGiveBackLooks = kWaitLooks;
+						RequestLook(false);
+					}));
 				}
 				return RE::BSEventNotifyControl::kContinue;
 			}
