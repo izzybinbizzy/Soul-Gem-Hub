@@ -912,7 +912,8 @@ namespace Plugin
 		struct PutOutLight
 		{
 			RE::NiPointer<RE::NiAVObject> object;
-			const RE::BSLight*            removed{ nullptr };  // only compared: the place this took out, its removal maybe still queued
+			const RE::BSLight*            queued{ nullptr };  // only compared: the place this took out, while its removal may still be queued
+			bool                          tookOut{ false };
 			bool                          dynamic{ true }, shadow{ false }, portalStrict{ false }, affectLand{ true }, affectWater{ true };
 			bool                          wasOut{ false };
 		};
@@ -1080,8 +1081,12 @@ namespace Plugin
 				auto* light = netimmerse_cast<RE::NiLight*>(other.get());
 				auto* bs = light ? a_scene->GetLight(light) : nullptr;
 				// a removal of ours still queued is the same place: never removed twice, unless its owner has just put it back
-				if (bs && (a_gem.relit || bs != out->removed)) {
-					out->removed = bs;
+				if (!bs) {
+					out->queued = nullptr;  // its removal has run: a new place at the same address is not this one
+				}
+				if (bs && (a_gem.relit || bs != out->queued)) {
+					out->queued = bs;
+					out->tookOut = true;
 					out->dynamic = bs->dynamic;
 					out->shadow = bs->IsShadowLight();
 					out->portalStrict = bs->portalStrict;
@@ -1094,14 +1099,20 @@ namespace Plugin
 		}
 
 		// each as it was - only while the gem still wears that model: a light of an old model would come back as a ghost
-		void GiveBack(TrackedGem& a_gem, RE::ShadowSceneNode* a_scene)
+		// true when one could not go back yet: its removal is still queued, and a light added before that runs stays dark
+		[[nodiscard]] bool GiveBack(TrackedGem& a_gem, RE::ShadowSceneNode* a_scene)
 		{
-			for (const auto& out : a_gem.putOut) {
+			bool waiting = false;
+			std::erase_if(a_gem.putOut, [&](const PutOutLight& out) {
 				out.object->SetAppCulled(out.wasOut);
 				auto*       light = netimmerse_cast<RE::NiLight*>(out.object.get());
 				const auto* now = light ? a_scene->GetLight(light) : nullptr;
+				if (now && now == out.queued) {
+					waiting = true;
+					return false;
+				}
 				// its owner may have put it back itself meanwhile (Light Placer, at the gem's placing): never a second place
-				if (out.removed && light && !now) {
+				if (out.tookOut && light && !now) {
 					RE::ShadowSceneNode::LIGHT_CREATE_PARAMS params{};
 					params.dynamic = out.dynamic;
 					params.shadowLight = out.shadow;
@@ -1115,8 +1126,9 @@ namespace Plugin
 					params.depthBias = 1.0f;
 					a_scene->AddLight(light, params);
 				}
-			}
-			a_gem.putOut.clear();
+				return true;
+			});
+			return waiting;
 		}
 
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
@@ -1242,7 +1254,7 @@ namespace Plugin
 				if (!s.on) {
 					DropAll(scene);
 					for (auto& [id, gem] : gNearGems) {
-						GiveBack(gem, scene);
+						static_cast<void>(GiveBack(gem, scene));
 					}
 					gPutOutNow = 0;
 					std::lock_guard lock(gLeftLock);
@@ -1346,8 +1358,9 @@ namespace Plugin
 			}
 			std::size_t putOut = 0;
 			for (auto& [id, gem] : gNearGems) {
-				if (!gem.keepOut && !gem.putOut.empty()) {
-					GiveBack(gem, scene);
+				if (!gem.keepOut && !gem.putOut.empty() && GiveBack(gem, scene) && gWaitLooks > 0) {
+					--gWaitLooks;
+					again = true;
 				}
 				putOut += gem.putOut.empty() ? 0 : 1;
 			}
