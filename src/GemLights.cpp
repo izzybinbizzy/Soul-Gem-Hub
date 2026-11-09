@@ -1467,11 +1467,18 @@ namespace Plugin
 			}
 
 			// Quit to Main Menu: the world our lights hang in is gone, so they are taken out when the Main Menu opens (on the main
-			// thread; a game loading drops them too)
+			// thread; a game loading drops them too). A loading screen takes every light out of the scene's lists and ours are not put back:
+			// when it closes each is let go, and the look makes it again
 			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
 			{
-				if (a_event && a_event->opening && std::string_view(a_event->menuName.c_str()) == RE::MainMenu::MENU_NAME) {
+				const std::string_view menu = a_event ? a_event->menuName.c_str() : "";
+				if (a_event && a_event->opening && menu == RE::MainMenu::MENU_NAME) {
 					static_cast<void>(Later("main menu", []() { DropGemLights(); }));
+				} else if (a_event && !a_event->opening && menu == RE::LoadingMenu::MENU_NAME) {
+					static_cast<void>(Later("loading screen", []() {
+						DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
+						RequestLook(true);
+					}));
 				}
 				return RE::BSEventNotifyControl::kContinue;
 			}
