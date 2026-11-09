@@ -592,6 +592,9 @@ namespace
 		const std::array<std::uint64_t, 1> noFile{ 0x9 }, packFile{ firstRow.hash };
 		CHECK(MeasuredColorWorn(noFile, packFile) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
 		CHECK(WornPairPrint(1, 2) == 0x6CD000005C805ULL);
+		// a game gem under a pack takes only its model's row in that texture: none without a model, none for a pair no take measured
+		const std::array<std::uint64_t, 0> noNamed{};
+		CHECK(!MeasuredPairColor(noNamed, packFile) && !MeasuredPairColor(noFile, wearsOther));
 		CHECK(GameFilesIn(kGameGemFiles) && !GameFilesIn(noFile));
 		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
 		bool rowsOk = true;

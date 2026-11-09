@@ -607,15 +607,20 @@ namespace Plugin
 			return !a_model.empty() && !Gems::GameFilesIn(named) && !Gems::WearsNamed(named, WornPrintsOf(a_model));
 		}
 
-		// the color measured off the gem's own pictures, by what it wears (GemMath.h MeasuredColorWorn)
+		// the color measured off the gem's own pictures, by what it wears (GemMath.h MeasuredColorWorn; the game's gems MeasuredPairColor)
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
 			if (a_model.empty()) {
 				return std::nullopt;
 			}
-			// the game's own gems keep his set whatever pack dresses them: a row of the pack's texture never stands over it
+			// the game's own gems keep his set, but for a pack measured on them (Vanilla PBR's set, his order): only this model's row in that
+			// texture counts there, never a row another model's take left on the texture
 			const auto& named = PrintsOf(a_model);
-			return Gems::GameFilesIn(named) ? Gems::MeasuredColorIn(named) : Gems::MeasuredColorWorn(named, WornPrintsOf(a_model));
+			const auto& worn = WornPrintsOf(a_model);
+			if (!Gems::GameFilesIn(named)) {
+				return Gems::MeasuredColorWorn(named, worn);
+			}
+			return Gems::WearsNamed(named, worn) ? Gems::MeasuredColorIn(named) : Gems::MeasuredPairColor(named, worn);
 		}
 
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads

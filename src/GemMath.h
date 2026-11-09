@@ -827,18 +827,27 @@ namespace Gems
 		return std::ranges::all_of(a_worn, [a_named](std::uint64_t a_print) { return std::ranges::find(a_named, a_print) != a_named.end(); });
 	}
 
-	// a gem's measured color by what it wears: its own files' rows while it wears them, else this model in that texture, then that texture
-	[[nodiscard]] inline std::optional<Rgb> MeasuredColorWorn(std::span<const std::uint64_t> a_named, std::span<const std::uint64_t> a_worn) noexcept
+	// the row a take measured for this model (the last of a_named) in a texture it wears
+	[[nodiscard]] inline std::optional<Rgb> MeasuredPairColor(std::span<const std::uint64_t> a_named, std::span<const std::uint64_t> a_worn) noexcept
 	{
-		if (WearsNamed(a_named, a_worn)) {
-			return MeasuredColorIn(a_named);
-		}
 		if (!a_named.empty()) {
 			for (const auto print : a_worn) {
 				if (const auto measured = MeasuredColorOf(WornPairPrint(a_named.back(), print))) {
 					return measured;
 				}
 			}
+		}
+		return std::nullopt;
+	}
+
+	// a gem's measured color by what it wears: its own files' rows while it wears them, else this model in that texture, then that texture
+	[[nodiscard]] inline std::optional<Rgb> MeasuredColorWorn(std::span<const std::uint64_t> a_named, std::span<const std::uint64_t> a_worn) noexcept
+	{
+		if (WearsNamed(a_named, a_worn)) {
+			return MeasuredColorIn(a_named);
+		}
+		if (const auto pair = MeasuredPairColor(a_named, a_worn)) {
+			return pair;
 		}
 		return MeasuredColorIn(a_worn);
 	}
