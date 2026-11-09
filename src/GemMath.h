@@ -273,9 +273,8 @@ namespace Gems
 	// is blue, the grand the pink-purple of CS Lights for Vayura's greater and grand
 	inline constexpr std::array<Rgb, 6> kGameSetRgb{ { { 215, 176, 255 }, { 194, 137, 255 }, { 165, 81, 255 }, { 114, 125, 255 },
 		{ 220, 130, 255 }, { 156, 103, 255 } } };
-	// the same set on ENB and Vanilla, where the greater and the grand show baby blue (his call)
-	inline constexpr std::array<Rgb, 6> kGameSetPlainRgb{ { { 215, 176, 255 }, { 194, 137, 255 }, { 165, 81, 255 }, { 137, 207, 240 },
-		{ 137, 207, 240 }, { 156, 103, 255 } } };
+	// on ENB and Vanilla the game's greater and grand show baby blue (his call)
+	inline constexpr Rgb kGameBabyBlue{ 137, 207, 240 };
 	// the game's Soul Cairn bowl and chunks, worn as given: the bright pink of CS Lights for Vayura (his call)
 	inline constexpr Rgb kGameCairnRgb{ 255, 135, 210 };
 
@@ -471,6 +470,24 @@ namespace Gems
 		double                  weight{ 0.0 };
 		double                  pixels{ 0.0 };  // every pixel, colored or not, weighed by its alpha as the color is
 	};
+
+	// the color a gem model shows from what it holds: the textures of its shapes that glow, else of all its lit shapes, so a gem mod with
+	// no gem texture of its own follows the texture it wears; only where no texture carries a color, a grey texture's emissive, then a
+	// light shape of its own
+	[[nodiscard]] inline std::optional<Rgb> ModelColorOf(const ColorSum& a_glowing, const ColorSum& a_all, const ColorSum& a_greyGlow, const ColorSum& a_ownLight) noexcept
+	{
+		if (!a_glowing.Colorless()) {
+			return a_glowing.Result();
+		}
+		if (!a_all.Colorless()) {
+			return a_all.Result();
+		}
+		if (const auto grey = a_greyGlow.Result()) {
+			return grey;
+		}
+		const auto own = a_ownLight.Result();
+		return own ? own : a_all.Result();
+	}
 
 	// the families whose color is read off the gem's own model in game; Praedy's (read off its textures into the table), the named
 	// gems and the Soul Cairn keep their own rows
@@ -815,7 +832,8 @@ namespace Gems
 	// a game gem wears its size's set color, as given, whatever the texture pack dressing it; a_inverseSquare: on Community Shaders
 	inline void WearGameSetColor(Look& a_look, bool a_inverseSquare) noexcept
 	{
-		WearFixedColor(a_look, SizeRgb(a_inverseSquare ? kGameSetRgb : kGameSetPlainRgb, a_look.kind));
+		const bool baby = !a_inverseSquare && (a_look.kind == Kind::kGreater || a_look.kind == Kind::kGrand);
+		WearFixedColor(a_look, baby ? kGameBabyBlue : SizeRgb(kGameSetRgb, a_look.kind));
 		a_look.exact = true;
 	}
 

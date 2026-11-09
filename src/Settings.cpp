@@ -30,15 +30,15 @@ namespace Plugin
 				off += (off.empty() ? "" : ", ") + std::string(Gems::kGemSwitchKeys[i]);
 			}
 		}
-		std::string second;
+		std::string moved;
 		for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
 			if (s.side[i]) {
-				second += (second.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key);
+				moved += (moved.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key) + " " + std::string(Gems::SideWords(Gems::kColorChoiceTexts[i], s.side[i]));
 			}
 		}
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, light color {}, star light {}, color choices on their other side: {}, gems switched off: {} ({} line(s) read)",
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, light color {}, star light {}, color choices moved: {}, gems switched off: {} ({} line(s) read)",
 			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
-			s.starGem ? "the gem" : "the metal", second.empty() ? "none" : second, off.empty() ? "none" : off, lines);
+			s.starGem ? "the gem" : "the metal", moved.empty() ? "none" : moved, off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write

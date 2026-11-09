@@ -478,16 +478,7 @@ namespace Plugin
 				read.insert_or_assign({ std::get<0>(it->first), a_star, !a_gem }, a_gem ? metal : gem);
 				return it->second = a_gem ? gem : metal;
 			}
-			if (!glowing.Colorless()) {
-				return it->second = glowing.Result();
-			}
-			if (!all.Colorless()) {
-				return it->second = all.Result();
-			}
-			const auto grey = greyGlow.Result();
-			const auto own = ownLight.Result();
-			it->second = grey ? grey : own ? own :
-			                                 all.Result();
+			it->second = Gems::ModelColorOf(glowing, all, greyGlow, ownLight);
 			return it->second;
 		}
 
@@ -940,6 +931,9 @@ namespace Plugin
 		// a gem whose load event came before its model is looked for this many looks more, then left to the next walk
 		constexpr int kWaitLooks = 300;
 		int           gWaitLooks = 0;
+		// a light to go back whose removal is still queued: looked at this many looks more, and when a menu closes (the queue may wait out a pause)
+		int               gGiveBackLooks = 0;
+		std::atomic<bool> gGiveBackWaits{ false };
 
 		// what happened since the last look, from the event sinks (any thread): an id and nothing else is kept
 		struct Noted
@@ -1136,6 +1130,23 @@ namespace Plugin
 			return waiting;
 		}
 
+		// true when another look should try again what GiveBack could not give back yet
+		[[nodiscard]] bool GiveBackAgain(bool a_waits)
+		{
+			if (!a_waits) {
+				gGiveBackWaits.store(false, std::memory_order_relaxed);
+				return false;
+			}
+			if (!gGiveBackWaits.exchange(true, std::memory_order_relaxed)) {
+				gGiveBackLooks = kWaitLooks;
+			}
+			if (gGiveBackLooks <= 0) {
+				return false;
+			}
+			--gGiveBackLooks;
+			return true;
+		}
+
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
 		// museum shows the real Azura's Star and Black Star through dbm_dynamicdisplayscript, enabled once donated. A gem left
 		// lying about carries no such script (the College's carry defaultDisableHavokOnLoad). The same check runs on VR (Papyrus
@@ -1258,8 +1269,12 @@ namespace Plugin
 			if (!s.on || !player || !tes || !player->GetParentCell()) {
 				if (!s.on) {
 					DropAll(scene);
+					bool waits = false;
 					for (auto& [id, gem] : gNearGems) {
-						static_cast<void>(GiveBack(gem, scene));
+						waits = GiveBack(gem, scene) || waits;
+					}
+					if (GiveBackAgain(waits)) {
+						LookAgainSoon();
 					}
 					gPutOutNow = 0;
 					std::lock_guard lock(gLeftLock);
@@ -1362,13 +1377,14 @@ namespace Plugin
 				}
 			}
 			std::size_t putOut = 0;
+			bool        waits = false;
 			for (auto& [id, gem] : gNearGems) {
-				if (!gem.keepOut && !gem.putOut.empty() && GiveBack(gem, scene) && gWaitLooks > 0) {
-					--gWaitLooks;
-					again = true;
+				if (!gem.keepOut && !gem.putOut.empty()) {
+					waits = GiveBack(gem, scene) || waits;
 				}
 				putOut += gem.putOut.empty() ? 0 : 1;
 			}
+			again = GiveBackAgain(waits) || again;
 			std::erase_if(gKept, [&](auto& a_entry) {
 				if (!a_entry.second.seen) {
 					Drop(a_entry.second, scene);
@@ -1516,6 +1532,8 @@ namespace Plugin
 						DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
 						RequestLook(true);
 					}));
+				} else if (a_event && !a_event->opening && gGiveBackWaits.load(std::memory_order_relaxed)) {
+					static_cast<void>(Later("menu closed", []() { RequestLook(false); }));
 				}
 				return RE::BSEventNotifyControl::kContinue;
 			}

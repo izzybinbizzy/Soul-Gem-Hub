@@ -559,6 +559,17 @@ namespace
 		std::stringstream tooFar("ColorRusticBlack=9\nColorRemasteredBlack=-3\n");
 		CHECK(ReadSettings(tooFar, s) == 2 && s.side[2] == 2 && s.side[1] == 0);
 
+		// a model's color: its glowing textures, its other textures, a grey texture's emissive, its own light shape, in that order
+		ColorSum none, texture, grey, halo;
+		texture.Add(176, 229, 255);
+		grey.AddShaderColor(0.2f, 0.2f, 1.0f);
+		halo.AddShaderColor(0.15f, 0.45f, 1.0f);
+		CHECK(ModelColorOf(texture, texture, grey, halo) == texture.Result());
+		CHECK(ModelColorOf(none, texture, grey, halo) == texture.Result());
+		CHECK(ModelColorOf(none, none, grey, halo) == grey.Result());
+		CHECK(ModelColorOf(none, none, none, halo) == halo.Result());
+		CHECK(!ModelColorOf(none, none, none, none));
+
 		// the measured table: sorted, every row found by its fingerprint, nothing for a file it does not list
 		CHECK(std::ranges::is_sorted(kMeasuredColors, {}, &MeasuredColor::hash) && !MeasuredColorOf(0));
 		bool measuredOk = true;
