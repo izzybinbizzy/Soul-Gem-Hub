@@ -567,7 +567,6 @@ namespace Plugin
 			return std::nullopt;
 		}
 
-		// the color measured off the gem's own pictures, by the first of its files the table lists (textures first, then the model)
 		// the color textures a gem actually wears, off its loaded model: a runtime patcher or a pack can point it elsewhere than its
 		// file names. Once per model; none on VR (the loader's address is SE / AE only)
 		const std::vector<std::uint64_t>& WornPrintsOf(std::string_view a_model)
@@ -602,6 +601,7 @@ namespace Plugin
 			return !a_model.empty() && !Gems::GameFilesIn(named) && !Gems::WearsNamed(named, WornPrintsOf(a_model));
 		}
 
+		// the color measured off the gem's own pictures, by what it wears (GemMath.h MeasuredColorWorn)
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
 			return a_model.empty() ? std::nullopt : Gems::MeasuredColorWorn(PrintsOf(a_model), WornPrintsOf(a_model));
