@@ -26,6 +26,7 @@
 
 #include "Plugin.h"
 
+#include "FloorLightFix.h"
 #include "FrameCost.h"
 #include "RuntimeGuard.h"
 #include "Translation.h"
@@ -89,11 +90,18 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
-	SKSE::Init(a_skse);
+	// the trampoline holds the shared Floor Light Fix's two call hooks and one spare 14-byte jump (every other hook of ours is a vtable
+	// slot); a new call hook adds its own bytes here
+	SKSE::InitInfo info{};
+	info.trampoline = true;
+	info.trampolineSize = 14 + FloorLightFix::kTrampolineBytes;
+	SKSE::Init(a_skse, info);
 	// the wrong game: loaded but idle - a false here makes SKSE add its own "exit game?" box over the guard's
 	if (!RuntimeGuard::RightGame("Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub - VR")) {
 		return true;
 	}
+	// a light leaving the scene no longer stays on the floors it lit; the first of our mods to load hooks it, the rest stand down
+	FloorLightFix::Install();
 	// the start line is the only work here that can throw (low memory): it never leaves the plugin
 	try {
 		// the version the DLL declares (xmake.lua set_version), never a typed number

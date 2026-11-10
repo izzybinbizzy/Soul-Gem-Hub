@@ -68,6 +68,12 @@ namespace Plugin
 				Write(a_light, { kFlag | kInitialised, std::bit_cast<std::uint32_t>(std::clamp(a_cutoff, Gems::kLowestCutoff, Gems::kHighestCutoff)) });
 				a_light->GetLightRuntimeData().ambient.blue = 0.0f;
 			}
+			// the same where Community Shaders draws linear: Initialised alone, no cutoff - an ambient color there reads as flags
+			void SetOwnLinear(RE::NiLight* a_light) noexcept
+			{
+				Write(a_light, { kInitialised, 0u });
+				a_light->GetLightRuntimeData().ambient.blue = 0.0f;
+			}
 		}
 
 		// a new light for the scene, cloned from one master made once: ReLight found that a freshly made light, attached straight
@@ -409,10 +415,10 @@ namespace Plugin
 			return true;
 		}
 
-		// the color a gem model shows: a light shape of its own first (the light ours stands in for - Animated Filled's halo); else
-		// the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that does not glow, or an effect-shader
-		// glow shell, is left out; every lit shape when none glows), a normal map in a color slot never counted - and when those
-		// textures are grey (Animated's soul, a cloud tile), the color their shapes' emissive gives them. Read through the game's own
+		// the color a gem model shows: the diffuse textures of its lit shapes that glow (the gem itself - an inner shape that does not
+		// glow, or an effect-shader glow shell, is left out; every lit shape when none glows), a normal map in a color slot never
+		// counted, so a gem mod with no gem texture of its own follows the texture it wears. Only when no texture carries a color: the
+		// color a grey texture's shape's emissive gives it (a cloud tile), then a light shape of its own. Read through the game's own
 		// model loader, once per model; none on VR (the loader's address is SE / AE only) or when nothing in it carries a color -
 		// the caller keeps the table's color then. A star (a_star: by its record or its model) never takes a light shape's color - it
 		// wears its body's color (ColorSum::Body), whatever light a replacer hangs in it; a_gem: a star's gem instead, the colored
@@ -462,9 +468,6 @@ namespace Plugin
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
-			if (const auto own = ownLight.Result(); own && !a_star && Gems::StarOf(a_model) == Gems::StarModel::kNone) {
-				return it->second = own;
-			}
 			Gems::ColorSum glowing, all, body;
 			for (const auto& [name, tex] : textures) {
 				if (tex.read) {
@@ -481,8 +484,7 @@ namespace Plugin
 				read.insert_or_assign({ std::get<0>(it->first), a_star, !a_gem }, a_gem ? metal : gem);
 				return it->second = a_gem ? gem : metal;
 			}
-			const auto glow = glowing.Colorless() ? greyGlow.Result() : glowing.Result();
-			it->second = glow ? glow : all.Result();
+			it->second = Gems::ModelColorOf(glowing, all, greyGlow, ownLight);
 			return it->second;
 		}
 
@@ -571,10 +573,54 @@ namespace Plugin
 			return std::nullopt;
 		}
 
-		// the color measured off the gem's own pictures, by the first of its files the table lists (textures first, then the model)
+		// the color textures a gem actually wears, off its loaded model: a runtime patcher or a pack can point it elsewhere than its
+		// file names. Once per model; none on VR (the loader's address is SE / AE only)
+		const std::vector<std::uint64_t>& WornPrintsOf(std::string_view a_model)
+		{
+			static std::unordered_map<std::string, std::vector<std::uint64_t>> read;
+			const auto [it, added] = read.try_emplace(Gems::NormalPath(a_model));
+			if (!added || a_model.empty() || REL::Module::IsVR()) {
+				return it->second;
+			}
+			RE::NiPointer<RE::NiNode> root;
+			const std::string         path(a_model);
+			if (RE::BSModelDB::Demand(path.c_str(), root, RE::BSModelDB::DBTraits::ArgsType{}) != RE::BSResource::ErrorCode::kNone || !root) {
+				return it->second;
+			}
+			auto& worn = it->second;
+			RE::BSVisit::TraverseScenegraphGeometries(root.get(), [&worn](RE::BSGeometry* a_geometry) {
+				const char* diffuse = OwnLightShape(a_geometry) ? nullptr : DiffuseOf(a_geometry);
+				const auto  print = diffuse && *diffuse && Gems::ColorTexture(diffuse) ? TexturePrint(diffuse) : std::nullopt;
+				if (print && std::ranges::find(worn, *print) == worn.end()) {
+					worn.push_back(*print);
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+			return worn;
+		}
+
+		// a pack or a patcher dresses this gem in something else than its own files: the rows of those files do not hold for it. The game's own
+		// gems keep his set whatever dresses them
+		bool PackOnTop(std::string_view a_model)
+		{
+			const auto& named = PrintsOf(a_model);
+			return !a_model.empty() && !Gems::GameFilesIn(named) && !Gems::WearsNamed(named, WornPrintsOf(a_model));
+		}
+
+		// the color measured off the gem's own pictures, by what it wears (GemMath.h MeasuredColorWorn; the game's gems MeasuredPairColor)
 		std::optional<Gems::Rgb> MeasuredColor(std::string_view a_model)
 		{
-			return a_model.empty() ? std::nullopt : Gems::MeasuredColorIn(PrintsOf(a_model));
+			if (a_model.empty()) {
+				return std::nullopt;
+			}
+			// the game's own gems keep his set, but for a pack measured on them (Vanilla PBR's set, his order): only this model's row in that
+			// texture counts there, never a row another model's take left on the texture
+			const auto& named = PrintsOf(a_model);
+			const auto& worn = WornPrintsOf(a_model);
+			if (!Gems::GameFilesIn(named)) {
+				return Gems::MeasuredColorWorn(named, worn);
+			}
+			return Gems::WearsNamed(named, worn) ? Gems::MeasuredColorIn(named) : Gems::MeasuredPairColor(named, worn);
 		}
 
 		// a color set by eye (GemMath.h kCairnEyeColors / kStarEyeColors, through a_of), by the files SeenColor reads
@@ -907,11 +953,14 @@ namespace Plugin
 		std::mutex                                       gLeftLock;
 		std::vector<std::pair<std::string, std::size_t>> gLeftByMod, gLeftByModel;  // gLeftLock
 
-		// a light of another mod taken out, with what gives it back as it was
+		// a light of another mod taken out, with what gives it back as it was. Its place in the scene is never kept: a removed place something
+		// still holds keeps lighting every floor it touched (measured). Light Placer writes a light's culled flag back itself, never the place
 		struct PutOutLight
 		{
 			RE::NiPointer<RE::NiAVObject> object;
-			RE::NiPointer<RE::BSLight>    bs;  // its place in the scene: Light Placer writes a light's culled flag back itself, never this
+			const RE::BSLight*            queued{ nullptr };  // only compared: the place this took out, while its removal may still be queued
+			bool                          tookOut{ false };
+			bool                          dynamic{ true }, shadow{ false }, portalStrict{ false }, affectLand{ true }, affectWater{ true };
 			bool                          wasOut{ false };
 		};
 
@@ -932,6 +981,9 @@ namespace Plugin
 		// a gem whose load event came before its model is looked for this many looks more, then left to the next walk
 		constexpr int kWaitLooks = 300;
 		int           gWaitLooks = 0;
+		// a light to go back whose removal is still queued: looked at this many looks more, and when a menu closes (the queue may wait out a pause)
+		int               gGiveBackLooks = 0;
+		std::atomic<bool> gGiveBackWaits{ false };
 
 		// what happened since the last look, from the event sinks (any thread): an id and nothing else is kept
 		struct Noted
@@ -985,6 +1037,8 @@ namespace Plugin
 			}
 			if (InverseSquare()) {
 				Isl::SetOwn(a_kept.light.get(), shown.cutoff);  // after SetLightAttenuation, which writes the same words
+			} else if (LightLimitFix()) {
+				Isl::SetOwnLinear(a_kept.light.get());
 			} else {
 				data.ambient = { data.diffuse.red * kAmbient, data.diffuse.green * kAmbient, data.diffuse.blue * kAmbient };
 			}
@@ -1070,34 +1124,79 @@ namespace Plugin
 			for (const auto& other : a_gem.others) {
 				auto out = std::ranges::find(a_gem.putOut, other, &PutOutLight::object);
 				if (out == a_gem.putOut.end()) {
-					a_gem.putOut.push_back({ other, {}, other->GetAppCulled() });
+					a_gem.putOut.emplace_back().object = other;
 					out = a_gem.putOut.end() - 1;
+					out->wasOut = other->GetAppCulled();
 				}
 				other->SetAppCulled(true);
 				auto* light = netimmerse_cast<RE::NiLight*>(other.get());
 				auto* bs = light ? a_scene->GetLight(light) : nullptr;
 				// a removal of ours still queued is the same place: never removed twice, unless its owner has just put it back
-				if (bs && (a_gem.relit || bs != out->bs.get())) {
-					out->bs.reset(bs);
-					a_scene->RemoveLight(out->bs);
+				if (!bs) {
+					out->queued = nullptr;  // its removal has run: a new place at the same address is not this one
+				}
+				if (bs && (a_gem.relit || bs != out->queued)) {
+					out->queued = bs;
+					out->tookOut = true;
+					out->dynamic = bs->dynamic;
+					out->shadow = bs->IsShadowLight();
+					out->portalStrict = bs->portalStrict;
+					out->affectLand = bs->affectLand;
+					out->affectWater = bs->affectWater;
+					a_scene->RemoveLight(RE::NiPointer<RE::BSLight>(bs));
 				}
 			}
 			a_gem.relit = false;
 		}
 
 		// each as it was - only while the gem still wears that model: a light of an old model would come back as a ghost
-		void GiveBack(TrackedGem& a_gem, RE::ShadowSceneNode* a_scene)
+		// true when one could not go back yet: its removal is still queued, and a light added before that runs stays dark
+		[[nodiscard]] bool GiveBack(TrackedGem& a_gem, RE::ShadowSceneNode* a_scene)
 		{
-			for (const auto& out : a_gem.putOut) {
+			bool waiting = false;
+			std::erase_if(a_gem.putOut, [&](const PutOutLight& out) {
 				out.object->SetAppCulled(out.wasOut);
 				auto*       light = netimmerse_cast<RE::NiLight*>(out.object.get());
 				const auto* now = light ? a_scene->GetLight(light) : nullptr;
-				// its owner may have put it back itself meanwhile (Light Placer, at the gem's placing): never a second place
-				if (out.bs && (!now || now == out.bs.get())) {
-					a_scene->AddLight(out.bs.get());
+				if (now && now == out.queued) {
+					waiting = true;
+					return false;
 				}
+				// its owner may have put it back itself meanwhile (Light Placer, at the gem's placing): never a second place
+				if (out.tookOut && light && !now) {
+					RE::ShadowSceneNode::LIGHT_CREATE_PARAMS params{};
+					params.dynamic = out.dynamic;
+					params.shadowLight = out.shadow;
+					params.portalStrict = out.portalStrict;
+					params.affectLand = out.affectLand;
+					params.affectWater = out.affectWater;
+					params.neverFades = true;
+					params.fov = 90.0f;
+					params.falloff = 1.0f;
+					params.nearDistance = 5.0f;
+					params.depthBias = 1.0f;
+					a_scene->AddLight(light, params);
+				}
+				return true;
+			});
+			return waiting;
+		}
+
+		// true when another look should try again what GiveBack could not give back yet
+		[[nodiscard]] bool GiveBackAgain(bool a_waits)
+		{
+			if (!a_waits) {
+				gGiveBackWaits.store(false, std::memory_order_relaxed);
+				return false;
 			}
-			a_gem.putOut.clear();
+			if (!gGiveBackWaits.exchange(true, std::memory_order_relaxed)) {
+				gGiveBackLooks = kWaitLooks;
+			}
+			if (gGiveBackLooks <= 0) {
+				return false;
+			}
+			--gGiveBackLooks;
+			return true;
 		}
 
 		// a gem on show is never lit (displays never get lit): a placed gem wearing a display script - Legacy of the Dragonborn's
@@ -1222,8 +1321,12 @@ namespace Plugin
 			if (!s.on || !player || !tes || !player->GetParentCell()) {
 				if (!s.on) {
 					DropAll(scene);
+					bool waits = false;
 					for (auto& [id, gem] : gNearGems) {
-						GiveBack(gem, scene);
+						waits = GiveBack(gem, scene) || waits;
+					}
+					if (GiveBackAgain(waits)) {
+						LookAgainSoon();
 					}
 					gPutOutNow = 0;
 					std::lock_guard lock(gLeftLock);
@@ -1326,12 +1429,14 @@ namespace Plugin
 				}
 			}
 			std::size_t putOut = 0;
+			bool        waits = false;
 			for (auto& [id, gem] : gNearGems) {
 				if (!gem.keepOut && !gem.putOut.empty()) {
-					GiveBack(gem, scene);
+					waits = GiveBack(gem, scene) || waits;
 				}
 				putOut += gem.putOut.empty() ? 0 : 1;
 			}
+			again = GiveBackAgain(waits) || again;
 			std::erase_if(gKept, [&](auto& a_entry) {
 				if (!a_entry.second.seen) {
 					Drop(a_entry.second, scene);
@@ -1467,11 +1572,24 @@ namespace Plugin
 			}
 
 			// Quit to Main Menu: the world our lights hang in is gone, so they are taken out when the Main Menu opens (on the main
-			// thread; a game loading drops them too)
+			// thread; a game loading drops them too). A loading screen takes every light out of the scene's lists and ours are not put back:
+			// when it closes each is let go, and the look makes it again
 			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
 			{
-				if (a_event && a_event->opening && std::string_view(a_event->menuName.c_str()) == RE::MainMenu::MENU_NAME) {
+				const std::string_view menu = a_event ? a_event->menuName.c_str() : "";
+				if (a_event && a_event->opening && menu == RE::MainMenu::MENU_NAME) {
 					static_cast<void>(Later("main menu", []() { DropGemLights(); }));
+				} else if (a_event && !a_event->opening && menu == RE::LoadingMenu::MENU_NAME) {
+					static_cast<void>(Later("loading screen", []() {
+						DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
+						RequestLook(true);
+					}));
+				} else if (a_event && !a_event->opening && gGiveBackWaits.load(std::memory_order_relaxed)) {
+					// the removal queue may have waited out the pause: a fresh set of looks, or one look at the close could miss it
+					static_cast<void>(Later("menu closed", []() {
+						gGiveBackLooks = kWaitLooks;
+						RequestLook(false);
+					}));
 				}
 				return RE::BSEventNotifyControl::kContinue;
 			}
@@ -1535,7 +1653,8 @@ namespace Plugin
 			if (BlockedBy(a_model)) {
 				return;
 			}
-			if (!a_star && (!a_named || a_look.family == Gems::Family::kNamed)) {
+			const bool packed = !a_star && PackOnTop(a_model);
+			if (!a_star && !packed && (!a_named || a_look.family == Gems::Family::kNamed)) {
 				SetGlow(a_look, GlowOf(a_model));
 				if (!a_look.glow && a_look.family == Gems::Family::kGame) {
 					a_look.glow = GameGlow(a_model);
@@ -1545,13 +1664,13 @@ namespace Plugin
 				// the color the game shows for this gem, measured off its own pictures: its light wears it, not another glow
 				Gems::WearFixedColor(a_look, *measured);
 				++fromPicture;
-			} else if (const auto seen = a_star ? std::nullopt : SeenColor(a_model, a_named)) {
+			} else if (const auto seen = a_star || packed ? std::nullopt : SeenColor(a_model, a_named)) {
 				a_look.rgb = *seen;
 				++fromPicture;
 			} else if (const auto eye = a_star ? EyeColor(a_model, Gems::StarEyeColorOf) : std::nullopt) {
 				a_look.rgb = *eye;
 				++fromPicture;
-			} else if (Gems::ColorFromModel(a_look.family)) {
+			} else if (Gems::ColorFromModel(a_look.family) || packed) {
 				if (const auto own = ModelColor(a_model, a_star)) {
 					a_look.rgb = Gems::ShownColor(*own, a_look.kind);
 					++fromModel;
@@ -1562,13 +1681,13 @@ namespace Plugin
 				return;
 			}
 			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
-			if (a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
-				Gems::WearGameSetColor(a_look);
+			if (!packed && a_look.family == Gems::Family::kGame && !MeasuredColor(a_model) && GameGlow(a_model)) {
+				Gems::WearGameSetColor(a_look, LightLimitFix());
 			}
 			// his color calls by the gem's own model (its fingerprint is the last of its files) stand over everything read above; a
 			// named quest gem keeps its own color
 			const auto& prints = PrintsOf(a_model);
-			if (const auto* his = a_named || prints.empty() ? nullptr : Gems::HisColorOf(prints.back())) {
+			if (const auto* his = a_named || prints.empty() || packed ? nullptr : Gems::HisColorOf(prints.back())) {
 				Gems::ApplyHisColor(a_look, *his);
 				choicesFound[static_cast<std::size_t>(his->choice)] = true;
 			}

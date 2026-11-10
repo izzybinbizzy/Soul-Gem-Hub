@@ -4,7 +4,8 @@
 //
 // The SKSE Menu Framework page - every setting this mod has (his rule: settings in the SKSE menu only). One page: what was
 // found (the lighting, the gem looks, the gems another light mod lights too, the gem mods waiting on their authors), then the
-// lights' switch, Brightness, Reach, Stars, the soft pulse, a switch per gem, the color choices, Light color and whose light a gem wears. A change is saved and
+// lights' switch, Brightness, Reach, the soft pulse, a switch per gem (the stars' strength and color beside theirs), the color choices, Light color and
+// whose light a gem wears. A change is saved and
 // applied on the game's main thread when it is let go.
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -105,25 +106,25 @@ namespace Plugin
 			MenuStyle::Tip(a_tip);
 		}
 
-		// a gem mod's two-way color, offered only while that gem mod is loaded (the gem mod itself is found, never picked)
+		// a gem mod's color choice, offered only while that gem mod is loaded (the gem mod itself is found, never picked)
 		void ColorChoices()
 		{
-			// GemMath.h kColorChoiceTexts' words, here for their translation: the label, then the two sides
-			constexpr std::array<std::array<const char*, 3>, Gems::kColorChoices> kWords{ {
-				{ TR_MARK("NeV-P Extreme Crystals"), TR_MARK("Gem color"), TR_MARK("Flare glow") },
-				{ TR_MARK("Remastered Remastered black gem"), TR_MARK("Blue"), TR_MARK("Pink") },
-				{ TR_MARK("Rustic black gem"), TR_MARK("Blue"), TR_MARK("Green") },
+			// GemMath.h kColorChoiceTexts' words, here for their translation: the label, then the sides
+			constexpr std::array<std::array<const char*, 4>, Gems::kColorChoices> kWords{ {
+				{ TR_MARK("NeV-P Extreme Crystals"), TR_MARK("Gem color"), TR_MARK("Flare glow"), "" },
+				{ TR_MARK("Remastered Remastered black gem"), TR_MARK("Blue"), TR_MARK("Pink"), "" },
+				{ TR_MARK("Rustic black gem"), TR_MARK("Purple"), TR_MARK("Green"), TR_MARK("Blue") },
 			} };
 			for (std::size_t i = 0; i < Gems::kColorChoices; ++i) {
 				if (!ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1))) {
 					continue;
 				}
 				const auto                       s = SettingsNow();
-				int                              v = s.second[i] ? 1 : 0;
-				const std::array<const char*, 2> items{ T(kWords[i][1]), T(kWords[i][2]) };
+				int                              v = s.side[i];
+				const std::array<const char*, 3> items{ T(kWords[i][1]), T(kWords[i][2]), T(kWords[i][3]) };
 				SetNextItemWidth(260.0f);
-				if (Combo(T(kWords[i][0]), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.second[i]) {
-					UpdateSettings([&](Gems::Settings& a_s) { a_s.second[i] = v == 1; });
+				if (Combo(T(kWords[i][0]), &v, items.data(), Gems::ChoiceSides(Gems::kColorChoiceTexts[i])) && v != s.side[i]) {
+					UpdateSettings([&](Gems::Settings& a_s) { a_s.side[i] = static_cast<std::uint8_t>(v); });
 					Changed();
 				}
 				MenuStyle::Tip(T("The color these gems light up in."));
@@ -177,14 +178,28 @@ namespace Plugin
 				"file or its own model's particle light lights keeps that light, each mod named at the top; this mod lights only the rest."));
 		}
 
-		// "Which Gems Glow": a light switch per gem, in GemSwitch order
+		// the next control on the same line, or on the next one when the window is too narrow for it (Dynamic Wards' way)
+		void BesideIfRoom(float a_width)
+		{
+			SameLine(0.0f, 24.0f);
+			if (GetContentRegionAvail().x < a_width) {
+				NewLine();
+			}
+		}
+
+		// "Which Gems Glow": a light switch per gem, in GemSwitch order; the two stars share a line with their own controls beside them
 		void GemSwitches()
 		{
 			constexpr std::array<const char*, Gems::kGemSwitches> kLabels{ TR_MARK("Petty soul gems"), TR_MARK("Lesser soul gems"),
 				TR_MARK("Common soul gems"), TR_MARK("Greater soul gems"), TR_MARK("Grand soul gems"), TR_MARK("Black soul gems"),
 				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems") };
+			constexpr auto                                        kAzura = static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar);
+			constexpr auto                                        kBlack = static_cast<std::size_t>(Gems::GemSwitch::kBlackStar);
 			Header(Icon::kGem, T("Which Gems Glow"));
 			for (std::size_t i = 0; i < kLabels.size(); ++i) {
+				if (i == kBlack) {
+					SameLine(0.0f, 24.0f);
+				}
 				bool       v = SettingsNow().gems[i];
 				const bool changed = Checkbox(T(kLabels[i]), &v);
 				// a hover tip belongs to the item just drawn, so each switch carries its own
@@ -192,6 +207,17 @@ namespace Plugin
 				if (changed) {
 					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
 					Changed();
+				}
+				if (i != kBlack) {
+					continue;
+				}
+				// the stars' strength, and their color while one is lit, beside their switches (his rule: a setting's controls beside it)
+				BesideIfRoom(260.0f + CalcTextSize(T("Stars")).x);
+				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
+					T("How bright Azura's Star and the Black Star are and how far their light reaches, on top of Brightness and Reach. Turn it down when their light drowns the gems near them."));
+				if (const auto s = SettingsNow(); s.gems[kAzura] || s.gems[kBlack]) {
+					BesideIfRoom(260.0f + CalcTextSize(T("Star light")).x);
+					StarLight();
 				}
 			}
 		}
@@ -260,20 +286,19 @@ namespace Plugin
 				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 					T("How bright the gems' light is. 100% is as built."));
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
-				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
-					T("How bright Azura's Star and the Black Star are and how far their light reaches, on top of Brightness and Reach. Turn it down when their light drowns the gems near them."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemSwitches();
-				Header(Icon::kGem, T("Colors"));
-				ColorChoices();
-				// shown only while a star is lit
-				if (const auto s = SettingsNow(); s.gems[static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar)] ||
-												  s.gems[static_cast<std::size_t>(Gems::GemSwitch::kBlackStar)]) {
-					StarLight();
+				// shown only while a gem mod with a color choice is loaded, or where Light color's two choices light a gem differently
+				bool choices = false;
+				for (std::size_t i = 1; i <= Gems::kColorChoices; ++i) {
+					choices = choices || ColorChoiceFound(static_cast<Gems::ColorChoice>(i));
 				}
-				// shown only where its two choices light a gem differently
-				if (LightColorMatters()) {
-					LightColor();
+				if (choices || LightColorMatters()) {
+					Header(Icon::kGem, T("Colors"));
+					ColorChoices();
+					if (LightColorMatters()) {
+						LightColor();
+					}
 				}
 				Header(Icon::kGem, T("Whose Light"));
 				WhoLightsChoice();

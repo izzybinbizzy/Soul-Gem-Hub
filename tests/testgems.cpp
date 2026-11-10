@@ -5,6 +5,7 @@
 // undefined-behavior checkers. The run fails when a check fails, AND when fewer checks ran than kFloor (a test that stopped
 // part way proves nothing - Dynamic Wards' and Illuminated's tests count theirs the same way).
 
+#include "FloorLightChecks.h"
 #include "GemMath.h"
 
 #include <algorithm>
@@ -36,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 238;
+	constexpr int kFloor = 243 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -267,8 +268,9 @@ namespace
 			Look chosen = look;
 			ApplyHisColor(chosen, *HisColorOf(0xEF44C3E71611A925ULL));
 			Settings metal, gemChoice, other, otherAuthor;
+			metal.starGem = false;
 			gemChoice.starGem = true;
-			other.second.fill(true);
+			other.side.fill(1);
 			otherAuthor = other;
 			otherAuthor.authorPick = true;
 			for (const auto* s : { &metal, &gemChoice, &other, &otherAuthor }) {
@@ -343,11 +345,19 @@ namespace
 		CHECK(bowl->rgb == kGameCairnRgb);
 		// the game's gems: only the greater is blue, each size's color worn as given; a star past the six sizes takes the last
 		Look gameGreater = GameLook(Kind::kGreater, false);
-		WearGameSetColor(gameGreater);
+		WearGameSetColor(gameGreater, true);
 		Look gameGrand = GameLook(Kind::kGrand, false);
 		gameGrand.glow = Rgb{ 9, 9, 9 };
-		WearGameSetColor(gameGrand);
+		WearGameSetColor(gameGrand, true);
 		CHECK((gameGreater.rgb == Rgb{ 114, 125, 255 }) && (gameGrand.rgb == Rgb{ 220, 130, 255 }) && gameGrand.exact && !gameGrand.glow);
+		// on ENB and Vanilla the greater and the grand are baby blue, the other sizes as on Community Shaders
+		Look plainGreater = GameLook(Kind::kGreater, false), plainGrand = GameLook(Kind::kGrand, false), plainPetty = GameLook(Kind::kPetty, false);
+		Look plainBlack = GameLook(Kind::kBlack, true);
+		for (auto* plain : { &plainGreater, &plainGrand, &plainPetty, &plainBlack }) {
+			WearGameSetColor(*plain, false);
+		}
+		CHECK((plainGreater.rgb == Rgb{ 137, 207, 240 }) && (plainGrand.rgb == Rgb{ 137, 207, 240 }) && plainGrand.exact);
+		CHECK(plainPetty.rgb == SizeRgb(kGameSetRgb, Kind::kPetty) && plainBlack.rgb == SizeRgb(kGameSetRgb, Kind::kBlack));
 		CHECK(ColorAt(gameGrand, Settings{}) == gameGrand.rgb);
 		// Morrowind-Style's grand model: bright orange, worn as given
 		Look mwGrand = GameLook(Kind::kGrand, false);
@@ -369,13 +379,14 @@ namespace
 		CHECK((StarEyeColorOf(0xE27812D9AE3242A1ULL) == Rgb{ 234, 240, 255 }));
 		CHECK((Richer(*StarEyeColorOf(0xE27812D9AE3242A1ULL))[2] == 255 && Richer(*StarEyeColorOf(0xE27812D9AE3242A1ULL))[0] < 210));
 		// the colors set by eye on his gem color page are laid onto the generated tables: a regen that loses one fails here
-		constexpr std::array<std::pair<std::uint64_t, Rgb>, 9> byEye{ { { 0xB0ECEC48C8938C35ULL, { 169, 107, 255 } },
-			{ 0xFEE719CDD30DD0A9ULL, { 169, 107, 255 } }, { 0x40F7CB51AF04EE0CULL, { 98, 213, 255 } },
-			{ 0x7BC926C7EA564A46ULL, { 11, 149, 255 } }, { 0x792501A608331F18ULL, { 72, 167, 255 } },
-			{ 0x28C1994DF9E895DBULL, { 106, 201, 255 } }, { 0x8F446D95A1428120ULL, { 80, 206, 255 } },
-			{ 0x5D22ACF84C7D75B6ULL, { 102, 213, 255 } }, { 0x5AC6A6D3E9FFDBD5ULL, { 44, 202, 255 } } } };
+		constexpr std::array<std::pair<std::uint64_t, Rgb>, 3> byEye{ { { 0xB0ECEC48C8938C35ULL, { 169, 107, 255 } },
+			{ 0xFEE719CDD30DD0A9ULL, { 169, 107, 255 } }, { 0x40F7CB51AF04EE0CULL, { 98, 213, 255 } } } };
 		for (const auto& [print, rgb] : byEye) {
 			CHECK(SeenColorOf(print) == rgb);
+		}
+		// Animated Filled ships no gem texture: no row keyed to its own models, its light follows the texture it wears
+		for (const auto print : { 0x7BC926C7EA564A46ULL, 0x792501A608331F18ULL, 0x28C1994DF9E895DBULL, 0x8F446D95A1428120ULL, 0x5D22ACF84C7D75B6ULL, 0x5AC6A6D3E9FFDBD5ULL }) {
+			CHECK(!SeenColorOf(print));
 		}
 		// Better's common texture went teal; its Soul Cairn pieces keep their blue
 		CHECK((CairnEyeColorOf(0x40F7CB51AF04EE0CULL) == Rgb{ 98, 169, 255 }));
@@ -450,7 +461,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 8 + kGemSwitches + kColorChoices);
+		CHECK(ReadSettings(again, back) == 9 + kGemSwitches + kColorChoices);
 		CHECK(out.str().find("WhoLights=2\n") != std::string::npos && out.str().find("Theirs") == std::string::npos && out.str().find("Defaults") == std::string::npos);
 		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
@@ -537,12 +548,28 @@ namespace
 	{
 		Settings          s;
 		std::stringstream old("GemMod=praedy\nGemMod=3\n");
-		CHECK(ReadSettings(old, s) == 0 && s.second == (std::array<bool, kColorChoices>{}));
+		CHECK(ReadSettings(old, s) == 0 && s.side == (std::array<std::uint8_t, kColorChoices>{}));
 		std::stringstream in("ColorNeVP=1\ncolorrusticblack=yes\n");
-		CHECK(ReadSettings(in, s) == 2 && s.second[0] && !s.second[1] && s.second[2]);
+		CHECK(ReadSettings(in, s) == 2 && s.side[0] == 1 && s.side[1] == 0 && s.side[2] == 1);
 		std::stringstream out;
 		WriteSettings(s, out);
 		CHECK(out.str().find("ColorNeVP=1\nColorRemasteredBlack=0\nColorRusticBlack=1\n") != std::string::npos);
+		// a choice holds only the sides it has
+		std::stringstream sides("ColorNeVP=2\nColorRusticBlack=2\n");
+		CHECK(ReadSettings(sides, s) == 2 && s.side[0] == 1 && s.side[2] == 2);
+		std::stringstream tooFar("ColorRusticBlack=9\nColorRemasteredBlack=-3\n");
+		CHECK(ReadSettings(tooFar, s) == 2 && s.side[2] == 2 && s.side[1] == 0);
+
+		// a model's color: its glowing textures, its other textures, a grey texture's emissive, its own light shape, in that order
+		ColorSum none, texture, grey, halo;
+		texture.Add(176, 229, 255);
+		grey.AddShaderColor(0.2f, 0.2f, 1.0f);
+		halo.AddShaderColor(0.15f, 0.45f, 1.0f);
+		CHECK(ModelColorOf(texture, texture, grey, halo) == texture.Result());
+		CHECK(ModelColorOf(none, texture, grey, halo) == texture.Result());
+		CHECK(ModelColorOf(none, none, grey, halo) == grey.Result());
+		CHECK(ModelColorOf(none, none, none, halo) == halo.Result());
+		CHECK(!ModelColorOf(none, none, none, none));
 
 		// the measured table: sorted, every row found by its fingerprint, nothing for a file it does not list
 		CHECK(std::ranges::is_sorted(kMeasuredColors, {}, &MeasuredColor::hash) && !MeasuredColorOf(0));
@@ -551,11 +578,25 @@ namespace
 			measuredOk = measuredOk && MeasuredColorOf(row.hash) == (Rgb{ row.r, row.g, row.b });
 		}
 		CHECK(measuredOk);
-		// a file both tables list (Animated Filled's petty gem): the measured color is what a plain gem wears, the seen row stays for
-		// the named quest gems and the fallback; the first listed file of a gem decides
-		const std::array<std::uint64_t, 2> pettyFiles{ 0x7BC926C7EA564A46ULL, 0 };
-		CHECK(MeasuredColorIn(pettyFiles) == (Rgb{ 217, 242, 255 }) && SeenColorOf(0x7BC926C7EA564A46ULL) == (Rgb{ 11, 149, 255 }));
+		// the first listed file of a gem decides
+		const auto&                        firstRow = kMeasuredColors.front();
+		const std::array<std::uint64_t, 2> gemFiles{ 0, firstRow.hash };
+		CHECK(MeasuredColorIn(gemFiles) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
 		CHECK(!MeasuredColorIn(std::array<std::uint64_t, 1>{ 0 }));
+		// what a gem wears decides: its own files' rows only while it wears them, a pack's texture its own row, an unknown pack none
+		constexpr std::uint64_t            otherFile = 0x1234;
+		const std::array<std::uint64_t, 2> ownFiles{ firstRow.hash, otherFile };
+		const std::array<std::uint64_t, 1> wearsOwn{ firstRow.hash }, wearsOther{ 0x5678 };
+		CHECK(WearsNamed(ownFiles, {}) && WearsNamed(ownFiles, wearsOwn) && !WearsNamed(ownFiles, wearsOther));
+		CHECK(MeasuredColorWorn(ownFiles, wearsOwn) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
+		CHECK(!MeasuredColorWorn(ownFiles, wearsOther));
+		const std::array<std::uint64_t, 1> noFile{ 0x9 }, packFile{ firstRow.hash };
+		CHECK(MeasuredColorWorn(noFile, packFile) == (Rgb{ firstRow.r, firstRow.g, firstRow.b }));
+		CHECK(WornPairPrint(1, 2) == 0x6CD000005C805ULL);
+		// a game gem under a pack takes only its model's row in that texture: none without a model, none for a pair no take measured
+		const std::array<std::uint64_t, 0> noNamed{};
+		CHECK(!MeasuredPairColor(noNamed, packFile) && !MeasuredPairColor(noFile, wearsOther));
+		CHECK(GameFilesIn(kGameGemFiles) && !GameFilesIn(noFile));
 		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
 		bool rowsOk = true;
 		for (const auto& row : kHisColors) {
@@ -569,7 +610,7 @@ namespace
 		mlp.glow = Rgb{ 9, 9, 9 };
 		ApplyHisColor(mlp, *HisColorOf(0x0FA73CA86BC804F3ULL));
 		Settings d, second;
-		second.second.fill(true);
+		second.side.fill(1);
 		CHECK(FoundColor(mlp, d) == (Rgb{ 255, 224, 109 }) && FoundColor(mlp, second) == (Rgb{ 255, 224, 109 }) && !mlp.glow);
 		Look nevp = GameLook(Kind::kGrand, false);
 		nevp.rgb = found;
@@ -583,8 +624,20 @@ namespace
 		CHECK(FoundColor(remrem, d) == (Rgb{ 69, 83, 255 }) && FoundColor(remrem, second) == found);
 		// one choice moves only its own gem mod's gems
 		Settings onlyRustic;
-		onlyRustic.second[2] = true;
+		onlyRustic.side[2] = 1;
 		CHECK(FoundColor(remrem, onlyRustic) == (Rgb{ 69, 83, 255 }) && FoundColor(nevp, onlyRustic) == (Rgb{ 255, 225, 160 }));
+		// Rustic's black gem: purple by default, then green, then blue
+		Look rustic = GameLook(Kind::kBlack, true);
+		ApplyHisColor(rustic, *HisColorOf(0xEF44C3E71611A925ULL));
+		Settings rusticBlue;
+		rusticBlue.side[2] = 2;
+		CHECK(FoundColor(rustic, d) == (Rgb{ 164, 113, 255 }) && FoundColor(rustic, onlyRustic) == (Rgb{ 119, 255, 176 }) && FoundColor(rustic, rusticBlue) == (Rgb{ 90, 158, 255 }));
+		// a side a gem mod does not have wears its second; another choice's side leaves it alone
+		Settings remremPastEnd;
+		remremPastEnd.side[1] = 2;
+		CHECK(FoundColor(remrem, remremPastEnd) == found && FoundColor(remrem, rusticBlue) == (Rgb{ 69, 83, 255 }));
+		CHECK(ChoiceSides(kColorChoiceTexts[2]) == 3 && ChoiceSides(kColorChoiceTexts[0]) == 2);
+		CHECK(SideWords(kColorChoiceTexts[2], 0) == "Purple" && SideWords(kColorChoiceTexts[2], 1) == "Green" && SideWords(kColorChoiceTexts[2], 2) == "Blue");
 		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
 		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
 			  StarOf("clutter\\soulgem\\soulgemgrand01.nif") == StarModel::kNone && StarOf("decor\\clutter\\daedric\\azurastar.nif") == StarModel::kNone);
@@ -595,12 +648,15 @@ namespace
 	void StarLightPick()
 	{
 		Settings s;
-		CHECK(!s.starGem);
-		std::stringstream in("StarGem=1\n");
-		CHECK(ReadSettings(in, s) == 1 && s.starGem);
+		CHECK(s.starGem);
+		// a file that only holds the old default moves to the gem once; a player's own pick stays
+		std::stringstream oldFile("StarGem=0\n");
+		CHECK(ReadSettings(oldFile, s) == 1 && s.starGem);
+		std::stringstream in("StarGem=0\nStarPicked=1\n");
+		CHECK(ReadSettings(in, s) == 2 && !s.starGem);
 		std::stringstream out;
 		WriteSettings(s, out);
-		CHECK(out.str().find("StarGem=1\n") != std::string::npos);
+		CHECK(out.str().find("StarGem=0\nStarPicked=1\n") != std::string::npos);
 
 		Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 		azura.gemRgb = StarGemColor(Rgb{ 157, 255, 252 }, false);
@@ -608,6 +664,7 @@ namespace
 		black.blackStar = true;
 		black.gemRgb = StarGemColor(Rgb{ 192, 203, 255 }, true);
 		Settings metal, gem;
+		metal.starGem = false;
 		gem.starGem = true;
 		CHECK(FoundColor(azura, metal) == kAzurasStarRgb && FoundColor(azura, gem) == (Rgb{ 157, 255, 252 }));
 		CHECK(FoundColor(black, metal) == kBlackStarRgb && FoundColor(black, gem) == kBlackStarGemRgb);
@@ -759,6 +816,7 @@ int main()
 	LightColorPick();
 	StarLightPick();
 	Permits();
+	FloorLightChecks::Run(Check);
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {
 		std::printf("FAIL: only %d checks ran, under the floor of %d - a test stopped part way\n", gPassed, kFloor);
