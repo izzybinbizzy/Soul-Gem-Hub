@@ -90,10 +90,11 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
-	// the trampoline holds only the shared Floor Light Fix's two call hooks; every other hook of ours is a vtable slot
+	// the trampoline holds the shared Floor Light Fix's two call hooks and one spare 14-byte jump (every other hook of ours is a vtable
+	// slot); a new call hook adds its own bytes here
 	SKSE::InitInfo info{};
 	info.trampoline = true;
-	info.trampolineSize = FloorLightFix::kTrampolineBytes;
+	info.trampolineSize = 14 + FloorLightFix::kTrampolineBytes;
 	SKSE::Init(a_skse, info);
 	// the wrong game: loaded but idle - a false here makes SKSE add its own "exit game?" box over the guard's
 	if (!RuntimeGuard::RightGame("Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub - VR")) {
