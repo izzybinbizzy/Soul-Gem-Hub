@@ -5,6 +5,7 @@
 // undefined-behavior checkers. The run fails when a check fails, AND when fewer checks ran than kFloor (a test that stopped
 // part way proves nothing - Dynamic Wards' and Illuminated's tests count theirs the same way).
 
+#include "FloorLightChecks.h"
 #include "GemMath.h"
 
 #include <algorithm>
@@ -36,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 243;
+	constexpr int kFloor = 243 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -812,6 +813,7 @@ int main()
 	LightColorPick();
 	StarLightPick();
 	Permits();
+	FloorLightChecks::Run(Check);
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {
 		std::printf("FAIL: only %d checks ran, under the floor of %d - a test stopped part way\n", gPassed, kFloor);
