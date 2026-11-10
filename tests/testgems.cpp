@@ -632,8 +632,11 @@ namespace
 		Settings rusticBlue;
 		rusticBlue.side[2] = 2;
 		CHECK(FoundColor(rustic, d) == (Rgb{ 164, 113, 255 }) && FoundColor(rustic, onlyRustic) == (Rgb{ 119, 255, 176 }) && FoundColor(rustic, rusticBlue) == (Rgb{ 90, 158, 255 }));
-		// a side a gem mod does not have wears its second
-		CHECK(FoundColor(remrem, rusticBlue) == (Rgb{ 69, 83, 255 }) && ChoiceSides(kColorChoiceTexts[2]) == 3 && ChoiceSides(kColorChoiceTexts[0]) == 2);
+		// a side a gem mod does not have wears its second; another choice's side leaves it alone
+		Settings remremPastEnd;
+		remremPastEnd.side[1] = 2;
+		CHECK(FoundColor(remrem, remremPastEnd) == found && FoundColor(remrem, rusticBlue) == (Rgb{ 69, 83, 255 }));
+		CHECK(ChoiceSides(kColorChoiceTexts[2]) == 3 && ChoiceSides(kColorChoiceTexts[0]) == 2);
 		CHECK(SideWords(kColorChoiceTexts[2], 0) == "Purple" && SideWords(kColorChoiceTexts[2], 1) == "Green" && SideWords(kColorChoiceTexts[2], 2) == "Blue");
 		// a gem mod's own star records are stars by the model they wear (Andrealletius Soul Gem Overhaul's star variants)
 		CHECK(StarOf("Clutter\\Daedric\\AzuraStarLite.nif") == StarModel::kAzura && StarOf("meshes/clutter/daedric/azurastar.nif") == StarModel::kBlack &&
