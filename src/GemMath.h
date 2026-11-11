@@ -1195,7 +1195,8 @@ namespace Gems
 	}
 
 	// a gem's strength; a_same ("Same reach"): its own brightness at a common gem's reach - a light's reach goes with its fade over its
-	// cutoff, so that ratio is the common gem's. The two stars keep their own, under the Stars slider
+	// cutoff, so that ratio is the common gem's (past Community Shaders' highest cutoff ShownFor dims the fade instead). The two stars keep
+	// their own, under the Stars slider
 	[[nodiscard]] inline Strength StrengthAt(Kind a_kind, bool a_same) noexcept
 	{
 		const auto& own = kStrength[static_cast<std::size_t>(a_kind)];
@@ -1232,7 +1233,8 @@ namespace Gems
 
 	// the file's text over a_out's values (the defaults, for a fresh table); keys in any case; a note after a value (; or #) is
 	// left out; a value that does not read keeps the one it had; every number clamped to its slider. Returns the key lines read.
-	inline std::size_t ReadSettings(std::istream& a_in, Settings& a_out)
+	// a_whoMoved: set when the file held only the old default of whose light, which is not taken
+	inline std::size_t ReadSettings(std::istream& a_in, Settings& a_out, bool* a_whoMoved = nullptr)
 	{
 		std::size_t lines = 0;
 		std::string line;
@@ -1309,6 +1311,8 @@ namespace Gems
 		}
 		if (who && (whoPicked || *who != WhoLights::kOthers)) {
 			a_out.who = *who;
+		} else if (who && a_whoMoved) {
+			*a_whoMoved = true;
 		}
 		return lines;
 	}

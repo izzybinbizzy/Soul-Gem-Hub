@@ -37,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 276 + FloorLightChecks::kCount;
+	constexpr int kFloor = 277 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -478,8 +478,10 @@ namespace
 		// 1.2's default, saved in a file that says nothing more, moves to ours once; a choice made since, or the game's own, stays
 		std::stringstream oldDefault("WhoLights=2\n"), picked("WhoLights=2\nWhoPicked=1\n"), pickedFirst("WhoPicked=1\nWhoLights=2\n"), gameLook("WhoLights=1\n");
 		Settings          od, pk, pf, gl;
-		CHECK(ReadSettings(oldDefault, od) == 1 && od.who == WhoLights::kOurs);
-		CHECK(ReadSettings(picked, pk) == 2 && pk.who == WhoLights::kOthers);
+		bool              odMoved = false, pkMoved = false;
+		CHECK(ReadSettings(oldDefault, od, &odMoved) == 1 && od.who == WhoLights::kOurs);
+		CHECK(ReadSettings(picked, pk, &pkMoved) == 2 && pk.who == WhoLights::kOthers);
+		CHECK(odMoved && !pkMoved);
 		CHECK(ReadSettings(pickedFirst, pf) == 2 && pf.who == WhoLights::kOthers);
 		CHECK(ReadSettings(gameLook, gl) == 1 && gl.who == WhoLights::kGame);
 		std::stringstream movedOut;

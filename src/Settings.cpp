@@ -21,7 +21,11 @@ namespace Plugin
 	{
 		std::ifstream  in(kPath);
 		Gems::Settings read;
-		const auto     lines = Gems::ReadSettings(in, read);
+		bool           whoMoved = false;
+		const auto     lines = Gems::ReadSettings(in, read, &whoMoved);
+		if (whoMoved) {
+			SKSE::log::info("settings: the file held the old default of whose light (another mod's lights) with no pick of the player's - it moves to our lights");
+		}
 		SetSettings(read);  // in the menu's steps of 5, as every other way in
 		const auto  s = SettingsNow();
 		std::string off;

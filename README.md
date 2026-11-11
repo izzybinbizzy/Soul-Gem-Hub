@@ -10,8 +10,8 @@ save.
 - Every filled soul gem lying in the world gets a soft light in its own color: the game's gems, Praedy's Soul Gems,
   Azura's Star, the Black Star, the named quest gems and the Soul Cairn's gem bowl and chunks.
 - Finds the lighting by itself (Community Shaders with or without Light Placer, ENB, Vanilla) and makes each light for it.
-- A gem another mod lights keeps that light and ours stays off it, so no gem glows twice; the menu names each such mod and
-  its one choice of whose light changes that. Works from the game's events, nothing per frame. Displays are never lit.
+- Ours lights every gem and another mod's light on it is put out, so no gem glows twice; the menu names each such mod and
+  a switch per mod hands its gems back to it. Works from the game's events, nothing per frame. Displays are never lit.
 - Gem mods whose authors have not allowed it yet are left unlit (`src/GemPermissions.h`, file fingerprints).
 
 ## The permission table

@@ -180,9 +180,9 @@ namespace Plugin
 		}
 
 		// a mod's gems handed back to its own light, or taken again
-		void HandBackSwitch(const std::string& a_mod, const char* a_label, const char* a_tip)
+		void HandBackSwitch(const Gems::Settings& a_now, const std::string& a_mod, const char* a_label, const char* a_tip)
 		{
-			bool v = Gems::HandedBack(SettingsNow(), a_mod);
+			bool v = Gems::HandedBack(a_now, a_mod);
 			if (Checkbox(a_label, &v)) {
 				UpdateSettings([&](Gems::Settings& a_s) { Gems::HandBack(a_s, a_mod, v); });
 				Changed();
@@ -203,10 +203,10 @@ namespace Plugin
 			Header(Icon::kGem, T("Hand Gems Back"));
 			const char* tip = T("Ticked, these gems get their own light back and this mod's light comes off them.");
 			for (const auto& [mod, n] : mods) {
-				HandBackSwitch(mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
+				HandBackSwitch(s, mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
 			}
 			if (unnamed) {
-				HandBackSwitch(std::string(Gems::kUnnamedMod), T("A light no mod's file names stays on its gem"), tip);
+				HandBackSwitch(s, std::string(Gems::kUnnamedMod), T("A light no mod's file names stays on its gem"), tip);
 			}
 			if (model) {
 				Switch(T("A gem model's own light stays on it"), &Gems::Settings::modelLights, tip);
@@ -324,7 +324,7 @@ namespace Plugin
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
 				BesideIfRoom(CalcTextSize(T("Same reach")).x + 40.0f);
 				Switch(T("Same reach"), &Gems::Settings::sameReach,
-					T("Every gem's light reaches as far as a common gem's, each keeping its own brightness. Azura's Star and the Black Star keep their own reach and the Stars slider."));
+					T("Every gem's light reaches as far as a common gem's. Azura's Star and the Black Star keep their own reach and the Stars slider."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemSwitches();
 				// shown only while a gem mod with a color choice is loaded, or where Light color's two choices light a gem differently

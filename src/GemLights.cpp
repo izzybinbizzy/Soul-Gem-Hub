@@ -375,8 +375,17 @@ namespace Plugin
 		// little. False when the file cannot be read or decoded.
 		bool AddTexturePixels(const std::string& a_path, Gems::ColorSum& a_sum)
 		{
+			// an 8K texture with nothing packed is about 340 MB: a file past this is no texture a gem wears
+			constexpr std::size_t     kMostBytes = std::size_t{ 512 } << 20;
 			std::vector<std::uint8_t> bytes;
-			if (!ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) { bytes.insert(bytes.end(), a_piece.begin(), a_piece.end()); })) {
+			bool                      tooBig = false;
+			const bool                opened = ReadGameFile(a_path, "textures", [&](std::span<const std::uint8_t> a_piece) {
+				tooBig = tooBig || bytes.size() + a_piece.size() > kMostBytes;
+				if (!tooBig) {
+					bytes.insert(bytes.end(), a_piece.begin(), a_piece.end());
+				}
+			});
+			if (!opened || tooBig) {
 				return false;
 			}
 			DirectX::TexMetadata  meta{};
@@ -973,7 +982,8 @@ namespace Plugin
 			std::vector<PutOutLight>                   putOut;
 			int                                        looks{ 0 };
 			bool                                       keepOut{ false };
-			bool                                       relit{ false };  // placed in a cell again: its owner may have put a light back in the place we took it from
+			bool                                       placed{ false };  // one of the others is a light a mod hung on it, not only its model's own
+			bool                                       relit{ false };   // placed in a cell again: its owner may have put a light back in the place we took it from
 			bool                                       hadModel{ false };
 		};
 		std::unordered_map<RE::FormID, TrackedGem> gNearGems;  // the main thread's
@@ -1323,6 +1333,12 @@ namespace Plugin
 					DropAll(scene);
 					bool waits = false;
 					for (auto& [id, gem] : gNearGems) {
+						// a gem whose model has gone took its lights with it: none of an old model's goes back in the scene
+						const auto* ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(id);
+						if (!ref || !ref->Is3DLoaded() || ref->Get3D() != gem.root.get()) {
+							gem.putOut.clear();
+							continue;
+						}
 						waits = GiveBack(gem, scene) || waits;
 					}
 					if (GiveBackAgain(waits)) {
@@ -1406,11 +1422,12 @@ namespace Plugin
 				auto& gem = *c.tracked;
 				if (gem.looks < kLooksAtLoad) {
 					gem.others = OtherLights(c.root, lighting, ownLights);
+					gem.placed = std::ranges::any_of(gem.others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
 					++gem.looks;
 					again = again || gem.looks < kLooksAtLoad;
 				}
 				const bool theirs = !gem.others.empty();
-				const bool placed = std::ranges::any_of(gem.others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
+				const bool placed = gem.placed;
 				const auto owner = c.gem->ownerName ? std::string_view(*c.gem->ownerName) : Gems::kUnnamedMod;
 				if (theirs && !placed) {
 					gModelLightSeen.store(true, std::memory_order_relaxed);
