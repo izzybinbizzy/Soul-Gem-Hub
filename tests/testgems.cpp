@@ -37,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 277 + FloorLightChecks::kCount;
+	constexpr int kFloor = 279 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -594,6 +594,9 @@ namespace
 		}
 		CHECK(Near(ShownAt(Kind::kPetty, true, false, same).fade, ShownAt(Kind::kPetty, true, false, stepped).fade));
 		CHECK(Near(ShownAt(Kind::kGrand, true, false, same).fade, ShownAt(Kind::kGrand, true, false, stepped).fade));
+		// past Community Shaders' highest cutoff a Soul Cairn piece keeps the common reach by a dimmer fade
+		CHECK(Near(ShownAt(Kind::kCairn, true, false, same).cutoff, kHighestCutoff));
+		CHECK(Near(ShownAt(Kind::kCairn, true, false, same).fade, 1.148f, 0.005f));
 		same.reach = stepped.reach = kReachMin;
 		CHECK(Near(ShownAt(Kind::kGrand, true, false, same).radius, ShownAt(Kind::kCommon, true, false, stepped).radius, 0.5f));
 		std::stringstream low("Brightness=1\nReach=-5\n");
