@@ -9,8 +9,9 @@
 // Every soul gem in the world glows in its own color - the game's own gems, Praedy's Soul Gems, Rustic Soul Gems, Azura's
 // Star, the Black Star, the named quest gems and the Soul Cairn's gem bowl and chunks - with lights made in memory, on
 // Community Shaders (with or without Light Placer), ENB and Vanilla, the lighting found by itself. No plugin file, nothing in
-// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). A gem another mod lights keeps that
-// light and ours stays off it (its menu's one choice of whose light changes that); this mod's own RE::Light files light their gems.
+// the save; the settings live in its SKSE Menu Framework page (and the file the page writes). Ours goes on every gem and any other
+// light on it is put out (its menu's choice of whose light, and a switch per other mod, change that); this mod's own RE::Light files
+// light their gems.
 //
 // THE FILES, AND WHAT EACH ONE IS FOR (laid out as Illuminated's and Dynamic Wards')
 //   main.cpp        this file - the order of the data-load work, and the SKSE messages
@@ -21,7 +22,7 @@
 //   Settings.cpp    the settings file, read at load and saved after each change
 //   Menu.cpp        the SKSE Menu Framework page          DevBench.cpp  DevBench's inspect and control (optional)
 //   SKSEMenuFramework.h, DevBenchAPI.*  those mods' own files; DevBenchGlue.h, MenuStyle.h, Translation.h are shared word for
-//                   word with our other plugins (master: Dynamic Wards' src\)
+//                   word with our other plugins (master: Tools\Shared Plugin Code)
 //   tests\testgems.cpp  the off-game tests of GemMath.h
 
 #include "Plugin.h"

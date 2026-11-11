@@ -161,7 +161,7 @@ namespace Plugin
 			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
 		}
 
-		// whose light a gem wears: one choice, always shown; the default leaves a gem another mod lights to that mod
+		// whose light a gem wears: one choice, always shown; by default ours is on every gem and any other light on it is put out
 		void WhoLightsChoice()
 		{
 			const auto                       s = SettingsNow();
@@ -173,9 +173,44 @@ namespace Plugin
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Use our lights: this mod lights every gem and any other light on it is put out. Use the game's own lights: none of this "
-				"mod's light, and other mods' lights on the gems are put out too. Use another mod's lights (the default): a gem a Light Placer "
-				"file or its own model's particle light lights keeps that light, each mod named at the top; this mod lights only the rest."));
+				"Use our lights (the default): this mod lights every gem and any other light on it is put out, but for a mod you hand its gems "
+				"back below. Use the game's own lights: none of this mod's light, and other mods' lights on the gems are put out too. Use another "
+				"mod's lights: a gem a Light Placer file or its own model's particle light lights keeps that light, each mod named at the top; "
+				"this mod lights only the rest."));
+		}
+
+		// a mod's gems handed back to its own light, or taken again
+		void HandBackSwitch(const std::string& a_mod, const char* a_label, const char* a_tip)
+		{
+			bool v = Gems::HandedBack(SettingsNow(), a_mod);
+			if (Checkbox(a_label, &v)) {
+				UpdateSettings([&](Gems::Settings& a_s) { Gems::HandBack(a_s, a_mod, v); });
+				Changed();
+			}
+			MenuStyle::Tip(a_tip);
+		}
+
+		// on our lights: a switch per other mod that lights these gems, each giving them back to that mod's light with ours off them
+		void HandBackSwitches()
+		{
+			const auto s = SettingsNow();
+			const auto mods = GemsLitBy();
+			const bool unnamed = GemsUnnamedLightSeen() || Gems::HandedBack(s, Gems::kUnnamedMod);
+			const bool model = GemsModelLightSeen() || s.modelLights;
+			if (s.who != Gems::WhoLights::kOurs || (mods.empty() && !unnamed && !model)) {
+				return;
+			}
+			Header(Icon::kGem, T("Hand Gems Back"));
+			const char* tip = T("Ticked, these gems get their own light back and this mod's light comes off them.");
+			for (const auto& [mod, n] : mods) {
+				HandBackSwitch(mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
+			}
+			if (unnamed) {
+				HandBackSwitch(std::string(Gems::kUnnamedMod), T("A light no mod's file names stays on its gem"), tip);
+			}
+			if (model) {
+				Switch(T("A gem model's own light stays on it"), &Gems::Settings::modelLights, tip);
+			}
 		}
 
 		// the next control on the same line, or on the next one when the window is too narrow for it (Dynamic Wards' way)
@@ -246,11 +281,12 @@ namespace Plugin
 			// the gems another light mod lights, named by the folder its Light Placer file sits in, and what the choice of whose light
 			// does with them; RE::Light keeps this mod's own files
 			const auto left = GemsOtherLighters();
-			const auto who = SettingsNow().who;
+			const auto now = SettingsNow();
 			for (const auto& [mod, n] : GemsLitBy()) {
-				const char* line = who == Gems::WhoLights::kOthers ? T("Lit by {} (its own light): {}") :
-				                   who == Gems::WhoLights::kOurs   ? T("Taken over from {}: {}") :
-				                                                     T("Put out for the game's own look - {}: {}");
+				const bool  theirs = now.who == Gems::WhoLights::kOthers || (now.who == Gems::WhoLights::kOurs && Gems::HandedBack(now, mod));
+				const char* line = theirs                            ? T("Lit by {} (its own light): {}") :
+				                   now.who == Gems::WhoLights::kOurs ? T("Taken over from {}: {}") :
+				                                                       T("Put out for the game's own look - {}: {}");
 				TextColored(kMuted, "%s", Fill(line, mod, std::to_string(n)).c_str());
 			}
 			if (left[3]) {
@@ -286,6 +322,9 @@ namespace Plugin
 				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 					T("How bright the gems' light is. 100% is as built."));
 				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
+				BesideIfRoom(CalcTextSize(T("Same reach")).x + 40.0f);
+				Switch(T("Same reach"), &Gems::Settings::sameReach,
+					T("Every gem's light reaches as far as a common gem's, each keeping its own brightness. Azura's Star and the Black Star keep their own reach and the Stars slider."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemSwitches();
 				// shown only while a gem mod with a color choice is loaded, or where Light color's two choices light a gem differently
@@ -302,6 +341,7 @@ namespace Plugin
 				}
 				Header(Icon::kGem, T("Whose Light"));
 				WhoLightsChoice();
+				HandBackSwitches();
 			}
 			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
 		}

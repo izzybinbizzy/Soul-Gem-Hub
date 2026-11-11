@@ -36,9 +36,15 @@ namespace Plugin
 				moved += (moved.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key) + " " + std::string(Gems::SideWords(Gems::kColorChoiceTexts[i], s.side[i]));
 			}
 		}
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, light color {}, star light {}, color choices moved: {}, gems switched off: {} ({} line(s) read)",
-			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
-			s.starGem ? "the gem" : "the metal", moved.empty() ? "none" : moved, off.empty() ? "none" : off, lines);
+		std::string back;
+		for (const auto& mod : s.handBack) {
+			back += (back.empty() ? "" : ", ") + mod;
+		}
+		const char* who = s.who == Gems::WhoLights::kOurs ? "ours" : s.who == Gems::WhoLights::kGame ? "the game's own" :
+		                                                                                               "another mod's";
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, same reach {}, stars {}%, soft pulse {}, light color {}, star light {}, whose light {}, handed back: {}, model lights {}, color choices moved: {}, gems switched off: {} ({} line(s) read)",
+			s.on ? "on" : "off", s.brightness, s.reach, s.sameReach ? "on" : "off", s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
+			s.starGem ? "the gem" : "the metal", who, back.empty() ? "none" : back, s.modelLights ? "kept" : "put out", moved.empty() ? "none" : moved, off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write

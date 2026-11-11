@@ -95,6 +95,8 @@ namespace Plugin
 	};
 	[[nodiscard]] std::vector<std::pair<std::string, std::size_t>> GemsLitBy();
 	[[nodiscard]] GemsLeft                                         GemsLeftNear();
+	[[nodiscard]] bool                                             GemsUnnamedLightSeen();                        // a gem has worn a light no Light Placer file names
+	[[nodiscard]] bool                                             GemsModelLightSeen();                          // a gem has worn only its own model's light
 	[[nodiscard]] bool                                             LightColorMatters();                           // "Light color" changes a lit gem
 	[[nodiscard]] bool                                             ColorChoiceFound(Gems::ColorChoice a_choice);  // its gem mod is loaded: the menu offers it
 	[[nodiscard]] std::string                                      GemsReport();                                  // for DevBench (JSON)

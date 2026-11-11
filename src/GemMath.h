@@ -531,9 +531,6 @@ namespace Gems
 		return a_black && IsPale(c) && c[2] >= (std::max)(c[0], c[1]) ? own : c;
 	}
 
-	// a gem read off its own model wears the color read, pale or not - no pull toward pale blue (he wants each gem's own color)
-	[[nodiscard]] inline Rgb ShownColor(const Rgb& a_texture, [[maybe_unused]] Kind a_kind) noexcept { return a_texture; }
-
 	// the game's own look for a gem of this size (a_black: it holds black souls)
 	[[nodiscard]] inline Look GameLook(Kind a_size, bool a_black) noexcept
 	{
@@ -1057,8 +1054,9 @@ namespace Gems
 		return a_look.named ? GemSwitch::kNamed : static_cast<GemSwitch>(a_look.kind);  // petty .. named: the same order
 	}
 
-	// whose light a gem wears, the menu's one choice: ours on every gem and any other light on it out; the game's own look, none of
-	// ours and other mods' gem lights out; another mod's where one lights the gem, ours only where none does
+	// whose light a gem wears, the menu's one choice: ours on every gem and any other light on it out (the default; a mod handed its
+	// gems back keeps them); the game's own look, none of ours and other mods' gem lights out; another mod's where one lights the gem,
+	// ours only where none does
 	enum class WhoLights : std::uint8_t
 	{
 		kOurs,
@@ -1066,14 +1064,22 @@ namespace Gems
 		kOthers,
 	};
 
+	// a light on a gem that no Light Placer file names goes by this name, in the menu and in the settings file
+	inline constexpr std::string_view kUnnamedMod = "another mod";
+	// the most mods handed their gems back, and the longest name one goes by (a folder's name)
+	inline constexpr std::size_t kMostHandedBack = 64, kLongestModName = 260;
+
 	struct Settings
 	{
 		bool                                    on{ true };                                                          // every soul gem light
 		int                                     brightness{ 100 };                                                   // percent
 		int                                     reach{ 100 };                                                        // percent
+		bool                                    sameReach{ false };                                                  // every gem's light carries as far as a common gem's, the two stars aside
 		int                                     stars{ 50 };                                                         // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
 		bool                                    pulse{ true };                                                       // the soft pulse
-		WhoLights                               who{ WhoLights::kOthers };                                           // whose light a gem wears
+		WhoLights                               who{ WhoLights::kOurs };                                             // whose light a gem wears
+		std::vector<std::string>                handBack{};                                                          // on our lights: the mods whose gems keep their own light, ours off them (each as the menu names it)
+		bool                                    modelLights{ false };                                                // on our lights: a gem model's own particle or ENB light stays, ours off that gem
 		std::array<std::uint8_t, kColorChoices> side{};                                                              // each color choice's side: 0 the first, 1 the second, 2 the third (ColorChoice order, kNone left out)
 		bool                                    authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
 		bool                                    starGem{ true };                                                     // "Star light": true = the gem it holds, false = a star's metal (its body)
@@ -1147,11 +1153,57 @@ namespace Gems
 		return a_look.exact ? FoundColor(a_look, a_s) : Richer(FoundColor(a_look, a_s));
 	}
 
-	// whether ours goes on a gem: a_otherLight, another light really hangs on it or its model carries one that shines in this game
-	// (GemLights.cpp OtherLights) - a claim alone is no light: a file may claim a gem it does not light here
-	[[nodiscard]] inline bool OursOn(WhoLights a_who, bool a_otherLight) noexcept
+	// whether a mod's gems are handed back to its own light (the menu's switch for it, on our lights)
+	[[nodiscard]] inline bool HandedBack(const Settings& a_s, std::string_view a_mod) noexcept
 	{
-		return a_who == WhoLights::kOurs || (a_who == WhoLights::kOthers && !a_otherLight);
+		return std::ranges::any_of(a_s.handBack, [a_mod](const std::string& a_name) { return SameText(a_name, a_mod); });
+	}
+
+	// a mod's gems handed back to its light (a_back), or taken again; false when nothing changed - the name is empty, too long or
+	// not plain text, or the list is full
+	inline bool HandBack(Settings& a_s, std::string_view a_mod, bool a_back)
+	{
+		const auto mod = Trim(a_mod);
+		const auto it = std::ranges::find_if(a_s.handBack, [mod](const std::string& a_name) { return SameText(a_name, mod); });
+		if (!a_back) {
+			if (it == a_s.handBack.end()) {
+				return false;
+			}
+			a_s.handBack.erase(it);
+			return true;
+		}
+		const bool plain = std::ranges::none_of(mod, [](unsigned char a_c) { return a_c < 0x20; });
+		if (it != a_s.handBack.end() || mod.empty() || mod.size() > kLongestModName || !plain || a_s.handBack.size() >= kMostHandedBack) {
+			return false;
+		}
+		a_s.handBack.emplace_back(mod);
+		return true;
+	}
+
+	// whether another light on a gem is left to its mod, ours off that gem: always on another mod's lights; on ours only where that
+	// mod's gems are handed back. a_otherLight: another light really hangs on the gem or its model carries one that shines in this
+	// game (GemLights.cpp OtherLights) - a claim alone is no light: a file may claim a gem it does not light here
+	[[nodiscard]] inline bool LeftToTheirs(WhoLights a_who, bool a_otherLight, bool a_handedBack) noexcept
+	{
+		return a_otherLight && (a_who == WhoLights::kOthers || (a_who == WhoLights::kOurs && a_handedBack));
+	}
+
+	// whether ours goes on a gem: never on the game's own lights, else wherever its other light is not left to its mod
+	[[nodiscard]] inline bool OursOn(WhoLights a_who, bool a_otherLight, bool a_handedBack) noexcept
+	{
+		return a_who != WhoLights::kGame && !LeftToTheirs(a_who, a_otherLight, a_handedBack);
+	}
+
+	// a gem's strength; a_same ("Same reach"): its own brightness at a common gem's reach - a light's reach goes with its fade over its
+	// cutoff, so that ratio is the common gem's. The two stars keep their own, under the Stars slider
+	[[nodiscard]] inline Strength StrengthAt(Kind a_kind, bool a_same) noexcept
+	{
+		const auto& own = kStrength[static_cast<std::size_t>(a_kind)];
+		if (!a_same || a_kind == Kind::kStar) {
+			return own;
+		}
+		const auto& common = kStrength[static_cast<std::size_t>(Kind::kCommon)];
+		return { own.fade, own.fade * common.cutoff / common.fade };
 	}
 
 	// what a gem of this kind is drawn with for the menu's settings on the lighting found (GemLights.cpp Follow): a_inverseSquare =
@@ -1159,7 +1211,7 @@ namespace Gems
 	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
 	{
 		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
-		return ShownFor(kStrength[static_cast<std::size_t>(a_kind)], a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+		return ShownFor(StrengthAt(a_kind, a_s.sameReach), a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
 			static_cast<float>(a_s.reach) / 100.0f * stars, a_pulse, stars);
 	}
 
@@ -1188,6 +1240,10 @@ namespace Gems
 		// pick carries StarPicked
 		std::optional<bool> starGem;
 		bool                starPicked = false;
+		// "Whose light" stood on another mod's lights by default before: a file that only holds that default moves to ours once;
+		// another choice, or one made since (WhoPicked), is the player's own
+		std::optional<WhoLights> who;
+		bool                     whoPicked = false;
 		while (a_in && std::getline(a_in, line)) {
 			auto text = Trim(line);
 			if (text.starts_with("\xEF\xBB\xBF")) {
@@ -1201,7 +1257,12 @@ namespace Gems
 				continue;
 			}
 			const auto key = Trim(text.substr(0, eq));
-			auto       val = Trim(text.substr(eq + 1));
+			// a mod's name is taken whole: a folder's name may hold ; or #
+			if (SameText(key, "HandBack")) {
+				lines += HandBack(a_out, text.substr(eq + 1), true) ? 1 : 0;
+				continue;
+			}
+			auto val = Trim(text.substr(eq + 1));
 			val = Trim(val.substr(0, val.find_first_of(";#")));
 			const auto read = SettingNumber(val);
 			if (!read) {
@@ -1215,12 +1276,18 @@ namespace Gems
 				a_out.brightness = std::clamp(v, kBrightnessMin, kBrightnessMax);
 			} else if (SameText(key, "Reach")) {
 				a_out.reach = std::clamp(v, kReachMin, kReachMax);
+			} else if (SameText(key, "SameReach")) {
+				a_out.sameReach = v != 0;
 			} else if (SameText(key, "Stars")) {
 				a_out.stars = std::clamp(v, kStarsMin, kStarsMax);
 			} else if (SameText(key, "Pulse")) {
 				a_out.pulse = v != 0;
 			} else if (SameText(key, "WhoLights")) {
-				a_out.who = static_cast<WhoLights>(std::clamp(v, 0, 2));
+				who = static_cast<WhoLights>(std::clamp(v, 0, 2));
+			} else if (SameText(key, "WhoPicked")) {
+				whoPicked = v != 0;
+			} else if (SameText(key, "HandBackModelLights")) {
+				a_out.modelLights = v != 0;
 			} else if (SameText(key, "AuthorPick")) {
 				a_out.authorPick = v != 0;
 			} else if (SameText(key, "StarGem")) {
@@ -1240,20 +1307,26 @@ namespace Gems
 		if (starGem && starPicked) {
 			a_out.starGem = *starGem;
 		}
+		if (who && (whoPicked || *who != WhoLights::kOthers)) {
+			a_out.who = *who;
+		}
 		return lines;
 	}
 
 	inline void WriteSettings(const Settings& a_s, std::ostream& a_out)
 	{
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
-			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nStars=" << a_s.stars
-			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nWhoLights=" << static_cast<int>(a_s.who)
-			  << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\nStarPicked=1\n";
+			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nSameReach=" << (a_s.sameReach ? 1 : 0) << "\nStars=" << a_s.stars
+			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nWhoLights=" << static_cast<int>(a_s.who) << "\nWhoPicked=1\nHandBackModelLights="
+			  << (a_s.modelLights ? 1 : 0) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\nStarPicked=1\n";
 		for (std::size_t i = 0; i < kGemSwitches; ++i) {
 			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';
 		}
 		for (std::size_t i = 0; i < kColorChoices; ++i) {
 			a_out << kColorChoiceTexts[i].key << '=' << static_cast<int>(a_s.side[i]) << '\n';
+		}
+		for (const auto& mod : a_s.handBack) {
+			a_out << "HandBack=" << mod << '\n';
 		}
 	}
 }

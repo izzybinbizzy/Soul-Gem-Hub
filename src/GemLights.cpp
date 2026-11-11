@@ -23,9 +23,9 @@
 // WHOSE LIGHT (the menu's one choice, Gems::WhoLights): what else lights a gem is read off its model when it loads and once more -
 // a Light Placer file's light, RE::Light's, or a light inside the gem's own model (the ENB particle lights of Praedy's, Subtle's,
 // Skyking's ... meshes) wherever it shines: on ENB, and on Community Shaders when a particle-light config
-// (Data\ParticleLights\<texture>.ini) names it. By default a gem with such a light keeps it and ours stays off; on our lights ours goes
-// on and the other is put out; on the game's own lights none of ours and the other is put out. This mod's own RE::Light files light
-// their gems themselves (Gems::OwnerOf).
+// (Data\ParticleLights\<texture>.ini) names it. By default ours goes on and the other is put out, but for a mod handed its gems back in
+// the menu; on another mod's lights a gem with such a light keeps it and ours stays off; on the game's own lights none of ours and the
+// other is put out. This mod's own RE::Light files light their gems themselves (Gems::OwnerOf).
 //
 // CREDIT: a light is made and registered the way ReLight by Truman does it (github.com/TrumanGIT/ReLight, GPL-3.0-or-later,
 // used with his permission, as Illuminated uses it): a master NiPointLight cloned for every use and handed to the shadow scene
@@ -711,21 +711,20 @@ namespace Plugin
 			return it->second;
 		}
 
-		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind);
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures);
 
-		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum, the pale-blue rule);
-		// once per set of textures and kind
-		std::optional<Gems::Rgb> SwapColor(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum); once per set of textures
+		std::optional<Gems::Rgb> SwapColor(const std::vector<std::string>& a_textures)
 		{
-			static std::map<std::pair<std::vector<std::string>, Gems::Kind>, std::optional<Gems::Rgb>> read;
-			const auto [it, added] = read.try_emplace({ a_textures, a_kind });
+			static std::map<std::vector<std::string>, std::optional<Gems::Rgb>> read;
+			const auto [it, added] = read.try_emplace(a_textures);
 			if (added) {
-				it->second = SwapColorOnce(a_textures, a_kind);
+				it->second = SwapColorOnce(a_textures);
 			}
 			return it->second;
 		}
 
-		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures, Gems::Kind a_kind)
+		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures)
 		{
 			for (const auto print : SwapPrints(a_textures)) {
 				if (const auto seen = Gems::SeenColorOf(print)) {
@@ -739,8 +738,7 @@ namespace Plugin
 					all.Add(one);
 				}
 			}
-			const auto rgb = all.Result();
-			return rgb ? std::optional(Gems::ShownColor(*rgb, a_kind)) : std::nullopt;
+			return all.Result();
 		}
 
 		// the own glow swapped textures show, when the glow table lists one of them
@@ -948,6 +946,8 @@ namespace Plugin
 		std::unordered_map<RE::FormID, Kept> gKept;  // by the placed gem's form id
 		std::atomic<std::size_t>             gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 };
 		std::atomic<std::uint32_t>           gChoices{ 0 };  // a bit per ColorChoice whose gem mod is loaded (the menu offers it)
+		// a look has met another light no Light Placer file names, or a gem with only its model's own light: the menu offers their switches
+		std::atomic<bool> gUnnamedLightSeen{ false }, gModelLightSeen{ false };
 		// the gems near her left to another mod's light at the last look, for the menu (drawn on the render thread): by the mod
 		// whose Light Placer file lights them, or by the look whose model carries its own light
 		std::mutex                                       gLeftLock;
@@ -1410,16 +1410,24 @@ namespace Plugin
 					again = again || gem.looks < kLooksAtLoad;
 				}
 				const bool theirs = !gem.others.empty();
+				const bool placed = std::ranges::any_of(gem.others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
+				const auto owner = c.gem->ownerName ? std::string_view(*c.gem->ownerName) : Gems::kUnnamedMod;
+				if (theirs && !placed) {
+					gModelLightSeen.store(true, std::memory_order_relaxed);
+				} else if (placed && !c.gem->ownerName) {
+					gUnnamedLightSeen.store(true, std::memory_order_relaxed);
+				}
+				// a gem with a light placed on it goes by that mod's switch; one with only its model's own light by the switch for those
+				const bool handed = s.who == WhoLights::kOurs && (theirs && !placed ? s.modelLights : Gems::HandedBack(s, owner));
 				// a claimed gem's light may hang a moment after its load event: the second look decides before ours is hung on it
-				if (s.who == WhoLights::kOthers && !theirs && !c.lit && c.gem->owner != Gems::Owner::kThisMod && gem.looks < kLooksAtLoad) {
+				if ((s.who == WhoLights::kOthers || handed) && !theirs && !c.lit && c.gem->owner != Gems::Owner::kThisMod && gem.looks < kLooksAtLoad) {
 					continue;
 				}
-				const bool hung = Gems::OursOn(s.who, theirs) && Keep(c.id, c.root, *c.gem, scene, s);
+				const bool hung = Gems::OursOn(s.who, theirs, handed) && Keep(c.id, c.root, *c.gem, scene, s);
 				ours += hung ? 1 : 0;
-				if (theirs && s.who == WhoLights::kOthers) {
-					const bool placed = std::ranges::any_of(gem.others, [](const auto& a_other) { return netimmerse_cast<RE::NiLight*>(a_other.get()) != nullptr; });
+				if (Gems::LeftToTheirs(s.who, theirs, handed)) {
 					if (placed) {
-						CountName(byMod, c.gem->ownerName ? std::string_view(*c.gem->ownerName) : std::string_view("another mod"));
+						CountName(byMod, owner);
 					} else {
 						CountName(byModel, Gems::FamilyName(c.gem->look.family));
 					}
@@ -1582,6 +1590,11 @@ namespace Plugin
 				} else if (a_event && !a_event->opening && menu == RE::LoadingMenu::MENU_NAME) {
 					static_cast<void>(Later("loading screen", []() {
 						DropAll(RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
+						// the scene's lists are empty: what hangs on a gem still loaded is read again, and a light its owner puts back goes out anew
+						for (auto& [id, gem] : gNearGems) {
+							gem.looks = 0;
+							gem.relit = true;
+						}
 						RequestLook(true);
 					}));
 				} else if (a_event && !a_event->opening && gGiveBackWaits.load(std::memory_order_relaxed)) {
@@ -1672,12 +1685,12 @@ namespace Plugin
 				++fromPicture;
 			} else if (Gems::ColorFromModel(a_look.family) || packed) {
 				if (const auto own = ModelColor(a_model, a_star)) {
-					a_look.rgb = Gems::ShownColor(*own, a_look.kind);
+					a_look.rgb = *own;
 					++fromModel;
 				}
 			}
 			if (a_star) {
-				a_look.gemRgb = Gems::ShownColor(Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar), a_look.kind);
+				a_look.gemRgb = Gems::StarGemColor(ModelColor(a_model, true, true), a_look.blackStar);
 				return;
 			}
 			// the game's own gems wear the set's colors, a named quest gem on a game model too; a gem mod measured or pictured keeps its own
@@ -1723,7 +1736,7 @@ namespace Plugin
 				// its own textures, never the game model's glow
 				SetGlow(*look, SwapGlow(swapped));
 				look->exact = false;
-				if (const auto own = SwapColor(swapped, look->kind)) {
+				if (const auto own = SwapColor(swapped)) {
 					look->rgb = *own;
 					++fromSwap;
 				}
@@ -1887,6 +1900,8 @@ namespace Plugin
 		std::lock_guard lock(gLeftLock);
 		return { gLeftByMod, gLeftByModel };
 	}
+	bool        GemsUnnamedLightSeen() { return gUnnamedLightSeen.load(std::memory_order_relaxed); }
+	bool        GemsModelLightSeen() { return gModelLightSeen.load(std::memory_order_relaxed); }
 	bool        LightColorMatters() { return gWithGlow.load() > 0; }
 	bool        ColorChoiceFound(Gems::ColorChoice a_choice) { return (gChoices.load() >> static_cast<std::uint32_t>(a_choice)) & 1u; }
 	std::string RusticFound() { return gRusticLit ? gRustic : std::string(); }
@@ -1949,7 +1964,7 @@ namespace Plugin
 		}
 		const nlohmann::json out{ { "gemForms", gGems.size() }, { "litByLook", families }, { "waitingOnPermission", blocked }, { "rustic", gRustic },
 			{ "claimedBy", { { "emissiveSoulGems", gOtherLighters[1] }, { "lightPlacer", gOtherLighters[2] } } },
-			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "litBy", litBy }, { "leftNearYou", { { "byMod", nearByMod }, { "byModel", nearByModel } } }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
+			{ "leftTo", { { "reLight", gOtherLighters[3] } } }, { "litBy", litBy }, { "leftNearYou", { { "byMod", nearByMod }, { "byModel", nearByModel } } }, { "unnamedLightSeen", gUnnamedLightSeen.load() }, { "modelLightSeen", gModelLightSeen.load() }, { "otherLightsPutOutNearYou", gPutOutNow.load() }, { "onShowNearYou", gOnShowNow.load() },
 			{ "particleLightConfigs", gParticleTextures.size() }, { "displays", gDisplays.size() }, { "displaysDark", gDisplaysDark.load() },
 			{ "lightsNow", gKept.size() }, { "lightsMade", gMade.load() }, { "looks", gLooks.load() }, { "walks", gWalks.load() },
 			{ "tracked", gTrackedNow.load() }, { "noModelYet", gNoModelYet.load() }, { "lights", lights } };
