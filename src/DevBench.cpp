@@ -6,8 +6,9 @@
 //   inspect kind=soulgemhub   the lighting found, the settings, the gems known (by look, and those left to another
 //                             light mod), and every gem light near the player now (its gem, color, fade, radius, place)
 //   soulgemhub.control        action = set (setting + value: one menu setting changed the way the menu does - saved,
-//                             then applied on the main thread; the reply is the state after it) | rescan (look for
-//                             the gems around the player again now) | glow (ref: the glow each shape of a placed gem shows)
+//                             then applied on the main thread; the reply is the state after it) | handback (mod + value:
+//                             that mod's switch, the same way) | rescan (look for the gems around the player again now) |
+//                             glow (ref: the glow each shape of a placed gem shows)
 
 #include "Plugin.h"
 
@@ -28,7 +29,7 @@ namespace Plugin
 			R"json({"description":"Soul Gem Hub - the lighting found (automatic), the settings, the soul gems this plugin lights (by look: the game's own, Praedy's, Rustic, named, stars, Soul Cairn) and those another light mod lights too (taken over from Emissive Soul Gems and other Light Placer files, left to RE::Light), the gems near the player whose other light is put out for ours, and every gem light near the player now with its color, fade, radius and place. Read only.","inputSchema":{"type":"object","properties":{}},"readOnly":true})json";
 
 		constexpr const char* kTool =
-			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), whoLights (whose light a gem wears: 0 ours on every gem and any other light on it out, 1 the game's own look with none of ours and other mods' gem lights out, 2 another mod's where one lights the gem and ours only on the rest; 2 by default), ColorNeVP / ColorRemasteredBlack / ColorRusticBlack (that gem mod's color choice, a side index from 0 to its number of sides minus one: ColorRusticBlack has three - 0 purple, 1 green, 2 blue - and the other two have two, 0 its first side and 1 its other; the state's colorChoices lists them), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick), starGem (0/1, the Star light: 0 = the star's metal, 1 = the gem it holds), LightPetty / LightLesser / LightCommon / LightGreater / LightGrand / LightBlack / LightNamed / LightAzurasStar / LightBlackStar / LightSoulCairn (0/1, the light switch of that gem; the state's gems lists them). action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","rescan","glow"]},"ref":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","stars","pulse","whoLights","ColorNeVP","ColorRemasteredBlack","ColorRusticBlack","authorPick","starGem","LightPetty","LightLesser","LightCommon","LightGreater","LightGrand","LightBlack","LightNamed","LightAzurasStar","LightBlackStar","LightSoulCairn"]},"value":{"type":"number"}},"required":["action"]}})json";
+			R"json({"description":"Soul Gem Hub (lights every soul gem in the world): change its settings the way its menu does, or look for gems again. action=set changes one setting (saved, then applied on the main thread) and replies with the state after it: lights (0/1), brightness (25-200, percent), reach (50-150, percent), sameReach (0/1, every gem's light carries as far as a common gem's, the two stars aside), stars (10-100, percent of Brightness and of Reach for Azura's Star and the Black Star), pulse (0/1, the soft pulse), whoLights (whose light a gem wears: 0 ours on every gem and any other light on it out, but for a mod handed its gems back, 1 the game's own look with none of ours and other mods' gem lights out, 2 another mod's where one lights the gem and ours only on the rest; 0 by default), modelLights (0/1, on our lights: a gem model's own light stays and ours comes off that gem), ColorNeVP / ColorRemasteredBlack / ColorRusticBlack (that gem mod's color choice, a side index from 0 to its number of sides minus one: ColorRusticBlack has three - 0 purple, 1 green, 2 blue - and the other two have two, 0 its first side and 1 its other; the state's colorChoices lists them), authorPick (0/1, the Light color: 0 = a gem's own glow where it differs from its light, 1 = Author pick), starGem (0/1, the Star light: 0 = the star's metal, 1 = the gem it holds), LightPetty / LightLesser / LightCommon / LightGreater / LightGrand / LightBlack / LightNamed / LightAzurasStar / LightBlackStar / LightSoulCairn (0/1, the light switch of that gem; the state's gems lists them). action=handback (mod = its name as the state's litBy gives it, or another mod for a light no file names; value 1 hands its gems back to its own light with ours off them, 0 takes them again; on our lights only) is that mod's menu switch. action=rescan looks for the gems around the player again at once. action=glow (ref = a placed gem's form id in hex) replies with the glow color each of its shapes shows right now. Read state with inspect kind=soulgemhub.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","handback","rescan","glow"]},"ref":{"type":"string"},"mod":{"type":"string"},"setting":{"type":"string","enum":["lights","brightness","reach","sameReach","stars","pulse","whoLights","modelLights","ColorNeVP","ColorRemasteredBlack","ColorRusticBlack","authorPick","starGem","LightPetty","LightLesser","LightCommon","LightGreater","LightGrand","LightBlack","LightNamed","LightAzurasStar","LightBlackStar","LightSoulCairn"]},"value":{"type":"number"}},"required":["action"]}})json";
 
 		json SettingsJson(const Gems::Settings& a_s)
 		{
@@ -42,8 +43,8 @@ namespace Plugin
 				choices[std::string(text.key)] = { { "value", static_cast<int>(a_s.side[i]) }, { "wears", std::string(Gems::SideWords(text, a_s.side[i])) },
 					{ "offered", ColorChoiceFound(static_cast<Gems::ColorChoice>(i + 1)) } };
 			}
-			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "stars", a_s.stars }, { "pulse", a_s.pulse },
-				{ "whoLights", static_cast<int>(a_s.who) },
+			return json{ { "lights", a_s.on }, { "brightness", a_s.brightness }, { "reach", a_s.reach }, { "sameReach", a_s.sameReach }, { "stars", a_s.stars }, { "pulse", a_s.pulse },
+				{ "whoLights", static_cast<int>(a_s.who) }, { "handBack", a_s.handBack }, { "modelLights", a_s.modelLights },
 				{ "authorPick", a_s.authorPick }, { "starGem", a_s.starGem }, { "colorChoices", std::move(choices) }, { "gems", std::move(gems) } };
 		}
 
@@ -105,18 +106,28 @@ namespace Plugin
 				}
 				return json{ { "ok", true }, { "queued", true } };
 			}
-			if (action != "set") {
-				return DevBenchGlue::Refusal("unknown action '" + action + "'", json::array({ "set", "rescan", "glow" }));
+			if (action != "set" && action != "handback") {
+				return DevBenchGlue::Refusal("unknown action '" + action + "'", json::array({ "set", "handback", "rescan", "glow" }));
 			}
-			const auto key = DevBenchGlue::Text(a_args, "setting");
+			const bool handback = action == "handback";
+			const auto key = DevBenchGlue::Text(a_args, handback ? "mod" : "setting");
 			const auto value = DevBenchGlue::Number(a_args, "value");
 			if (!value) {
-				return DevBenchGlue::Refusal("set needs a number value");
+				return DevBenchGlue::Refusal(action + " needs a number value");
 			}
 			const int v = static_cast<int>(std::clamp(*value, -100000.0, 100000.0));  // finite (Number); in range before the cast
 			// the one field, changed under the settings lock - a menu change at the same moment is kept
 			std::function<void(Gems::Settings&)> change;
-			if (key == "lights") {
+			if (handback) {
+				if (key.empty()) {
+					return DevBenchGlue::Refusal("handback needs mod, its name as the state's litBy gives it");
+				}
+				change = [key, v](Gems::Settings& a_s) { Gems::HandBack(a_s, key, v != 0); };
+			} else if (key == "sameReach") {
+				change = [v](Gems::Settings& a_s) { a_s.sameReach = v != 0; };
+			} else if (key == "modelLights") {
+				change = [v](Gems::Settings& a_s) { a_s.modelLights = v != 0; };
+			} else if (key == "lights") {
 				change = [v](Gems::Settings& a_s) { a_s.on = v != 0; };
 			} else if (key == "brightness") {
 				change = [v](Gems::Settings& a_s) { a_s.brightness = v; };
@@ -141,7 +152,7 @@ namespace Plugin
 				const auto i = static_cast<std::size_t>(it - Gems::kGemSwitchKeys.begin());
 				change = [v, i](Gems::Settings& a_s) { a_s.gems[i] = v != 0; };
 			} else {
-				auto known = json::array({ "lights", "brightness", "reach", "stars", "pulse", "whoLights", "authorPick", "starGem" });
+				auto known = json::array({ "lights", "brightness", "reach", "sameReach", "stars", "pulse", "whoLights", "modelLights", "authorPick", "starGem" });
 				for (const auto k : Gems::kGemSwitchKeys) {
 					known.push_back(std::string(k));
 				}

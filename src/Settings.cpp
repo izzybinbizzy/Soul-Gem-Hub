@@ -21,7 +21,11 @@ namespace Plugin
 	{
 		std::ifstream  in(kPath);
 		Gems::Settings read;
-		const auto     lines = Gems::ReadSettings(in, read);
+		bool           whoMoved = false;
+		const auto     lines = Gems::ReadSettings(in, read, &whoMoved);
+		if (whoMoved) {
+			SKSE::log::info("settings: the file held the old default of whose light (another mod's lights) with no pick of the player's - it moves to our lights");
+		}
 		SetSettings(read);  // in the menu's steps of 5, as every other way in
 		const auto  s = SettingsNow();
 		std::string off;
@@ -36,9 +40,15 @@ namespace Plugin
 				moved += (moved.empty() ? "" : ", ") + std::string(Gems::kColorChoiceTexts[i].key) + " " + std::string(Gems::SideWords(Gems::kColorChoiceTexts[i], s.side[i]));
 			}
 		}
-		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, stars {}%, soft pulse {}, light color {}, star light {}, color choices moved: {}, gems switched off: {} ({} line(s) read)",
-			s.on ? "on" : "off", s.brightness, s.reach, s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
-			s.starGem ? "the gem" : "the metal", moved.empty() ? "none" : moved, off.empty() ? "none" : off, lines);
+		std::string back;
+		for (const auto& mod : s.handBack) {
+			back += (back.empty() ? "" : ", ") + mod;
+		}
+		const char* who = s.who == Gems::WhoLights::kOurs ? "ours" : s.who == Gems::WhoLights::kGame ? "the game's own" :
+		                                                                                               "another mod's";
+		SKSE::log::info("settings: lights {}, brightness {}%, reach {}%, same reach {}, stars {}%, soft pulse {}, light color {}, star light {}, whose light {}, handed back: {}, model lights {}, color choices moved: {}, gems switched off: {} ({} line(s) read)",
+			s.on ? "on" : "off", s.brightness, s.reach, s.sameReach ? "on" : "off", s.stars, s.pulse ? "on" : "off", s.authorPick ? "Author pick" : "the gem's own glow",
+			s.starGem ? "the gem" : "the metal", who, back.empty() ? "none" : back, s.modelLights ? "kept" : "put out", moved.empty() ? "none" : moved, off.empty() ? "none" : off, lines);
 	}
 
 	// written beside the file and moved over it (as Dynamic Wards and Illuminated save theirs): a crash or a full disk mid-write

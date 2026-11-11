@@ -37,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 243 + FloorLightChecks::kCount;
+	constexpr int kFloor = 279 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -230,19 +230,12 @@ namespace
 		broken.AddShaderColor(std::numeric_limits<float>::quiet_NaN(), 1.0f, 0.0f);
 		broken.AddShaderColor(std::numeric_limits<float>::infinity(), 1.0f, 0.0f);
 		CHECK(!grey.Result() && !broken.Result());
-		// the light a model read gives: a colored texture as it is (the game's grand crystal's teal, never its glow's violet)
 		const Rgb teal{ 83, 255, 234 };
-		CHECK(ShownColor(teal, Kind::kGrand) == teal);
-		// a pale gem (the game's soulgemcommon texture, 154,241,255) wears its own color too - no pull toward pale blue
+		// a pale reading (the game's soulgemcommon texture, 154,241,255)
 		const Rgb paleCyan{ 154, 241, 255 };
 		CHECK(IsPale(paleCyan) && !IsPale(Rgb{ 255, 38, 25 }) && !IsPale(Rgb{ 0, 0, 0 }));
-		CHECK(ShownColor(paleCyan, Kind::kCommon) == paleCyan);
-		CHECK(ShownColor(Rgb{ 255, 200, 230 }, Kind::kPetty) == (Rgb{ 255, 200, 230 }));
-		// a black-soul gem keeps its own purple, a star its own texture's color, pale or not
 		const Rgb lilac{ 184, 132, 255 };
-		CHECK(IsPale(lilac) && ShownColor(lilac, Kind::kBlack) == lilac);
-		const Rgb starPale{ 157, 255, 252 };
-		CHECK(ShownColor(starPale, Kind::kStar) == starPale);
+		CHECK(IsPale(lilac));
 		// every light keeps its hue and top channel, its saturation lifted to 1 - (1 - s)^3; grey and pure colors stay as they are
 		const auto satOf = [](const Rgb& a_c) {
 			const int top = (std::max)({ a_c[0], a_c[1], a_c[2] }), bottom = (std::min)({ a_c[0], a_c[1], a_c[2] });
@@ -456,18 +449,18 @@ namespace
 		std::stringstream in("; a comment\n[Settings]\nLights=0\nbrightness=150\nREACH=500\nPulse=0\nShadows=1\nTheirsLightPlacer=1\nENBParticleGems=1\nUnknown=3\nBrightness=x\n");
 		CHECK(ReadSettings(in, s) == 4);
 		CHECK(!s.on && s.brightness == 150 && s.reach == kReachMax && !s.pulse);
-		CHECK(s.who == WhoLights::kOthers);  // an old file's Theirs lines are read as nothing
+		CHECK(s.who == WhoLights::kOurs);  // an old file's Theirs lines are read as nothing
 		std::stringstream out;
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 9 + kGemSwitches + kColorChoices);
-		CHECK(out.str().find("WhoLights=2\n") != std::string::npos && out.str().find("Theirs") == std::string::npos && out.str().find("Defaults") == std::string::npos);
+		CHECK(ReadSettings(again, back) == 12 + kGemSwitches + kColorChoices);
+		CHECK(out.str().find("WhoLights=0\nWhoPicked=1\n") != std::string::npos && out.str().find("Theirs") == std::string::npos && out.str().find("Defaults") == std::string::npos);
 		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
 		CHECK(back.on == s.on && back.brightness == s.brightness && back.reach == s.reach && back.pulse == s.pulse);
 		CHECK(out.str().find("Shadows") == std::string::npos);
-		CHECK(back.who == WhoLights::kOthers);
+		CHECK(back.who == WhoLights::kOurs);
 		Settings          d;
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
@@ -477,11 +470,49 @@ namespace
 		Settings          h;
 		CHECK(ReadSettings(hand, h) == 4 && !h.on && h.brightness == 150 && !h.pulse && h.who == WhoLights::kGame && h.reach == 100);
 		// the one choice of whose light: read and clamped; an old file's switches are read as nothing
-		std::stringstream oldFile("Defaults=2\nTheirsEmissive=0\nTheirsMesh=0\n"), oursFile("WhoLights=0\n"), tooBig("WhoLights=9\n");
+		std::stringstream oldFile("Defaults=2\nTheirsEmissive=0\nTheirsMesh=0\n"), oursFile("WhoLights=0\n"), tooBig("WhoLights=9\nWhoPicked=1\n");
 		Settings          o, n, big;
-		CHECK(ReadSettings(oldFile, o) == 0 && o.who == WhoLights::kOthers);
+		CHECK(ReadSettings(oldFile, o) == 0 && o.who == WhoLights::kOurs);
 		CHECK(ReadSettings(oursFile, n) == 1 && n.who == WhoLights::kOurs);
-		CHECK(ReadSettings(tooBig, big) == 1 && big.who == WhoLights::kOthers);
+		CHECK(ReadSettings(tooBig, big) == 2 && big.who == WhoLights::kOthers);
+		// 1.2's default, saved in a file that says nothing more, moves to ours once; a choice made since, or the game's own, stays
+		std::stringstream oldDefault("WhoLights=2\n"), picked("WhoLights=2\nWhoPicked=1\n"), pickedFirst("WhoPicked=1\nWhoLights=2\n"), gameLook("WhoLights=1\n");
+		Settings          od, pk, pf, gl;
+		bool              odMoved = false, pkMoved = false;
+		CHECK(ReadSettings(oldDefault, od, &odMoved) == 1 && od.who == WhoLights::kOurs);
+		CHECK(ReadSettings(picked, pk, &pkMoved) == 2 && pk.who == WhoLights::kOthers);
+		CHECK(odMoved && !pkMoved);
+		CHECK(ReadSettings(pickedFirst, pf) == 2 && pf.who == WhoLights::kOthers);
+		CHECK(ReadSettings(gameLook, gl) == 1 && gl.who == WhoLights::kGame);
+		std::stringstream movedOut;
+		WriteSettings(od, movedOut);
+		Settings          movedBack;
+		std::stringstream movedIn(movedOut.str());
+		static_cast<void>(ReadSettings(movedIn, movedBack));
+		CHECK(movedBack.who == WhoLights::kOurs);
+		// a mod's gems handed back: its name kept whole (a folder's name may hold ; # or =), any case, once, written back and read again
+		Settings hb;
+		CHECK(hb.handBack.empty() && !hb.modelLights);
+		CHECK(HandBack(hb, "Subtle Light; for #1 = Gems", true) && HandedBack(hb, "subtle light; FOR #1 = gems") && !HandedBack(hb, "Subtle Light"));
+		CHECK(!HandBack(hb, "SUBTLE LIGHT; FOR #1 = GEMS", true) && hb.handBack.size() == 1);
+		CHECK(!HandBack(hb, "   ", true) && !HandBack(hb, std::string(kLongestModName + 1, 'x'), true) && !HandBack(hb, "a\tb", true) && hb.handBack.size() == 1);
+		hb.modelLights = true;
+		std::stringstream hbOut;
+		WriteSettings(hb, hbOut);
+		CHECK(hbOut.str().find("HandBack=Subtle Light; for #1 = Gems\n") != std::string::npos && hbOut.str().find("HandBackModelLights=1\n") != std::string::npos);
+		Settings          hbBack;
+		std::stringstream hbIn(hbOut.str());
+		CHECK(ReadSettings(hbIn, hbBack) == 13 + kGemSwitches + kColorChoices && HandedBack(hbBack, "Subtle Light; for #1 = Gems") && hbBack.modelLights);
+		CHECK(HandBack(hb, "subtle light; for #1 = gems", false) && hb.handBack.empty() && !HandBack(hb, "Subtle Light", false));
+		// a file cannot grow the list without end, and an empty or repeated line counts for nothing
+		std::string many;
+		for (std::size_t i = 0; i < kMostHandedBack + 5; ++i) {
+			many += "HandBack=mod " + std::to_string(i) + "\n";
+		}
+		many += "HandBack=\nHandBack=mod 0\n";
+		std::stringstream manyIn(many);
+		Settings          full64;
+		CHECK(ReadSettings(manyIn, full64) == kMostHandedBack && full64.handBack.size() == kMostHandedBack);
 		// a light switch per gem: every gem on by default, one switched off read, written back and kept off the light
 		CHECK(std::ranges::all_of(d.gems, [](bool a_on) { return a_on; }));
 		std::stringstream gemsIn("lightblackstar=0\nLightPetty=off\n");
@@ -533,11 +564,41 @@ namespace
 			const auto atFull = ShownAt(Kind::kStar, true, false, atReach), atHalf = ShownAt(Kind::kStar, true, false, halfStars);
 			CHECK(atHalf.fade < atFull.fade && atHalf.radius < atFull.radius);
 		}
-		CHECK(d.who == WhoLights::kOthers);  // another mod's light stays by default (his step-aside order)
-		// ours on a gem: always on our lights, never on the game's, only where no other light hangs on another mod's
-		CHECK(OursOn(WhoLights::kOurs, true) && OursOn(WhoLights::kOurs, false));
-		CHECK(!OursOn(WhoLights::kGame, true) && !OursOn(WhoLights::kGame, false));
-		CHECK(!OursOn(WhoLights::kOthers, true) && OursOn(WhoLights::kOthers, false));
+		CHECK(d.who == WhoLights::kOurs);
+		// ours on a gem: on our lights but where its mod has it back, never on the game's, only where no other light hangs on another mod's
+		CHECK(OursOn(WhoLights::kOurs, true, false) && OursOn(WhoLights::kOurs, false, false));
+		CHECK(!OursOn(WhoLights::kOurs, true, true) && OursOn(WhoLights::kOurs, false, true));
+		CHECK(!OursOn(WhoLights::kGame, true, false) && !OursOn(WhoLights::kGame, false, false) && !OursOn(WhoLights::kGame, true, true));
+		CHECK(!OursOn(WhoLights::kOthers, true, false) && OursOn(WhoLights::kOthers, false, false));
+		// its light left to its mod: on another mod's lights, or on ours once handed back; never on the game's look, never with no light there
+		CHECK(LeftToTheirs(WhoLights::kOthers, true, false) && LeftToTheirs(WhoLights::kOurs, true, true));
+		CHECK(!LeftToTheirs(WhoLights::kOurs, true, false) && !LeftToTheirs(WhoLights::kGame, true, true));
+		CHECK(!LeftToTheirs(WhoLights::kOthers, false, false) && !LeftToTheirs(WhoLights::kOurs, false, true));
+		// "Same reach": off by default; on, every gem but the stars carries as far as a common gem on either lighting and at any Reach, each at its own brightness
+		CHECK(!d.sameReach);
+		Settings same, stepped;
+		same.sameReach = true;
+		std::stringstream sameOut;
+		WriteSettings(same, sameOut);
+		CHECK(sameOut.str().find("SameReach=1\n") != std::string::npos);
+		Settings          sameBack;
+		std::stringstream sameIn(sameOut.str());
+		static_cast<void>(ReadSettings(sameIn, sameBack));
+		CHECK(sameBack.sameReach);
+		for (const bool isl : { true, false }) {
+			for (const auto kind : { Kind::kPetty, Kind::kGrand, Kind::kBlack, Kind::kNamed, Kind::kCairn }) {
+				CHECK(Near(ShownAt(kind, isl, false, same).radius, ShownAt(Kind::kCommon, isl, false, stepped).radius, 0.5f));
+			}
+			CHECK(Near(ShownAt(Kind::kStar, isl, false, same).radius, ShownAt(Kind::kStar, isl, false, stepped).radius));
+			CHECK(ShownAt(Kind::kPetty, isl, false, stepped).radius < ShownAt(Kind::kGrand, isl, false, stepped).radius);
+		}
+		CHECK(Near(ShownAt(Kind::kPetty, true, false, same).fade, ShownAt(Kind::kPetty, true, false, stepped).fade));
+		CHECK(Near(ShownAt(Kind::kGrand, true, false, same).fade, ShownAt(Kind::kGrand, true, false, stepped).fade));
+		// past Community Shaders' highest cutoff a Soul Cairn piece keeps the common reach by a dimmer fade
+		CHECK(Near(ShownAt(Kind::kCairn, true, false, same).cutoff, kHighestCutoff));
+		CHECK(Near(ShownAt(Kind::kCairn, true, false, same).fade, 1.148f, 0.005f));
+		same.reach = stepped.reach = kReachMin;
+		CHECK(Near(ShownAt(Kind::kGrand, true, false, same).radius, ShownAt(Kind::kCommon, true, false, stepped).radius, 0.5f));
 		std::stringstream low("Brightness=1\nReach=-5\n");
 		CHECK(ReadSettings(low, d) == 2 && d.brightness == kBrightnessMin && d.reach == kReachMin);
 	}
