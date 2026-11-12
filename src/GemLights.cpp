@@ -889,8 +889,8 @@ namespace Plugin
 			Gems::Look bare, dressed;
 			bool       empty{ false };
 		};
-		std::unordered_map<const RE::TESBoundObject*, PinkLooks>       gPinkLooks;
-		std::unordered_set<RE::TESModelTextureSwap::AlternateTexture*> gPinkArrays;  // swap arrays known to hold one entry at least
+		std::unordered_map<const RE::TESBoundObject*, PinkLooks> gPinkLooks;
+		std::unordered_set<RE::FormID>                           gPinkSet;  // the records PlacePink sets (another mod's are left out)
 
 		void FindPink(RE::TESDataHandler* a_dh)
 		{
@@ -926,9 +926,9 @@ namespace Plugin
 			return diffuse && *diffuse ? std::vector<std::string>{ diffuse } : std::vector<std::string>{};
 		}
 
-		// one record's swap on (its pink set) or off. A loader thread reading it meanwhile sees the old swap or the new one: the entry
-		// is written while the count reads 0. An array the record had stays its own (the game frees it); a new one comes from the
-		// game's heap. A record another mod's model or swaps win is left alone
+		// one record's swap on (its pink set) or off. A loader thread reading it meanwhile sees the old swap or the new one: a new
+		// entry is written into a fresh array while the count reads 0, never over a published one. A record another mod's model or
+		// swaps win is left alone
 		bool DressPink(const PinkGem& a_gem, bool a_on)
 		{
 			auto*       dh = RE::TESDataHandler::GetSingleton();
@@ -945,19 +945,14 @@ namespace Plugin
 			if (now > 1 || (now == 1 && !pinkNow)) {
 				return false;
 			}
-			if (array && now == 1) {
-				gPinkArrays.insert(array);
-			}
 			if (!a_on || (pinkNow && array[0].textureSet == gPink.sets[a_gem.set])) {
 				count.store(a_on ? 1 : 0, std::memory_order_release);
 				return true;
 			}
-			if (!array || !gPinkArrays.contains(array)) {
-				array = static_cast<RE::TESModelTextureSwap::AlternateTexture*>(RE::calloc(1, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
-				if (!array) {
-					return false;
-				}
-				gPinkArrays.insert(array);
+			// never an entry a loader may be reading: each dress a fresh array (a few bytes kept per menu change)
+			array = static_cast<RE::TESModelTextureSwap::AlternateTexture*>(RE::calloc(1, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
+			if (!array) {
+				return false;
 			}
 			count.store(0, std::memory_order_release);
 			array[0].textureSet = gPink.sets[a_gem.set];
@@ -972,7 +967,13 @@ namespace Plugin
 		{
 			std::size_t placed = 0, left = 0;
 			for (const auto& g : kPinkGems) {
-				(DressPink(g, g.empty == a_onEmpty) ? placed : left) += 1;
+				if (DressPink(g, g.empty == a_onEmpty)) {
+					gPinkSet.insert(g.id);
+					++placed;
+				} else {
+					gPinkSet.erase(g.id);
+					++left;
+				}
 			}
 			gPink.onEmpty = a_onEmpty;
 			SKSE::log::info("New Filled Soul Gems: its pink on the {} gems ({} record(s) set, {} left as another mod has them)", a_onEmpty ? "empty" : "filled",
@@ -992,7 +993,7 @@ namespace Plugin
 			}
 			PlacePink(onEmpty);
 			for (const auto& [form, looks] : gPinkLooks) {
-				if (const auto it = gGems.find(form); it != gGems.end()) {
+				if (const auto it = gGems.find(form); it != gGems.end() && gPinkSet.contains(form->GetFormID())) {
 					it->second.look = looks.empty == onEmpty ? looks.dressed : looks.bare;
 				}
 			}
@@ -1815,6 +1816,7 @@ namespace Plugin
 		// New Filled Soul Gems' pink goes where the menu puts it before any gem's look is read (his checklist 574)
 		FindPink(dh);
 		gPinkLooks.clear();
+		gPinkSet.clear();
 		if (gPink.found) {
 			PlacePink(Gems::PinkOnEmpty(SettingsNow().pink, gPink.installedOnEmpty));
 		}
@@ -1946,7 +1948,7 @@ namespace Plugin
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			const bool taken = Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod, nullptr }, others);
-			if (pink && taken) {
+			if (pink && taken && gPinkSet.contains(gem->GetFormID())) {
 				auto dressed = bare;
 				static_cast<void>(dress(dressed, model, PinkDiffuses(*pink)));
 				gPinkLooks.insert_or_assign(gem, PinkLooks{ bare, dressed, pink->empty });
