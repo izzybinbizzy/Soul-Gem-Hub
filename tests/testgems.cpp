@@ -454,7 +454,7 @@ namespace
 		WriteSettings(s, out);
 		Settings          back;
 		std::stringstream again(out.str());
-		CHECK(ReadSettings(again, back) == 12 + kGemSwitches + kColorChoices);
+		CHECK(ReadSettings(again, back) == 13 + kGemSwitches + kColorChoices);
 		CHECK(out.str().find("WhoLights=0\nWhoPicked=1\n") != std::string::npos && out.str().find("Theirs") == std::string::npos && out.str().find("Defaults") == std::string::npos);
 		CHECK(out.str().find("GemMod") == std::string::npos && out.str().find("ColorNeVP=0\n") != std::string::npos);
 		CHECK(out.str().find("AuthorPick=0\n") != std::string::npos && !back.authorPick);
@@ -465,6 +465,12 @@ namespace
 		std::stringstream empty("");
 		CHECK(ReadSettings(empty, d) == 0);
 		CHECK(d.on && d.brightness == 100 && d.reach == 100 && d.pulse && d.stars == 50);
+		// New Filled Soul Gems' pink (his 574 "a"): 0 follows its installed file, 1 the filled gems, 2 the empty; read clamped, written
+		std::stringstream pinkIn("NewFilledPink=2\n"), pinkHigh("NewFilledPink=7\n");
+		Settings          pinkA, pinkB;
+		CHECK(ReadSettings(pinkIn, pinkA) == 1 && pinkA.pink == 2 && ReadSettings(pinkHigh, pinkB) == 1 && pinkB.pink == 2);
+		CHECK(d.pink == 0 && out.str().find("NewFilledPink=0\n") != std::string::npos);
+		CHECK(!PinkOnEmpty(0, false) && PinkOnEmpty(0, true) && !PinkOnEmpty(1, true) && PinkOnEmpty(2, false));
 		// a hand-edited file: an editor's UTF-8 mark, a note after a value, true / false and on / off words
 		std::stringstream hand("\xEF\xBB\xBFLights = off ; mine\nBrightness=150 # brighter\nPulse=false\nWhoLights=1\nReach=far\n");
 		Settings          h;
@@ -502,7 +508,7 @@ namespace
 		CHECK(hbOut.str().find("HandBack=Subtle Light; for #1 = Gems\n") != std::string::npos && hbOut.str().find("HandBackModelLights=1\n") != std::string::npos);
 		Settings          hbBack;
 		std::stringstream hbIn(hbOut.str());
-		CHECK(ReadSettings(hbIn, hbBack) == 13 + kGemSwitches + kColorChoices && HandedBack(hbBack, "Subtle Light; for #1 = Gems") && hbBack.modelLights);
+		CHECK(ReadSettings(hbIn, hbBack) == 14 + kGemSwitches + kColorChoices && HandedBack(hbBack, "Subtle Light; for #1 = Gems") && hbBack.modelLights);
 		CHECK(HandBack(hb, "subtle light; for #1 = gems", false) && hb.handBack.empty() && !HandBack(hb, "Subtle Light", false));
 		// a file cannot grow the list without end, and an empty or repeated line counts for nothing
 		std::string many;
@@ -657,6 +663,13 @@ namespace
 		// a game gem under a pack takes only its model's row in that texture: none without a model, none for a pair no take measured
 		const std::array<std::uint64_t, 0> noNamed{};
 		CHECK(!MeasuredPairColor(noNamed, packFile) && !MeasuredPairColor(noFile, wearsOther));
+		// New Filled Soul Gems' texture sets on the game's models (GemLights.cpp SwapMeasured): the petty in the common set by its pair
+		// row (its three sizes read apart, so that set has no row of its own), the grand set and the black set by their own rows
+		constexpr std::uint64_t            newFilledCommonSet = 0x1B1AB34DE690E2DAULL, gamePettyModel = 0xB8F31CDE569730CDULL;
+		const std::array<std::uint64_t, 1> pettyModel{ gamePettyModel }, commonSet{ newFilledCommonSet };
+		CHECK(MeasuredPairColor(pettyModel, commonSet) == (Rgb{ 227, 200, 255 }) && !MeasuredColorIn(commonSet));
+		CHECK(MeasuredColorIn(std::array<std::uint64_t, 1>{ 0xD660EFFCC7A53E01ULL }) == (Rgb{ 246, 208, 255 }));
+		CHECK(MeasuredColorIn(std::array<std::uint64_t, 1>{ 0x4E72E3E4A548F044ULL }) == (Rgb{ 255, 160, 245 }));
 		CHECK(GameFilesIn(kGameGemFiles) && !GameFilesIn(noFile));
 		// every row keyed once, by a model; a choice row names a choice, a fixed row its color
 		bool rowsOk = true;

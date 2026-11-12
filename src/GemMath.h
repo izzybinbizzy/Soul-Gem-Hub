@@ -1083,6 +1083,7 @@ namespace Gems
 		std::array<std::uint8_t, kColorChoices> side{};                                                              // each color choice's side: 0 the first, 1 the second, 2 the third (ColorChoice order, kNone left out)
 		bool                                    authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
 		bool                                    starGem{ true };                                                     // "Star light": true = the gem it holds, false = a star's metal (its body)
+		std::uint8_t                            pink{ 0 };                                                           // New Filled Soul Gems' pink look: 0 where its installed file puts it, 1 on the filled gems, 2 on the empty gems
 		std::array<bool, kGemSwitches>          gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
 	};
 
@@ -1090,6 +1091,12 @@ namespace Gems
 	[[nodiscard]] inline bool GemLit(const Look& a_look, const Settings& a_s) noexcept
 	{
 		return a_s.on && a_s.gems[static_cast<std::size_t>(SwitchOf(a_look))];
+	}
+
+	// where New Filled Soul Gems' pink look goes (his checklist 574 "a"): the menu's pick, else where its installed file puts it
+	[[nodiscard]] constexpr bool PinkOnEmpty(std::uint8_t a_pick, bool a_installedOnEmpty) noexcept
+	{
+		return a_pick == 0 ? a_installedOnEmpty : a_pick == 2;
 	}
 
 	// each color choice's key in Settings.ini and DevBench, and the menu's words for it and its sides (Menu.cpp translates them)
@@ -1296,6 +1303,8 @@ namespace Gems
 				starGem = v != 0;
 			} else if (SameText(key, "StarPicked")) {
 				starPicked = v != 0;
+			} else if (SameText(key, "NewFilledPink")) {
+				a_out.pink = static_cast<std::uint8_t>(std::clamp(v, 0, 2));
 			} else if (const auto it = std::ranges::find_if(kGemSwitchKeys, [&](std::string_view a_k) { return SameText(key, a_k); });
 				it != kGemSwitchKeys.end()) {
 				a_out.gems[static_cast<std::size_t>(it - kGemSwitchKeys.begin())] = v != 0;
@@ -1322,7 +1331,7 @@ namespace Gems
 		a_out << "; Illuminated - Soul Gem Hub - written by its menu (SKSE Menu Framework). Change these in game, not here.\n"
 			  << "[Settings]\nLights=" << (a_s.on ? 1 : 0) << "\nBrightness=" << a_s.brightness << "\nReach=" << a_s.reach << "\nSameReach=" << (a_s.sameReach ? 1 : 0) << "\nStars=" << a_s.stars
 			  << "\nPulse=" << (a_s.pulse ? 1 : 0) << "\nWhoLights=" << static_cast<int>(a_s.who) << "\nWhoPicked=1\nHandBackModelLights="
-			  << (a_s.modelLights ? 1 : 0) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\nStarPicked=1\n";
+			  << (a_s.modelLights ? 1 : 0) << "\nAuthorPick=" << (a_s.authorPick ? 1 : 0) << "\nStarGem=" << (a_s.starGem ? 1 : 0) << "\nStarPicked=1\nNewFilledPink=" << static_cast<int>(a_s.pink) << '\n';
 		for (std::size_t i = 0; i < kGemSwitches; ++i) {
 			a_out << kGemSwitchKeys[i] << '=' << (a_s.gems[i] ? 1 : 0) << '\n';
 		}
