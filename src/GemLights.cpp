@@ -958,7 +958,8 @@ namespace Plugin
 			array[0].textureSet = gPink.sets[a_gem.set];
 			array[0].index3D = 0;
 			array[0].name3D = a_gem.shape;
-			swap->alternateTextures = array;
+			// published only once the entry is whole: a loader that read the old count may follow the new pointer
+			std::atomic_ref<RE::TESModelTextureSwap::AlternateTexture*>(swap->alternateTextures).store(array, std::memory_order_release);
 			count.store(1, std::memory_order_release);
 			return true;
 		}
