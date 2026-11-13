@@ -143,7 +143,7 @@ namespace Plugin
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Puts New Filled Soul Gems' pink look on the filled gems or the empty ones."));
+				"Puts New Filled Soul Gems' pink look on the filled gems or the empty ones; a gem in view changes when it next loads."));
 		}
 
 		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
@@ -332,7 +332,7 @@ namespace Plugin
 				} disabled{ !on };
 				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 					T("How bright the gems' light is. 100% is as built."));
-				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built; Brightness sets how bright."));
+				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built; on Community Shaders a short reach also dims it."));
 				BesideIfRoom(CalcTextSize(T("Same reach")).x + 40.0f);
 				Switch(T("Same reach"), &Gems::Settings::sameReach,
 					T("Gives every gem a common gem's reach; the two stars keep the Stars slider."));
