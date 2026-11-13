@@ -351,6 +351,13 @@ namespace Plugin
 				if (choices || LightColorMatters() || PinkFound()) {
 					Header(Icon::kGem, T("Colors"));
 					if (PinkFound()) {
+						// the pink is the gem mod's look, not our light: movable with the lights off; greyed again after it, a throw too
+						EndDisabled();
+						struct Again
+						{
+							bool off{ false };
+							~Again() { BeginDisabled(off); }
+						} again{ !on };
 						PinkChoice();
 					}
 					ColorChoices();

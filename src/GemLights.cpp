@@ -877,7 +877,8 @@ namespace Plugin
 
 		struct PinkSets
 		{
-			std::array<RE::BGSTextureSet*, 3> sets{};
+			std::array<RE::BGSTextureSet*, 3> sets{};   // the sets a dress uses: the first loaded plugin's in kPinkPlugins
+			std::vector<RE::BGSTextureSet*>   known{};  // every loaded plugin's sets: a swap with any of them is this pink
 			bool                              found{ false }, installedOnEmpty{ false };
 			std::atomic<bool>                 onEmpty{ false };  // where the look is now (the menu reads it on the render thread)
 		};
@@ -895,6 +896,7 @@ namespace Plugin
 		void FindPink(RE::TESDataHandler* a_dh)
 		{
 			gPink.found = false;
+			gPink.known.clear();
 			for (const auto& p : kPinkPlugins) {
 				if (!Loaded(a_dh, p.name)) {
 					continue;
@@ -907,10 +909,12 @@ namespace Plugin
 					SKSE::log::warn("New Filled Soul Gems: {} is loaded without its three texture sets - its pink stays where the file puts it", p.name);
 					continue;
 				}
-				gPink.sets = sets;
-				gPink.installedOnEmpty = p.empty;
-				gPink.found = true;
-				return;
+				gPink.known.insert(gPink.known.end(), sets.begin(), sets.end());
+				if (!gPink.found) {
+					gPink.sets = sets;
+					gPink.installedOnEmpty = p.empty;
+					gPink.found = true;
+				}
 			}
 		}
 
@@ -941,7 +945,9 @@ namespace Plugin
 			std::atomic_ref<std::uint32_t> count(swap->numAlternateTextures);
 			auto*                          array = swap->alternateTextures;
 			const auto                     now = count.load(std::memory_order_acquire);
-			const bool                     pinkNow = now == 1 && array && std::ranges::find(gPink.sets, array[0].textureSet) != gPink.sets.end();
+			// this pink only when the set, the shape and the index are all the gem's: another mod's swap with one of these sets is its own
+			const bool pinkNow = now == 1 && array && std::ranges::find(gPink.known, array[0].textureSet) != gPink.known.end() &&
+			                     array[0].index3D == 0 && Gems::Lower(array[0].name3D.c_str()) == Gems::Lower(a_gem.shape);
 			if (now > 1 || (now == 1 && !pinkNow)) {
 				return false;
 			}
