@@ -720,6 +720,17 @@ namespace Plugin
 			return it->second;
 		}
 
+		// the color measured off a texture-set gem's own pictures: this model in that texture where sizes sharing it read apart, else
+		// that texture's own row (gem color measure.py TXST_PICKS, New Filled Soul Gems)
+		std::optional<Gems::Rgb> SwapMeasured(std::string_view a_model, const std::vector<std::string>& a_textures)
+		{
+			const auto& swapped = SwapPrints(a_textures);
+			if (const auto pair = Gems::MeasuredPairColor(PrintsOf(a_model), swapped)) {
+				return pair;
+			}
+			return Gems::MeasuredColorIn(swapped);
+		}
+
 		std::optional<Gems::Rgb> SwapColorOnce(const std::vector<std::string>& a_textures);
 
 		// the color swapped textures show: a picture row of one of them first, else their pixels (ColorSum); once per set of textures
@@ -825,6 +836,174 @@ namespace Plugin
 			}
 			gGems.insert_or_assign(a_form, std::move(gem));
 			return true;
+		}
+
+		// New Filled Soul Gems (Nexus 118160) dresses the game's gem models in its pink through three texture sets: on the filled gems
+		// (its main file) or on the empty ones (its optional New Empty file). His checklist 574 "a": the menu moves that look between
+		// them, whichever file is installed. Each record's model and the shape its set dresses, as both of its plugins write them
+		struct PinkGem
+		{
+			RE::FormID  id{ 0 };
+			bool        empty{ false };
+			std::size_t set{ 0 };  // the set's place in PinkSets
+			const char* model{ "" };
+			const char* shape{ "" };
+		};
+		constexpr std::array<PinkGem, 13> kPinkGems{ {
+			{ 0x2E4E3, false, 0, "Clutter\\SoulGem\\SoulGemPetty01.nif", "SoulGemPetty01" },
+			{ 0x2E4E5, false, 0, "Clutter\\SoulGem\\SoulGemLesser01.nif", "SoulGemLesser" },
+			{ 0x2E4F3, false, 0, "Clutter\\SoulGem\\SoulGemCommon01.nif", "SoulGemCommon" },
+			{ 0x2E4FB, false, 1, "Clutter\\SoulGem\\SoulGemGreater01.nif", "SoulGemGreat" },
+			{ 0x2E4FF, false, 1, "Clutter\\SoulGem\\SoulGemGrand01.nif", "SoulGemGrand" },
+			{ 0x2E504, false, 2, "Clutter\\SoulGem\\SoulGemBlack01.nif", "SoulGemBlack01" },
+			{ 0x2E4E2, true, 0, "Clutter\\SoulGem\\SoulGemPetty01.nif", "SoulGemPetty01" },
+			{ 0x2E4E4, true, 0, "Clutter\\SoulGem\\SoulGemLesser01.nif", "SoulGemLesser" },
+			{ 0x2E4E6, true, 0, "Clutter\\SoulGem\\SoulGemCommon01.nif", "SoulGemCommon" },
+			{ 0x2E4F4, true, 1, "Clutter\\SoulGem\\SoulGemGreater01.nif", "SoulGemGreat" },
+			{ 0x2E4FC, true, 1, "Clutter\\SoulGem\\SoulGemGrand01.nif", "SoulGemGrand" },
+			{ 0x2E500, true, 2, "Clutter\\SoulGem\\SoulGemBlack01.nif", "SoulGemBlack01" },
+			{ 0x43E26, true, 1, "Clutter\\SoulGem\\SoulGemGrand01.nif", "SoulGemGrand" },  // Wylandriah's, dressed by the New Empty file only
+		} };
+
+		// its two plugins and their three sets (common, grand, black); with both loaded the main file decides where the look starts
+		struct PinkPlugin
+		{
+			const char*               name{ "" };
+			std::array<RE::FormID, 3> sets{};
+			bool                      empty{ false };
+		};
+		constexpr std::array<PinkPlugin, 2> kPinkPlugins{ { { "NewFilledSoulGems.esp", { 0xD62, 0xD63, 0xD64 }, false },
+			{ "NewEmptySoulGems.esp", { 0x800, 0x801, 0x802 }, true } } };
+
+		struct PinkSets
+		{
+			std::array<RE::BGSTextureSet*, 3> sets{};   // the sets a dress uses: the first loaded plugin's in kPinkPlugins
+			std::vector<RE::BGSTextureSet*>   known{};  // every loaded plugin's sets: a swap with any of them is this pink
+			bool                              found{ false }, installedOnEmpty{ false };
+			std::atomic<bool>                 onEmpty{ false };  // where the look is now (the menu reads it on the render thread)
+		};
+		PinkSets gPink;
+
+		// a New Filled record we light: its look bare and in the pink, so the menu moves the pink with no new reading
+		struct PinkLooks
+		{
+			Gems::Look bare, dressed;
+			bool       empty{ false };
+		};
+		std::unordered_map<const RE::TESBoundObject*, PinkLooks> gPinkLooks;
+		std::unordered_set<RE::FormID>                           gPinkSet;  // the records PlacePink sets (another mod's are left out)
+
+		void FindPink(RE::TESDataHandler* a_dh)
+		{
+			gPink.found = false;
+			gPink.known.clear();
+			for (const auto& p : kPinkPlugins) {
+				if (!Loaded(a_dh, p.name)) {
+					continue;
+				}
+				std::array<RE::BGSTextureSet*, 3> sets{};
+				for (std::size_t i = 0; i < sets.size(); ++i) {
+					sets[i] = a_dh->LookupForm<RE::BGSTextureSet>(p.sets[i], p.name);
+				}
+				if (std::ranges::find(sets, nullptr) != sets.end()) {
+					SKSE::log::warn("New Filled Soul Gems: {} is loaded without its three texture sets - its pink stays where the file puts it", p.name);
+					continue;
+				}
+				gPink.known.insert(gPink.known.end(), sets.begin(), sets.end());
+				if (!gPink.found) {
+					gPink.sets = sets;
+					gPink.installedOnEmpty = p.empty;
+					gPink.found = true;
+				}
+			}
+		}
+
+		[[nodiscard]] const PinkGem* PinkOf(const RE::TESForm* a_form)
+		{
+			const auto it = std::ranges::find(kPinkGems, a_form->GetFormID(), &PinkGem::id);
+			return gPink.found && it != kPinkGems.end() ? &*it : nullptr;
+		}
+
+		[[nodiscard]] std::vector<std::string> PinkDiffuses(const PinkGem& a_gem)
+		{
+			const char* diffuse = gPink.sets[a_gem.set]->GetTexturePath(RE::BSTextureSet::Textures::kDiffuse);
+			return diffuse && *diffuse ? std::vector<std::string>{ diffuse } : std::vector<std::string>{};
+		}
+
+		// one record's swap on (its pink set) or off. A loader thread reading it meanwhile sees the old swap or the new one: a new
+		// entry is written into a fresh array while the count reads 0, never over a published one. A record another mod's model or
+		// swaps win is left alone
+		bool DressPink(const PinkGem& a_gem, bool a_on)
+		{
+			auto*       dh = RE::TESDataHandler::GetSingleton();
+			auto*       form = dh ? dh->LookupForm(a_gem.id, "Skyrim.esm") : nullptr;
+			auto*       swap = form && form->Is(RE::FormType::SoulGem) ? form->As<RE::TESModelTextureSwap>() : nullptr;
+			const char* model = swap ? swap->GetModel() : nullptr;
+			if (!swap || Gems::NormalPath(model ? model : "") != Gems::NormalPath(a_gem.model)) {
+				return false;
+			}
+			std::atomic_ref<std::uint32_t> count(swap->numAlternateTextures);
+			auto*                          array = swap->alternateTextures;
+			const auto                     now = count.load(std::memory_order_acquire);
+			// this pink only when the set, the shape and the index are all the gem's: another mod's swap with one of these sets is its own
+			const bool pinkNow = now == 1 && array && std::ranges::find(gPink.known, array[0].textureSet) != gPink.known.end() &&
+			                     array[0].index3D == 0 && Gems::Lower(array[0].name3D.c_str()) == Gems::Lower(a_gem.shape);
+			if (now > 1 || (now == 1 && !pinkNow)) {
+				return false;
+			}
+			if (!a_on || (pinkNow && array[0].textureSet == gPink.sets[a_gem.set])) {
+				count.store(a_on ? 1 : 0, std::memory_order_release);
+				return true;
+			}
+			// never an entry a loader may be reading: each dress a fresh array (a few bytes kept per menu change)
+			array = static_cast<RE::TESModelTextureSwap::AlternateTexture*>(RE::calloc(1, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
+			if (!array) {
+				return false;
+			}
+			count.store(0, std::memory_order_release);
+			array[0].textureSet = gPink.sets[a_gem.set];
+			array[0].index3D = 0;
+			array[0].name3D = a_gem.shape;
+			// published only once the entry is whole: a loader that read the old count may follow the new pointer
+			std::atomic_ref<RE::TESModelTextureSwap::AlternateTexture*>(swap->alternateTextures).store(array, std::memory_order_release);
+			count.store(1, std::memory_order_release);
+			return true;
+		}
+
+		void PlacePink(bool a_onEmpty)
+		{
+			std::size_t placed = 0, left = 0;
+			for (const auto& g : kPinkGems) {
+				if (DressPink(g, g.empty == a_onEmpty)) {
+					gPinkSet.insert(g.id);
+					++placed;
+				} else {
+					gPinkSet.erase(g.id);
+					++left;
+				}
+			}
+			gPink.onEmpty = a_onEmpty;
+			SKSE::log::info("New Filled Soul Gems: its pink on the {} gems ({} record(s) set, {} left as another mod has them)", a_onEmpty ? "empty" : "filled",
+				placed, left);
+		}
+
+		// main thread: the menu's pick onto the records and the looks of the gems we light; a gem already in view wears it when it
+		// next loads, our light on it at once
+		void ApplyPink()
+		{
+			if (!gPink.found) {
+				return;
+			}
+			const bool onEmpty = Gems::PinkOnEmpty(SettingsNow().pink, gPink.installedOnEmpty);
+			if (onEmpty == gPink.onEmpty.load()) {
+				return;
+			}
+			PlacePink(onEmpty);
+			for (const auto& [form, looks] : gPinkLooks) {
+				if (const auto it = gGems.find(form); it != gGems.end() && gPinkSet.contains(form->GetFormID())) {
+					it->second.look = looks.empty == onEmpty ? looks.dressed : looks.bare;
+				}
+			}
 		}
 
 		// items and pieces that are not soul gem records, known by their own model: a_items lets an item take a named gem's model
@@ -1641,6 +1820,13 @@ namespace Plugin
 		gRustic = sorted && unsorted ? "both" : sorted ? "Sorted" :
 		                                    unsorted   ? "Unsorted" :
 		                                                 "";
+		// New Filled Soul Gems' pink goes where the menu puts it before any gem's look is read (his checklist 574)
+		FindPink(dh);
+		gPinkLooks.clear();
+		gPinkSet.clear();
+		if (gPink.found) {
+			PlacePink(Gems::PinkOnEmpty(SettingsNow().pink, gPink.installedOnEmpty));
+		}
 		// the particle-light configs (Data\ParticleLights\<texture>.ini): a Community Shaders that draws particle lights (Bottled
 		// Shaders, Community Shaders Expanded) lights every shape drawing such a texture itself
 		gParticleTextures.clear();
@@ -1722,6 +1908,20 @@ namespace Plugin
 				choicesFound[static_cast<std::size_t>(his->choice)] = true;
 			}
 		};
+		// a gem in textures of its own (its record swaps them onto the model): their color and glow, never the game model's
+		const auto dress = [&](Gems::Look& a_look, std::string_view a_model, const std::vector<std::string>& a_swapped) {
+			SetGlow(a_look, SwapGlow(a_swapped));
+			a_look.exact = false;
+			if (const auto measured = SwapMeasured(a_model, a_swapped)) {
+				Gems::WearFixedColor(a_look, *measured);
+				return true;
+			}
+			if (const auto own = SwapColor(a_swapped)) {
+				a_look.rgb = *own;
+				return true;
+			}
+			return false;
+		};
 		for (auto* gem : dh->GetFormArray<RE::TESSoulGem>()) {
 			if (!gem) {
 				continue;
@@ -1744,22 +1944,22 @@ namespace Plugin
 			// a star's picture rows were keyed by the other star's model, so both stars read their own textures (readColor)
 			readColor(*look, model, star, namedId(gem));
 			look->named = namedId(gem) != 0;  // on a plain model too (a kGame look): its own light switch
-			// a gem in textures of its own (its record swaps them onto the model): their color, never the model's
+			const auto* pink = star ? nullptr : PinkOf(gem);
+			const auto  bare = *look;
 			if (const auto swapped = star ? std::vector<std::string>{} : SwappedDiffuses(gem); !swapped.empty()) {
 				if (const auto mod = BlockedSwap(swapped)) {
 					CountName(gBlocked, *mod);
 					continue;
 				}
-				// its own textures, never the game model's glow
-				SetGlow(*look, SwapGlow(swapped));
-				look->exact = false;
-				if (const auto own = SwapColor(swapped)) {
-					look->rgb = *own;
-					++fromSwap;
-				}
+				fromSwap += dress(*look, model, swapped) ? 1 : 0;
 			}
 			const bool always = star || holds || look->family == Gems::Family::kNamed;
 			const bool taken = Take(gem, model, Gem{ *look, !always, Gems::Owner::kThisMod, nullptr }, others);
+			if (pink && taken && gPinkSet.contains(gem->GetFormID())) {
+				auto dressed = bare;
+				static_cast<void>(dress(dressed, model, PinkDiffuses(*pink)));
+				gPinkLooks.insert_or_assign(gem, PinkLooks{ bare, dressed, pink->empty });
+			}
 			withGlow += taken && look->glow ? 1 : 0;
 			if (taken && always) {
 				++lit;
@@ -1890,7 +2090,9 @@ namespace Plugin
 
 	void ApplyNow()
 	{
-		// a look now, walking the loaded references (a gem moved by a script sends no load event), and the settings onto every light
+		// New Filled Soul Gems' pink where the menu puts it, then a look now, walking the loaded references (a gem moved by a script
+		// sends no load event), and the settings onto every light
+		ApplyPink();
 		Look(true);
 		RefreshLights();
 	}
@@ -1922,6 +2124,8 @@ namespace Plugin
 	bool        LightColorMatters() { return gWithGlow.load() > 0; }
 	bool        ColorChoiceFound(Gems::ColorChoice a_choice) { return (gChoices.load() >> static_cast<std::uint32_t>(a_choice)) & 1u; }
 	std::string RusticFound() { return gRusticLit ? gRustic : std::string(); }
+	bool        PinkFound() { return gPink.found; }
+	bool        PinkOnEmptyNow() { return gPink.onEmpty.load(); }
 
 	std::string GlowNow(RE::FormID a_ref)
 	{

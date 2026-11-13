@@ -131,6 +131,22 @@ namespace Plugin
 			}
 		}
 
+		// New Filled Soul Gems' pink on the filled or on the empty gems (his checklist 574), shown only while it is loaded
+		void PinkChoice()
+		{
+			const int                        now = PinkOnEmptyNow() ? 1 : 0;
+			int                              v = now;
+			const std::array<const char*, 2> items{ T("On the filled gems"), T("On the empty gems") };
+			SetNextItemWidth(260.0f);
+			if (Combo(T("New Filled Soul Gems pink"), &v, items.data(), static_cast<int>(items.size())) && v != now) {
+				UpdateSettings([&](Gems::Settings& a_s) { a_s.pink = static_cast<std::uint8_t>(v + 1); });
+				Changed();
+			}
+			MenuStyle::Tip(T(
+				"Where New Filled Soul Gems puts its pink look, whichever of its two files you installed. A gem already in view "
+				"changes the next time it loads."));
+		}
+
 		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
 		void LightColor()
 		{
@@ -332,8 +348,18 @@ namespace Plugin
 				for (std::size_t i = 1; i <= Gems::kColorChoices; ++i) {
 					choices = choices || ColorChoiceFound(static_cast<Gems::ColorChoice>(i));
 				}
-				if (choices || LightColorMatters()) {
+				if (choices || LightColorMatters() || PinkFound()) {
 					Header(Icon::kGem, T("Colors"));
+					if (PinkFound()) {
+						// the pink is the gem mod's look, not our light: movable with the lights off; greyed again after it, a throw too
+						EndDisabled();
+						struct Again
+						{
+							bool off{ false };
+							~Again() { BeginDisabled(off); }
+						} again{ !on };
+						PinkChoice();
+					}
 					ColorChoices();
 					if (LightColorMatters()) {
 						LightColor();

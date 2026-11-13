@@ -99,6 +99,8 @@ namespace Plugin
 	[[nodiscard]] bool                                             GemsModelLightSeen();                          // a gem has worn only its own model's light
 	[[nodiscard]] bool                                             LightColorMatters();                           // "Light color" changes a lit gem
 	[[nodiscard]] bool                                             ColorChoiceFound(Gems::ColorChoice a_choice);  // its gem mod is loaded: the menu offers it
+	[[nodiscard]] bool                                             PinkFound();                                   // New Filled Soul Gems is loaded: the menu offers where its pink goes
+	[[nodiscard]] bool                                             PinkOnEmptyNow();                              // its pink is on the empty gems now, else on the filled ones
 	[[nodiscard]] std::string                                      GemsReport();                                  // for DevBench (JSON)
 	[[nodiscard]] std::string                                      GlowNow(RE::FormID a_ref);                     // main thread: the glow each lit shape of a placed gem shows now (JSON)
 
