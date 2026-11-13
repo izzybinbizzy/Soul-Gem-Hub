@@ -143,8 +143,7 @@ namespace Plugin
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Where New Filled Soul Gems puts its pink look, whichever of its two files you installed. A gem already in view "
-				"changes the next time it loads."));
+				"Puts New Filled Soul Gems' pink look on the filled gems or the empty ones."));
 		}
 
 		// "Light color": each gem's own glow (the default) or the author's pick, for the gems whose glow is not their light's color
@@ -152,15 +151,14 @@ namespace Plugin
 		{
 			auto                             s = SettingsNow();
 			int                              v = s.authorPick ? 1 : 0;
-			const std::array<const char*, 2> items{ T("Gem's own glow"), T("Author pick") };
+			const std::array<const char*, 2> items{ T("Gem's own glow"), T("My pick") };
 			SetNextItemWidth(260.0f);
 			if (Combo(T("Light color"), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.authorPick) {
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.authorPick = v == 1; });
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Some gems glow in another color than the light the author picked for them. Gem's own glow lights them in the color "
-				"they glow; Author pick keeps the author's color."));
+				"Lights a gem in the color it glows, or in the color I picked."));
 		}
 
 		// "Star light": Azura's Star and the Black Star lit in the color of their metal or of the gem they hold
@@ -182,17 +180,14 @@ namespace Plugin
 		{
 			const auto                       s = SettingsNow();
 			int                              v = static_cast<int>(s.who);
-			const std::array<const char*, 3> items{ T("Use our lights"), T("Use the game's own lights"), T("Use another mod's lights") };
+			const std::array<const char*, 3> items{ T("Use my lights"), T("Use the game's own lights"), T("Use another mod's lights") };
 			SetNextItemWidth(260.0f);
 			if (Combo(T("Whose light"), &v, items.data(), static_cast<int>(items.size())) && v != static_cast<int>(s.who)) {
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.who = static_cast<Gems::WhoLights>(std::clamp(v, 0, 2)); });
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Use our lights (the default): this mod lights every gem and any other light on it is put out, but for a mod you hand its gems "
-				"back below. Use the game's own lights: none of this mod's light, and other mods' lights on the gems are put out too. Use another "
-				"mod's lights: a gem a Light Placer file or its own model's particle light lights keeps that light, each mod named at the top; "
-				"this mod lights only the rest."));
+				"Whose light a gem wears: mine, the game's own, or another mod's where one lights it."));
 		}
 
 		// a mod's gems handed back to its own light, or taken again
@@ -217,7 +212,7 @@ namespace Plugin
 				return;
 			}
 			Header(Icon::kGem, T("Hand Gems Back"));
-			const char* tip = T("Ticked, these gems get their own light back and this mod's light comes off them.");
+			const char* tip = T("Ticked, another mod's light stays on these gems and mine comes off them.");
 			for (const auto& [mod, n] : mods) {
 				HandBackSwitch(s, mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
 			}
@@ -254,7 +249,7 @@ namespace Plugin
 				bool       v = SettingsNow().gems[i];
 				const bool changed = Checkbox(T(kLabels[i]), &v);
 				// a hover tip belongs to the item just drawn, so each switch carries its own
-				MenuStyle::Tip(T("A gem switched off gets none of this mod's light; another mod's light on it stays."));
+				MenuStyle::Tip(T("A gem switched off gets none of my light; another mod's light on it stays."));
 				if (changed) {
 					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
 					Changed();
@@ -265,7 +260,7 @@ namespace Plugin
 				// the stars' strength, and their color while one is lit, beside their switches (his rule: a setting's controls beside it)
 				BesideIfRoom(260.0f + CalcTextSize(T("Stars")).x);
 				Percent(T("Stars"), &Gems::Settings::stars, Gems::kStarsMin, Gems::kStarsMax,
-					T("How bright Azura's Star and the Black Star are and how far their light reaches, on top of Brightness and Reach. Turn it down when their light drowns the gems near them."));
+					T("How bright and far Azura's Star and the Black Star shine, on top of Brightness and Reach."));
 				if (const auto s = SettingsNow(); s.gems[kAzura] || s.gems[kBlack]) {
 					BesideIfRoom(260.0f + CalcTextSize(T("Star light")).x);
 					StarLight();
@@ -300,13 +295,13 @@ namespace Plugin
 			const auto now = SettingsNow();
 			for (const auto& [mod, n] : GemsLitBy()) {
 				const bool  theirs = now.who == Gems::WhoLights::kOthers || (now.who == Gems::WhoLights::kOurs && Gems::HandedBack(now, mod));
-				const char* line = theirs                            ? T("Lit by {} (its own light): {}") :
+				const char* line = theirs                            ? T("Lit by {}: {}") :
 				                   now.who == Gems::WhoLights::kOurs ? T("Taken over from {}: {}") :
 				                                                       T("Put out for the game's own look - {}: {}");
 				TextColored(kMuted, "%s", Fill(line, mod, std::to_string(n)).c_str());
 			}
 			if (left[3]) {
-				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (this mod's RE::Light files): {}"), std::to_string(left[3])).c_str());
+				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (my RE::Light files): {}"), std::to_string(left[3])).c_str());
 			}
 			for (const auto& [mod, n] : GemsBlocked()) {
 				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
@@ -319,12 +314,12 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Gems near you lit by {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			for (const auto& [look, n] : nearYou.byModel) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you keeping their model's own light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems near you keeping their model's light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
 			Switch(T("Soul gem lights"), &Gems::Settings::on,
-				T("Every filled soul gem, Azura's Star, the Black Star, the named quest gems and the Soul Cairn's gems glow in their own color."));
+				T("Lights every filled soul gem, both stars and the Soul Cairn's gems, each in its own color."));
 			const bool on = SettingsNow().on;
 			{
 				// ended however the block is left, so a caught throw never leaves the next frame disabled
@@ -337,10 +332,10 @@ namespace Plugin
 				} disabled{ !on };
 				Percent(T("Brightness"), &Gems::Settings::brightness, Gems::kBrightnessMin, Gems::kBrightnessMax,
 					T("How bright the gems' light is. 100% is as built."));
-				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built. On Community Shaders a short reach dims the light, and past a certain point Brightness adds no more light."));
+				Percent(T("Reach"), &Gems::Settings::reach, Gems::kReachMin, Gems::kReachMax, T("How far the gems' light reaches. 100% is as built; Brightness sets how bright."));
 				BesideIfRoom(CalcTextSize(T("Same reach")).x + 40.0f);
 				Switch(T("Same reach"), &Gems::Settings::sameReach,
-					T("Every gem's light reaches as far as a common gem's. Azura's Star and the Black Star keep their own reach and the Stars slider."));
+					T("Gives every gem a common gem's reach; the two stars keep the Stars slider."));
 				Switch(T("Soft pulse"), &Gems::Settings::pulse, T("The light breathes slowly, as the gem's own glow does."));
 				GemSwitches();
 				// shown only while a gem mod with a color choice is loaded, or where Light color's two choices light a gem differently
