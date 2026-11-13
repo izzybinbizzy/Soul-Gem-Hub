@@ -32,6 +32,7 @@
 // node.
 
 #include "Plugin.h"
+#include "SceneTakeOff.h"
 
 #include "FrameCost.h"
 
@@ -1191,9 +1192,7 @@ namespace Plugin
 		void Drop(Kept& a_kept, RE::ShadowSceneNode* a_scene)
 		{
 			a_kept.dimmer.reset();
-			if (a_scene && a_kept.bs) {
-				a_scene->RemoveLight(a_kept.bs);
-			}
+			SceneTakeOff::TakeOff(a_scene, a_kept.bs);
 			if (a_kept.light && a_kept.light->parent) {
 				a_kept.light->parent->DetachChild(a_kept.light.get());
 			}
@@ -1332,7 +1331,7 @@ namespace Plugin
 					out->portalStrict = bs->portalStrict;
 					out->affectLand = bs->affectLand;
 					out->affectWater = bs->affectWater;
-					a_scene->RemoveLight(RE::NiPointer<RE::BSLight>(bs));
+					SceneTakeOff::TakeOff(a_scene, RE::NiPointer<RE::BSLight>(bs));
 				}
 			}
 			a_gem.relit = false;
