@@ -1008,8 +1008,8 @@ namespace Plugin
 		}
 
 		// items and pieces that are not soul gem records, known by their own model: a_items lets an item take a named gem's model
-		// (the Soul Essence Gem); the Soul Cairn's pieces are an activator, a misc item and a furniture, never a static - a static
-		// wearing one of their models is decor (a display)
+		// (the Soul Essence Gem) or a Paragon's; the Soul Cairn's pieces are an activator, a misc item and a furniture, never a static -
+		// a static wearing one of their models is decor (a display)
 		template <class T>
 		std::size_t AddByModel(bool a_items, const Others& a_others)
 		{
@@ -1023,7 +1023,8 @@ namespace Plugin
 				const auto* model = bound ? form->template As<RE::TESModel>() : nullptr;
 				const char* path = model ? model->GetModel() : nullptr;
 				auto        look = path && *path ? Gems::LookOfModel(path, false) : std::nullopt;
-				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && look->family == Gems::Family::kNamed))) {
+				const bool  item = look && (look->family == Gems::Family::kNamed || look->family == Gems::Family::kParagon);
+				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && item))) {
 					continue;
 				}
 				if (const auto eye = look->kind == Gems::Kind::kCairn ? EyeColor(path, Gems::CairnEyeColorOf) : std::nullopt) {
@@ -1032,7 +1033,8 @@ namespace Plugin
 					look->rgb = *seen;
 				}
 				SetGlow(*look, GlowOf(path));
-				look->exact = look->rgb == Gems::kGameCairnRgb;
+				// a set's colors are worn as given: the Cairn's pink, the Paragons' (CS Light's until each is read off a still)
+				look->exact = look->rgb == Gems::kGameCairnRgb || look->family == Gems::Family::kParagon;
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod, nullptr }, a_others) ? 1 : 0;
 			}
 			return added;

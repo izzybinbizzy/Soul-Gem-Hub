@@ -238,7 +238,7 @@ namespace Plugin
 		{
 			constexpr std::array<const char*, Gems::kGemSwitches> kLabels{ TR_MARK("Petty soul gems"), TR_MARK("Lesser soul gems"),
 				TR_MARK("Common soul gems"), TR_MARK("Greater soul gems"), TR_MARK("Grand soul gems"), TR_MARK("Black soul gems"),
-				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems") };
+				TR_MARK("Named quest gems"), TR_MARK("Azura's Star"), TR_MARK("The Black Star"), TR_MARK("The Soul Cairn's gems"), TR_MARK("Paragons") };
 			constexpr auto                                        kAzura = static_cast<std::size_t>(Gems::GemSwitch::kAzurasStar);
 			constexpr auto                                        kBlack = static_cast<std::size_t>(Gems::GemSwitch::kBlackStar);
 			Header(Icon::kGem, T("Which Gems Glow"));
