@@ -24,6 +24,7 @@ namespace Plugin
 		std::atomic<bool>     gCsLoaded{ false };     // CommunityShaders.dll loaded: Light Limit Fix reads every light's first words
 		std::atomic<bool>     gInverseSquare{ false };
 		std::atomic<bool>     gEnbRunning{ false }, gEnbFiles{ false };
+		std::atomic<bool>     gRead{ false };  // ReadLighting ran: before it nothing was looked at
 	}
 
 	void ReadLighting()
@@ -35,6 +36,7 @@ namespace Plugin
 		gEnbRunning = found.enb;
 		gEnbFiles = found.enbFilesLeft;
 		gFound = static_cast<Lighting>(found.lighting);
+		gRead = true;
 		const auto lines = GameLighting::Describe(found);
 		SKSE::log::info("{}", lines.info);
 		for (const auto& warning : lines.warnings) {
@@ -65,7 +67,7 @@ namespace Plugin
 	std::string LightingReport()
 	{
 		return std::format(
-			R"({{"lighting":"{}","detected":true,"inverseSquareFiles":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
-			LightingName(gFound), gShaderFiles.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
+			R"({{"lighting":"{}","detected":{},"inverseSquareFiles":{},"communityShadersLoaded":{},"enbRunning":{},"enbFiles":{},"inverseSquare":{}}})",
+			LightingName(gFound), gRead.load(), gShaderFiles.load(), gCsLoaded.load(), gEnbRunning.load(), gEnbFiles.load(), InverseSquare());
 	}
 }

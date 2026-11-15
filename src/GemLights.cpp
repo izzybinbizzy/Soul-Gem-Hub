@@ -1027,14 +1027,16 @@ namespace Plugin
 				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && item))) {
 					continue;
 				}
+				const auto tableRgb = look->rgb;
 				if (const auto eye = look->kind == Gems::Kind::kCairn ? EyeColor(path, Gems::CairnEyeColorOf) : std::nullopt) {
 					look->rgb = *eye;
 				} else if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
 					look->rgb = *seen;
 				}
 				SetGlow(*look, GlowOf(path));
-				// a set's colors are worn as given: the Cairn's pink, the Paragons' (CS Light's until each is read off a still)
-				look->exact = look->rgb == Gems::kGameCairnRgb || look->family == Gems::Family::kParagon;
+				// a set's colors are worn as given: the Cairn's pink, the Paragons' table (CS Light's until each is read off a still); a
+				// color read off a picture is richened like every other gem's
+				look->exact = look->rgb == Gems::kGameCairnRgb || (look->family == Gems::Family::kParagon && look->rgb == tableRgb);
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod, nullptr }, a_others) ? 1 : 0;
 			}
 			return added;
