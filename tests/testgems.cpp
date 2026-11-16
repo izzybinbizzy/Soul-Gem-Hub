@@ -37,7 +37,7 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 279 + FloorLightChecks::kCount;
+	constexpr int kFloor = 285 + FloorLightChecks::kCount;
 
 	using namespace Gems;
 
@@ -533,6 +533,17 @@ namespace
 		const Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 		const Look cairn{ Family::kSoulCairn, Kind::kNamed, kBlackStarRgb };  // the portal's bowl
 		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
+		// Dawnguard's Paragons: each model a Paragon look, on its own switch and RE::Light's with its files; the socket that holds one is no gem
+		for (const char* paragon : { "DLC01\\Clutter\\Animated\\PortalGem01\\PortalGemOrange01.nif", "dlc01\\clutter\\animated\\portalgem01\\portalgemwhite01.nif" }) {
+			const auto p = LookOfModel(paragon, false);
+			CHECK(p && p->family == Family::kParagon && SwitchOf(*p) == GemSwitch::kParagon && ReLightCovers(p->family));
+		}
+		CHECK(!LookOfModel("dlc01\\clutter\\animated\\portalgem01\\portalgemsocket01.nif", false));
+		CHECK(ReLightKeyed("_pgpatcher_dups\\3\\dlc01\\clutter\\animated\\portalgem01\\portalgemblue01.nif"));
+		Settings pg;
+		pg.gems[static_cast<std::size_t>(GemSwitch::kParagon)] = false;
+		CHECK(!GemLit(*LookOfModel("dlc01\\clutter\\animated\\portalgem01\\portalgemgreen01.nif", false), pg) && GemLit(cairn, pg));
+		CHECK(FamilyName(Family::kParagon) == "Paragons");
 		CHECK(SwitchOf(GameLook(Kind::kGreater, false)) == GemSwitch::kGreater && SwitchOf(GameLook(Kind::kGrand, true)) == GemSwitch::kBlack);
 		CHECK(!GemLit(blackStar, g) && GemLit(azura, g) && !GemLit(GameLook(Kind::kPetty, false), g) && GemLit(GameLook(Kind::kGrand, false), g));
 		// a named quest gem on a plain gem's model (Malyn's Black Soul on the black gem's) goes by its own switch, not its size's
