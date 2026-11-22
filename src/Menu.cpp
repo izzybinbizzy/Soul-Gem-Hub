@@ -41,7 +41,7 @@ namespace Plugin
 		using Translation::Fill;
 		using Translation::T;
 		namespace Icon = MenuStyle::Icon;
-#define TR_MARK(x) x  // a line Translation.json carries, though it is not written inside T( ) here
+#define TR_MARK(x) x  // a line the translation file carries, though it is not written inside T( ) here
 
 		// the menu draws on the RENDER thread: the save and the lights follow in ONE task on the main thread
 		void Changed()

@@ -17,6 +17,21 @@ namespace Plugin
 		Gems::Settings gS;  // under gLock
 	}
 
+	// the Advanced Settings file (AdvancedSettings.h): the fine values the menu does not show, read once here before any light is made - the
+	// shipped file, then the player's Custom file over it (no download carries that one, so an update never replaces a player's values)
+	void LoadAdvanced()
+	{
+		bool       wrote = false;
+		const auto folder = std::filesystem::path(kPath).parent_path();
+		const auto r = AdvancedSettings::Load(folder, Gems::kAdvancedTitle, Gems::kAdvancedKnobs, wrote);
+		for (const auto& warning : r.warnings) {
+			SKSE::log::warn("advanced settings: {}", warning);
+		}
+		Gems::gTuning = Gems::TuningOf(r.values);
+		SKSE::log::info("advanced settings: {} value(s) of {} read in {}{}", r.read, Gems::kAdvancedKnobs.size(), folder.string(),
+			wrote ? "; the file was missing a value and was written whole" : "");
+	}
+
 	void LoadSettings()
 	{
 		std::ifstream  in(kPath);

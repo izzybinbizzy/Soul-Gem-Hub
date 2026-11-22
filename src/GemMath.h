@@ -15,6 +15,7 @@
 #include "GemMeasuredColors.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
+#include "AdvancedSettings.h"
 
 #include <algorithm>
 #include <array>
@@ -162,12 +163,66 @@ namespace Gems
 		return (2.0f * u3 - 3.0f * u2 + 1.0f) * v0 + (-2.0f * u3 + 3.0f * u2) * v1;
 	}
 
-	// the soft pulse: the light breathes 10% either side of its strength over 4.5 s, as Illuminated's soul gem rows did
-	inline constexpr float     kPulseSeconds = 4.5f;
+	// the soft pulse: the light breathes 10% either side of its strength over 4.5 s, as Illuminated's soul gem rows did. These and the values
+	// below are the Advanced Settings file's defaults
+	inline constexpr float       kPulseSeconds = 4.5f;
+	inline constexpr float       kPulseSwing = 0.1f;
+	inline constexpr std::size_t kMaxLitGems = 24;  // the most gem lights at once - the nearest gems
+	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
+	inline constexpr float kVanillaBoost = 1.25f;
+
+	// the Advanced Settings file's values (AdvancedSettings.h), read once when the game starts (Settings.cpp LoadAdvanced) before any light
+	// is made, and only read after; strength is a brightness per gem kind (Kind order) on top of the menu's Brightness
+	struct Tuning
+	{
+		std::size_t          maxLit{ kMaxLitGems };
+		float                pulseSwing{ kPulseSwing };
+		float                pulseSeconds{ kPulseSeconds };
+		float                vanillaBoost{ kVanillaBoost };
+		std::array<float, 9> strength{ 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	};
+	inline Tuning gTuning{};
+
+	// "<title> - Advanced Settings.ini" (shipped) and "... - Custom.ini" (the player's) in the mod's SKSE folder
+	inline constexpr std::string_view kAdvancedTitle = "Illuminated - Soul Gem Hub";
+
+	// in Tuning's order
+	inline constexpr std::array<AdvancedSettings::Knob, 13> kAdvancedKnobs{ {
+		{ "Performance", "MaxLitGems", "How many soul gems nearest you get a light at once.", 24.0f, 1.0f, 64.0f, true, true },
+		{ "Flicker", "PulseSwing", "How much a gem's light breathes either side of its strength: 0.1 is 10 percent, 0 steady.", 0.1f, 0.0f,
+			0.5f, false, true },
+		{ "Flicker", "PulseSeconds", "How many seconds one breath of the soft pulse takes.", 4.5f, 1.0f, 20.0f, false, false },
+		{ "Vanilla and ENB", "VanillaBoost", "How much brighter every gem's light is drawn on Vanilla lighting, where it reads darker.", 1.25f, 0.5f, 3.0f,
+			false, false },
+		{ "Brightness and Reach", "PettyBrightness", "Brightness of petty soul gems' lights, on top of the menu's Brightness: 1 as made.", 1.0f, 0.25f, 4.0f,
+			false, false },
+		{ "Brightness and Reach", "LesserBrightness", "Brightness of lesser soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "CommonBrightness", "Brightness of common soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "GreaterBrightness", "Brightness of greater soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "GrandBrightness", "Brightness of grand soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "BlackBrightness", "Brightness of black soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "NamedGemBrightness", "Brightness of the named quest gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "StarBrightness", "Brightness of Azura's Star and the Black Star, on top of the menu's Stars slider: 1 as made.", 1.0f, 0.25f,
+			4.0f, false, true },
+		{ "Brightness and Reach", "SoulCairnBrightness", "Brightness of the Soul Cairn's gem bowl and chunks: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+	} };
+
+	// the file's values (one per knob, in its order) as the tuning they set
+	[[nodiscard]] inline Tuning TuningOf(std::span<const float> a_values) noexcept
+	{
+		const auto at = [&](std::size_t a_i) { return a_i < a_values.size() ? a_values[a_i] : kAdvancedKnobs[a_i].def; };
+		Tuning     t{ static_cast<std::size_t>(std::lround((std::max)(at(0), 1.0f))), at(1), at(2), at(3), {} };
+		for (std::size_t i = 0; i < t.strength.size(); ++i) {
+			t.strength[i] = at(4 + i);
+		}
+		return t;
+	}
+
 	[[nodiscard]] inline float PulseAt(float a_seconds) noexcept
 	{
-		constexpr std::array<std::pair<float, float>, 3> keys{ { { 0.0f, 0.9f }, { kPulseSeconds / 2.0f, 1.1f }, { kPulseSeconds, 0.9f } } };
-		const float                                      t = std::fmod(std::fabs(a_seconds), kPulseSeconds);
+		const float                                  seconds = gTuning.pulseSeconds, swing = gTuning.pulseSwing;
+		const std::array<std::pair<float, float>, 3> keys{ { { 0.0f, 1.0f - swing }, { seconds / 2.0f, 1.0f + swing }, { seconds, 1.0f - swing } } };
+		const float                                  t = std::fmod(std::fabs(a_seconds), seconds);
 		return KeyAt(keys, 2, t);
 	}
 
@@ -187,6 +242,7 @@ namespace Gems
 		kCairn,
 	};
 	inline constexpr std::size_t kKinds = 9;
+	static_assert(std::tuple_size_v<decltype(Tuning::strength)> == kKinds, "a brightness for every gem kind");
 
 	struct Strength
 	{
@@ -1024,13 +1080,10 @@ namespace Gems
 	// "Stars": Azura's Star and the Black Star on top of Brightness and Reach - their big pools can drown every gem near them
 	inline constexpr int kStarsMin = 10, kStarsMax = 100;
 
-	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
-	inline constexpr float kVanillaBoost = 1.25f;
-
 	// the Brightness slider's percent as the factor a light is drawn with
 	[[nodiscard]] inline float BrightnessFor(int a_percent, bool a_vanilla) noexcept
 	{
-		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? kVanillaBoost : 1.0f);
+		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? gTuning.vanillaBoost : 1.0f);
 	}
 
 	// the menu's light switch per gem, in menu order: the six sizes and the named quest gems in Kind order
@@ -1233,7 +1286,8 @@ namespace Gems
 	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
 	{
 		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
-		return ShownFor(StrengthAt(a_kind, a_s.sameReach), a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+		const float kind = gTuning.strength[static_cast<std::size_t>(a_kind)];
+		return ShownFor(StrengthAt(a_kind, a_s.sameReach), a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla) * kind,
 			static_cast<float>(a_s.reach) / 100.0f * stars, a_pulse, stars);
 	}
 
