@@ -1695,7 +1695,8 @@ namespace Plugin
 		}
 
 		// the record types a gem or a display is, read off gGems and gDisplays once they are found (FindGems): every reference's load passes
-		// the hooks below, and one of another type - most of a cell - goes on after one read of its base's type, before any lookup
+		// the hooks below, and one of another type goes on after one read of its base's type, before any lookup. Displays are statics, so
+		// with RE::Light loaded (the only time gDisplays holds any) every static passes this test and Note's own lookups judge it, as before
 		std::array<std::atomic<bool>, 256> gNoteTypes{};
 
 		// any thread, the hooks' first test: whether this reference's record type can be a gem or a display

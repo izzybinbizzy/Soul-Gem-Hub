@@ -201,7 +201,7 @@ namespace Gems
 		{ "Brightness and Reach", "GreaterBrightness", "Brightness of greater soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
 		{ "Brightness and Reach", "GrandBrightness", "Brightness of grand soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
 		{ "Brightness and Reach", "BlackBrightness", "Brightness of black soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
-		{ "Brightness and Reach", "NamedGemBrightness", "Brightness of the named quest gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "NamedGemBrightness", "Brightness of the named quest gems' and the Paragons' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
 		{ "Brightness and Reach", "StarBrightness", "Brightness of Azura's Star and the Black Star, on top of the menu's Stars slider: 1 as made.", 1.0f, 0.25f,
 			4.0f, false, true },
 		{ "Brightness and Reach", "SoulCairnBrightness", "Brightness of the Soul Cairn's gem bowl and chunks: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
