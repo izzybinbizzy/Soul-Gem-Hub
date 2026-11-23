@@ -536,10 +536,12 @@ namespace
 		const Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 		const Look cairn{ Family::kSoulCairn, Kind::kNamed, kBlackStarRgb };  // the portal's bowl
 		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
-		// Dawnguard's Paragons: each model a Paragon look, on its own switch and RE::Light's with its files; the socket that holds one is no gem
+		// Dawnguard's Paragons: each model a Paragon look, on its own switch and lit by the plugin even with RE::Light (no config, so the
+		// switch reaches the light); the socket that holds one is no gem
 		for (const char* paragon : { "DLC01\\Clutter\\Animated\\PortalGem01\\PortalGemOrange01.nif", "dlc01\\clutter\\animated\\portalgem01\\portalgemwhite01.nif" }) {
 			const auto p = LookOfModel(paragon, false);
-			CHECK(p && p->family == Family::kParagon && SwitchOf(*p) == GemSwitch::kParagon && ReLightCovers(p->family));
+			CHECK(p && p->family == Family::kParagon && SwitchOf(*p) == GemSwitch::kParagon && !ReLightCovers(p->family));
+			CHECK(OwnerOf(paragon, p->family, Claim::kNone, true) == Owner::kThisMod);
 		}
 		CHECK(!LookOfModel("dlc01\\clutter\\animated\\portalgem01\\portalgemsocket01.nif", false));
 		CHECK(ReLightKeyed("_pgpatcher_dups\\3\\dlc01\\clutter\\animated\\portalgem01\\portalgemblue01.nif"));

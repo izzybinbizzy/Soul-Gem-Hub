@@ -618,12 +618,13 @@ namespace Gems
 	}
 
 	// the gems this mod's RE::Light configs light (SKSE\Plugins\ReLight\Configs\Illuminated - Soul Gem Hub\): Praedy's
-	// filled gems, the named quest gems, the Soul Cairn's pieces and the Paragons - each keyed by its own model (the Soul Essence Gem
-	// by its record). With RE::Light loaded the plugin leaves these to it; the gems that share the game's model (or are Emissive Soul
-	// Gems' models) have no config, so the plugin lights them itself
+	// filled gems, the named quest gems and the Soul Cairn's pieces - each keyed by its own model (the Soul Essence Gem by its record).
+	// With RE::Light loaded the plugin leaves these to it; the gems that share the game's model (or are Emissive Soul Gems' models) have
+	// no config, so the plugin lights them itself. The Paragons have no config: their own switch must reach their light, and RE::Light
+	// reads its configs once at game start, so the plugin lights them on every setup
 	[[nodiscard]] inline bool ReLightCovers(Family a_family) noexcept
 	{
-		return a_family == Family::kPraedys || a_family == Family::kNamed || a_family == Family::kSoulCairn || a_family == Family::kParagon;
+		return a_family == Family::kPraedys || a_family == Family::kNamed || a_family == Family::kSoulCairn;
 	}
 
 	// a script that puts an item on show (Legacy of the Dragonborn's dbm_dynamicdisplayscript, a museum's DisplayCase...): the
