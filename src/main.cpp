@@ -29,6 +29,7 @@
 
 #include "FloorLightFix.h"
 #include "FrameCost.h"
+#include "Po3Tweaks.h"
 #include "RuntimeGuard.h"
 #include "Translation.h"
 
@@ -42,7 +43,7 @@ namespace
 		ReadLighting();
 		FindGems();
 		WatchGems();  // before the menu's steps: a throw in them leaves the gems lit
-		SKSE::log::info("{}", Translation::Load("Data/SKSE/Plugins/SoulGemHub/Translation.json"));
+		SKSE::log::info("{}", Translation::Load("SoulGemHub"));
 		RegisterMenu();
 		SKSE::log::info("ready in {:.1f} ms", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
 	}
@@ -51,6 +52,7 @@ namespace
 	void OnDataLoaded()
 	{
 		try {
+			Po3Tweaks::Judge(Gems::kAdvancedTitle);  // the mod's name; before another mod's Light Placer files are matched by editor ID
 			LoadEverything();
 		} catch (const std::exception& e) {
 			SKSE::log::critical("the data-load work stopped part way: {} - the steps before it keep their work, the rest is not done this session",
@@ -63,6 +65,7 @@ namespace
 		switch (a_msg->type) {
 		case SKSE::MessagingInterface::kPostLoad:
 			LoadSettings();  // before DevBench can change one and save the rest
+			LoadAdvanced();
 			OfferToDevBench();
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:

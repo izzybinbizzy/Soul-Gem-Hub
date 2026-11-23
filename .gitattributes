@@ -1,2 +1,4 @@
 # shell scripts run under bash (CI, WSL): LF on every checkout
 *.sh text eol=lf
+# the shipped settings files keep LF on every checkout: the off-game test compares them byte for byte with the text it makes
+*.ini text eol=lf

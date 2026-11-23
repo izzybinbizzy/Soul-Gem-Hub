@@ -14,7 +14,7 @@
 // is put out.
 //
 // HOW (from what the game announces, on the main thread; nothing runs on a clock): a look runs when a gem's 3D loads or is released,
-// a cell loads, her cell changes, a game loads or a setting changes. The nearest 24 (kMaxLights) gems each get one
+// a cell loads, her cell changes, a game loads or a setting changes. The nearest 24 (the Advanced Settings file's MaxLitGems) gems each get one
 // light of ours hung on its model, made and registered the way ReLight does it (the credit below), in its color, at its strength and
 // reach for the lighting found (Lighting.cpp - Community Shaders' inverse-square words, or the same light drawn plain on ENB and
 // Vanilla). The soft pulse is a dimmer controller the game itself runs on the light. A gem picked up, unloaded or turned off loses
@@ -32,6 +32,7 @@
 // node.
 
 #include "Plugin.h"
+#include "Po3Tweaks.h"
 #include "SceneTakeOff.h"
 
 #include "FrameCost.h"
@@ -45,10 +46,11 @@ namespace Plugin
 	namespace
 	{
 		constexpr const char* kName = "SoulGemLight";
-		constexpr float       kAmbient = 0.1f;                                // a plain light's ambient: a tenth of its color (RE::Light's rule)
-		constexpr std::size_t kMaxLights = 24;                                // the most gem lights at once - the nearest gems
-		constexpr std::size_t kMostLooked = 4 * kMaxLights;                   // the nearest gems a look looks at closely (on show? another light on it?)
-		constexpr RE::FormID  kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
+		constexpr float       kAmbient = 0.1f;  // a plain light's ambient: a tenth of its color (RE::Light's rule)
+		// the most gem lights at once (the Advanced Settings file), and the nearest gems a look looks at closely (on show? another light on it?)
+		[[nodiscard]] std::size_t MaxLights() noexcept { return Gems::gTuning.maxLit; }
+		[[nodiscard]] std::size_t MostLooked() noexcept { return 4 * Gems::gTuning.maxLit; }
+		constexpr RE::FormID      kAzurasStar = 0x063B27, kBlackStar = 0x063B29;  // in Skyrim.esm
 
 		// ---------------------------------------------------------- the light, as Illuminated's LightKit.h makes it
 		// Community Shaders' inverse-square lighting reads a flag and the cutoff from the first eight bytes of a light's runtime data
@@ -218,29 +220,6 @@ namespace Plugin
 			return out;
 		}
 
-		using TweaksEditorId = const char* (*)(std::uint32_t);
-
-		[[nodiscard]] TweaksEditorId FindTweaksEditorId()
-		{
-			const auto tweaks = REX::W32::GetModuleHandleW(L"po3_Tweaks");
-			if (!tweaks) {
-				return nullptr;
-			}
-			return reinterpret_cast<TweaksEditorId>(REX::W32::GetProcAddress(tweaks, "GetFormEditorID"));
-		}
-
-		// the game keeps no editor ID for a soul gem: powerofthree's Tweaks keeps them and exports the lookup, so ask it first
-		[[nodiscard]] const char* EditorIdOf(const RE::TESForm* a_form)
-		{
-			static const TweaksEditorId tweaks = FindTweaksEditorId();
-			if (tweaks) {
-				if (const char* id = tweaks(a_form->GetFormID()); id && *id) {
-					return id;
-				}
-			}
-			return a_form->GetFormEditorID();
-		}
-
 		// which file claims this form: by its model's whole path, or a formIDs token ("SoulGemGrandFilled", "0x2E4FF~Skyrim.esm" ...)
 		[[nodiscard]] Gems::Claim Claimed(const Claims& a_claims, const RE::TESForm* a_form, std::string_view a_model, std::string& a_mod)
 		{
@@ -253,7 +232,8 @@ namespace Plugin
 				a_mod = m->second;
 				return Gems::Claim::kOther;
 			}
-			if (const char* id = EditorIdOf(a_form); id && *id) {
+			// the game keeps no editor ID for a soul gem: only while powerofthree's Tweaks keeps them can a claim name one that way
+			if (const auto id = Po3Tweaks::EditorID(a_form); !id.empty()) {
 				if (const auto f = a_claims.forms.find(Lower(id)); f != a_claims.forms.end()) {
 					a_mod = f->second;
 					return Gems::Claim::kOther;
@@ -1008,8 +988,8 @@ namespace Plugin
 		}
 
 		// items and pieces that are not soul gem records, known by their own model: a_items lets an item take a named gem's model
-		// (the Soul Essence Gem); the Soul Cairn's pieces are an activator, a misc item and a furniture, never a static - a static
-		// wearing one of their models is decor (a display)
+		// (the Soul Essence Gem) or a Paragon's; the Soul Cairn's pieces are an activator, a misc item and a furniture, never a static -
+		// a static wearing one of their models is decor (a display)
 		template <class T>
 		std::size_t AddByModel(bool a_items, const Others& a_others)
 		{
@@ -1023,16 +1003,20 @@ namespace Plugin
 				const auto* model = bound ? form->template As<RE::TESModel>() : nullptr;
 				const char* path = model ? model->GetModel() : nullptr;
 				auto        look = path && *path ? Gems::LookOfModel(path, false) : std::nullopt;
-				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && look->family == Gems::Family::kNamed))) {
+				const bool  item = look && (look->family == Gems::Family::kNamed || look->family == Gems::Family::kParagon);
+				if (!look || (look->family != Gems::Family::kSoulCairn && !(a_items && item))) {
 					continue;
 				}
+				const auto tableRgb = look->rgb;
 				if (const auto eye = look->kind == Gems::Kind::kCairn ? EyeColor(path, Gems::CairnEyeColorOf) : std::nullopt) {
 					look->rgb = *eye;
 				} else if (const auto seen = SeenColor(path)) {  // the color its lit-room picture shows
 					look->rgb = *seen;
 				}
 				SetGlow(*look, GlowOf(path));
-				look->exact = look->rgb == Gems::kGameCairnRgb;
+				// a set's colors are worn as given: the Cairn's pink, the Paragons' table (CS Light's until each is read off a still); a
+				// color read off a picture is richened like every other gem's
+				look->exact = look->rgb == Gems::kGameCairnRgb || (look->family == Gems::Family::kParagon && look->rgb == tableRgb);
 				added += Take(bound, path, Gem{ *look, false, Gems::Owner::kThisMod, nullptr }, a_others) ? 1 : 0;
 			}
 			return added;
@@ -1115,7 +1099,7 @@ namespace Plugin
 				dimmer->frequency = 1.0f;
 				dimmer->phase = a_phase;
 				dimmer->loKeyTime = 0.0f;
-				dimmer->hiKeyTime = Gems::kPulseSeconds;
+				dimmer->hiKeyTime = Gems::gTuning.pulseSeconds;
 				dimmer->SetTarget(a_light);
 				return dimmer;
 			}
@@ -1134,7 +1118,8 @@ namespace Plugin
 		};
 		std::unordered_map<RE::FormID, Kept> gKept;  // by the placed gem's form id
 		std::atomic<std::size_t>             gCount{ 0 }, gMade{ 0 }, gPutOutNow{ 0 }, gWithGlow{ 0 };
-		std::atomic<std::uint32_t>           gChoices{ 0 };  // a bit per ColorChoice whose gem mod is loaded (the menu offers it)
+		std::atomic<std::uint32_t>           gMainThread{ 0 };  // WatchGems', at data load
+		std::atomic<std::uint32_t>           gChoices{ 0 };     // a bit per ColorChoice whose gem mod is loaded (the menu offers it)
 		// a look has met another light no Light Placer file names, or a gem with only its model's own light: the menu offers their switches
 		std::atomic<bool> gUnnamedLightSeen{ false }, gModelLightSeen{ false };
 		// the gems near her left to another mod's light at the last look, for the menu (drawn on the render thread): by the mod
@@ -1208,6 +1193,19 @@ namespace Plugin
 			gCount = 0;
 		}
 
+		// the main thread's, at a gem's release: our light goes with the model (Light Placer's lights leave in the game's removal call)
+		// - left to the next look, a light Open Shaders made a shadow light shone those frames with no gem round it, a flash of its color
+		void DropNow(RE::FormID a_id)
+		{
+			const auto it = gKept.find(a_id);
+			if (it == gKept.end()) {
+				return;
+			}
+			Drop(it->second, RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0]);
+			gKept.erase(it);
+			gCount = gKept.size();
+		}
+
 		// the settings onto the light: its color, strength and reach, and the keys the game's dimmer moves its fade along
 		void Follow(Kept& a_kept, const Gems::Settings& a_s)
 		{
@@ -1243,7 +1241,7 @@ namespace Plugin
 			auto* keys = interpolator && interpolator->floatData ? interpolator->floatData->keys : nullptr;
 			if (keys) {
 				for (std::uint32_t i = 0; i < Dimmer::kKeys; ++i) {
-					const float at = Gems::kPulseSeconds * static_cast<float>(i) / static_cast<float>(Dimmer::kKeys - 1);
+					const float at = Gems::gTuning.pulseSeconds * static_cast<float>(i) / static_cast<float>(Dimmer::kKeys - 1);
 					keys[i].SetTime(at);
 					keys[i].SetValue(shownAt(Gems::PulseAt(at)).fade);
 				}
@@ -1422,7 +1420,7 @@ namespace Plugin
 			}
 			kept.gem = &a_gem;
 			if (!kept.light) {
-				kept.phase = static_cast<float>(a_id % 997u) / 997.0f * Gems::kPulseSeconds;
+				kept.phase = static_cast<float>(a_id % 997u) / 997.0f * Gems::gTuning.pulseSeconds;
 				if (!Make(kept, a_root, a_scene, a_s)) {
 					static bool warned = false;
 					if (!std::exchange(warned, true)) {
@@ -1448,7 +1446,7 @@ namespace Plugin
 		void LookAgainSoon();
 
 		// What every gem wears now, from what the game has announced (Watch, below) - never on a clock. Which gems are the nearest
-		// kMaxLights is judged here too, so it holds from one announcement to the next: a stash of more gems does not re-sort as she
+		// MaxLights() is judged here too, so it holds from one announcement to the next: a stash of more gems does not re-sort as she
 		// walks inside one cell. a_walk: the references of the loaded cells are walked as well (a load, her cell, a setting)
 		void Look(bool a_walk)
 		{
@@ -1576,12 +1574,12 @@ namespace Plugin
 					gem.root.reset(root);
 					gem.hadModel = true;
 				}
-				// a gem that holds our light already counts as a fifth nearer, so two gems at the kMaxLights edge do not swap lights
+				// a gem that holds our light already counts as a fifth nearer, so two gems at the MaxLights() edge do not swap lights
 				const auto held = gKept.find(id);
 				const bool lit = held != gKept.end() && held->second.light && held->second.root.get() == root;
 				candidates.push_back({ ref, id, root, &it->second, &gem, ref->GetPosition().GetSquaredDistance(here) * (lit ? 0.64f : 1.0f), lit });
 			}
-			// the nearest kMaxLights gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem loaded;
+			// the nearest MaxLights() gems keep a light: a shop, a stash or the Soul Cairn would otherwise hang one on every gem loaded;
 			// a farther gem is let go below and takes a light again when it is among the nearest
 			std::ranges::sort(candidates, {}, &Candidate::distance);
 			using Gems::WhoLights;
@@ -1589,10 +1587,10 @@ namespace Plugin
 			bool                                             again = !gDisplaysAgain.empty();
 			std::vector<std::pair<std::string, std::size_t>> byMod, byModel;  // the gems left to another mod's light, for the menu
 			for (const auto& c : candidates) {
-				if (++looked > kMostLooked || (s.who != WhoLights::kGame && ours == kMaxLights)) {
+				if (++looked > MostLooked() || (s.who != WhoLights::kGame && ours >= MaxLights())) {
 					break;
 				}
-				// asked only of the nearest kMostLooked gems, outside any reference walk: it takes the Papyrus VM's lock
+				// asked only of the nearest MostLooked() gems, outside any reference walk: it takes the Papyrus VM's lock
 				if (OnShow(c.ref)) {
 					++onShow;
 					continue;
@@ -1696,6 +1694,18 @@ namespace Plugin
 			}
 		}
 
+		// the record types a gem or a display is, read off gGems and gDisplays once they are found (FindGems): every reference's load passes
+		// the hooks below, and one of another type goes on after one read of its base's type, before any lookup. Displays are statics, so
+		// with RE::Light loaded (the only time gDisplays holds any) every static passes this test and Note's own lookups judge it, as before
+		std::array<std::atomic<bool>, 256> gNoteTypes{};
+
+		// any thread, the hooks' first test: whether this reference's record type can be a gem or a display
+		[[nodiscard]] bool MayNote(const RE::TESObjectREFR* a_ref) noexcept
+		{
+			const auto* base = a_ref ? a_ref->GetBaseObject() : nullptr;
+			return base && gNoteTypes[static_cast<std::size_t>(base->GetFormType())].load(std::memory_order_relaxed);
+		}
+
 		// any thread: only a gem or a display is noted (a cell's load is thousands of references; gGems and gDisplays are fixed after
 		// data load)
 		void Note(const RE::TESObjectREFR* a_ref, bool a_loaded, bool a_relit = false)
@@ -1719,7 +1729,7 @@ namespace Plugin
 			static RE::NiAVObject* thunk(RE::TESObjectREFR* a_this, bool a_backgroundLoading)
 			{
 				auto* object = func(a_this, a_backgroundLoading);
-				if (object) {
+				if (object && MayNote(a_this)) {
 					Guarded("gem load", [a_this]() { Note(a_this, true); });
 				}
 				return object;
@@ -1731,7 +1741,14 @@ namespace Plugin
 		{
 			static void thunk(RE::TESObjectREFR* a_this)
 			{
-				Guarded("gem release", [a_this]() { Note(a_this, false); });
+				if (MayNote(a_this)) {
+					Guarded("gem release", [a_this]() {
+						if (REX::W32::GetCurrentThreadId() == gMainThread.load(std::memory_order_relaxed)) {
+							DropNow(a_this->GetFormID());
+						}
+						Note(a_this, false);
+					});
+				}
 				func(a_this);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1744,11 +1761,13 @@ namespace Plugin
 			static void thunk(RE::TESObjectREFR* a_this, RE::TESObjectCELL* a_cell)
 			{
 				func(a_this, a_cell);
-				Guarded("gem placed", [a_this, a_cell]() {
-					if (a_cell && a_this->Is3DLoaded()) {
-						Note(a_this, true, true);
-					}
-				});
+				if (a_cell && MayNote(a_this)) {
+					Guarded("gem placed", [a_this]() {
+						if (a_this->Is3DLoaded()) {
+							Note(a_this, true, true);
+						}
+					});
+				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1998,6 +2017,16 @@ namespace Plugin
 			const auto displays = AddDisplays<RE::TESObjectSTAT>() + AddDisplays<RE::BGSMovableStatic>();
 			SKSE::log::info("gems: {} display(s) wearing a gem's model - an RE::Light light on one is put out (displays never get lit)", displays);
 		}
+		std::array<bool, 256> types{};
+		for (const auto& [form, gem] : gGems) {
+			types[static_cast<std::size_t>(form->GetFormType())] = true;
+		}
+		for (const auto* form : gDisplays) {
+			types[static_cast<std::size_t>(form->GetFormType())] = true;
+		}
+		for (std::size_t i = 0; i < types.size(); ++i) {
+			gNoteTypes[i].store(types[i], std::memory_order_relaxed);
+		}
 		std::string list;
 		for (const auto& [name, n] : gFamilies) {
 			list += std::format("{}{} {}", list.empty() ? "" : ", ", n, name);
@@ -2034,7 +2063,9 @@ namespace Plugin
 				const char* model = soulGem->GetModel();
 				// the color its light wears on the default settings, then the color found for it
 				const auto worn = Gems::ColorAt(gem.look, Gems::Settings{});
-				SKSE::log::info("  {:08X} {} | {} | {},{},{} (on the default settings)", form->GetFormID(), form->GetName(), model ? model : "", worn[0], worn[1], worn[2]);
+				const auto id = Po3Tweaks::EditorID(form);  // a soul gem's only with powerofthree's Tweaks keeping editor IDs
+				SKSE::log::info("  {:08X} {}{} | {} | {},{},{} (on the default settings)", form->GetFormID(), form->GetName(), id.empty() ? "" : " [" + id + "]",
+					model ? model : "", worn[0], worn[1], worn[2]);
 				SKSE::log::info("    found: {},{},{}", gem.look.rgb[0], gem.look.rgb[1], gem.look.rgb[2]);
 				if (const auto& g = gem.look.gemRgb) {
 					SKSE::log::info("    its gem (Star light on Gem): {},{},{}", (*g)[0], (*g)[1], (*g)[2]);
@@ -2045,6 +2076,7 @@ namespace Plugin
 
 	void WatchGems()
 	{
+		gMainThread = REX::W32::GetCurrentThreadId();
 		static Watch watch;
 		if (auto* ui = RE::UI::GetSingleton()) {
 			ui->AddEventSink<RE::MenuOpenCloseEvent>(&watch);

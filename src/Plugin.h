@@ -67,6 +67,7 @@ namespace Plugin
 
 	// ------------------------------------------------------------------ Settings.cpp: SoulGemHub\Settings.ini, written by the menu
 	void                         LoadSettings();
+	void                         LoadAdvanced();  // the Advanced Settings file, once at game start, before any light (Gems::gTuning)
 	bool                         SaveSettings();  // any thread; false when the file could not be written (logged)
 	[[nodiscard]] Gems::Settings SettingsNow();
 	void                         SetSettings(const Gems::Settings& a_settings);  // clamped; the caller saves and applies

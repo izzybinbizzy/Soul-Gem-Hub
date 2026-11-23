@@ -5,8 +5,10 @@
 // undefined-behavior checkers. The run fails when a check fails, AND when fewer checks ran than kFloor (a test that stopped
 // part way proves nothing - Dynamic Wards' and Illuminated's tests count theirs the same way).
 
+#include "AdvancedSettingsChecks.h"
 #include "FloorLightChecks.h"
 #include "GemMath.h"
+#include "Po3TweaksChecks.h"
 
 #include <algorithm>
 #include <array>
@@ -37,7 +39,8 @@ namespace
 #define CHECK(x) Check((x), #x, __LINE__)
 
 	// the fewest checks a whole run makes (raise it when checks are added; lower it only when checks are removed on purpose)
-	constexpr int kFloor = 279 + FloorLightChecks::kCount;
+	constexpr int kFloor = 285 + 7 + FloorLightChecks::kCount + AdvancedSettingsChecks::kCount + AdvancedSettingsChecks::kTableCount +
+	                       AdvancedSettingsChecks::kShippedCount + Po3TweaksChecks::kCount;
 
 	using namespace Gems;
 
@@ -533,6 +536,19 @@ namespace
 		const Look azura{ Family::kStar, Kind::kStar, kAzurasStarRgb };
 		const Look cairn{ Family::kSoulCairn, Kind::kNamed, kBlackStarRgb };  // the portal's bowl
 		CHECK(SwitchOf(blackStar) == GemSwitch::kBlackStar && SwitchOf(azura) == GemSwitch::kAzurasStar && SwitchOf(cairn) == GemSwitch::kSoulCairn);
+		// Dawnguard's Paragons: each model a Paragon look, on its own switch and lit by the plugin even with RE::Light (no config, so the
+		// switch reaches the light); the socket that holds one is no gem
+		for (const char* paragon : { "DLC01\\Clutter\\Animated\\PortalGem01\\PortalGemOrange01.nif", "dlc01\\clutter\\animated\\portalgem01\\portalgemwhite01.nif" }) {
+			const auto p = LookOfModel(paragon, false);
+			CHECK(p && p->family == Family::kParagon && SwitchOf(*p) == GemSwitch::kParagon && !ReLightCovers(p->family));
+			CHECK(OwnerOf(paragon, p->family, Claim::kNone, true) == Owner::kThisMod);
+		}
+		CHECK(!LookOfModel("dlc01\\clutter\\animated\\portalgem01\\portalgemsocket01.nif", false));
+		CHECK(ReLightKeyed("_pgpatcher_dups\\3\\dlc01\\clutter\\animated\\portalgem01\\portalgemblue01.nif"));
+		Settings pg;
+		pg.gems[static_cast<std::size_t>(GemSwitch::kParagon)] = false;
+		CHECK(!GemLit(*LookOfModel("dlc01\\clutter\\animated\\portalgem01\\portalgemgreen01.nif", false), pg) && GemLit(cairn, pg));
+		CHECK(FamilyName(Family::kParagon) == "Paragons");
 		CHECK(SwitchOf(GameLook(Kind::kGreater, false)) == GemSwitch::kGreater && SwitchOf(GameLook(Kind::kGrand, true)) == GemSwitch::kBlack);
 		CHECK(!GemLit(blackStar, g) && GemLit(azura, g) && !GemLit(GameLook(Kind::kPetty, false), g) && GemLit(GameLook(Kind::kGrand, false), g));
 		// a named quest gem on a plain gem's model (Malyn's Black Soul on the black gem's) goes by its own switch, not its size's
@@ -874,6 +890,37 @@ namespace
 		const auto        both = TexturesNamed(std::span(reinterpret_cast<const std::uint8_t*>(glued.data()), glued.size()));
 		CHECK(both.size() == 2 && both[0] == "clutter\\a\\b.dds" && both[1] == "clutter\\soulgem\\soulgemblack.dds");
 	}
+
+	// the Advanced Settings file: the shared reader and writer, this mod's knobs, the file the download ships, and what each value moves
+	void Advanced()
+	{
+		AdvancedSettingsChecks::Run(Check);
+		AdvancedSettingsChecks::Table(Check, kAdvancedKnobs);
+		AdvancedSettingsChecks::Shipped(Check, "package/SKSE/Plugins/SoulGemHub", kAdvancedTitle, kAdvancedKnobs);
+		// the file at its defaults is the mod as it was
+		const auto   d = TuningOf(AdvancedSettings::Defaults(kAdvancedKnobs));
+		const Tuning t{};
+		CHECK(d.maxLit == kMaxLitGems && d.maxLit == t.maxLit && Near(d.pulseSwing, kPulseSwing, 0.0001f) && Near(d.pulseSeconds, kPulseSeconds, 0.0001f) &&
+			  Near(d.vanillaBoost, kVanillaBoost, 0.0001f));
+		CHECK(std::ranges::all_of(d.strength, [](float a_v) { return a_v == 1.0f; }) && d.strength == t.strength);
+		// each value reaches what it names: the pulse's swing and length, the Vanilla boost, one kind's brightness only
+		Settings   set;
+		const auto grandBefore = ShownAt(Kind::kGrand, false, false, set).fade;
+		const auto pettyBefore = ShownAt(Kind::kPetty, false, false, set).fade;
+		gTuning.pulseSwing = 0.2f;
+		gTuning.pulseSeconds = 6.0f;
+		gTuning.vanillaBoost = 2.0f;
+		gTuning.strength[static_cast<std::size_t>(Kind::kGrand)] = 2.0f;
+		CHECK(Near(PulseAt(3.0f), 1.2f) && Near(PulseAt(0.0f), 0.8f) && Near(PulseAt(1.0f), PulseAt(7.0f)));
+		CHECK(Near(BrightnessFor(100, true), 2.0f) && Near(BrightnessFor(100, false), 1.0f));
+		CHECK(Near(ShownAt(Kind::kGrand, false, false, set).fade, grandBefore * 2.0f) && Near(ShownAt(Kind::kPetty, false, false, set).fade, pettyBefore));
+		// values read off the file set the tuning, a count never below 1
+		const std::array<float, 13> mine{ 0.0f, 0.3f, 9.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 1.0f, 1.0f, 0.5f, 1.0f };
+		const auto                  m = TuningOf(mine);
+		CHECK(m.maxLit == 1 && Near(m.pulseSwing, 0.3f) && Near(m.pulseSeconds, 9.0f) && Near(m.strength[4], 3.0f) && Near(m.strength[7], 0.5f));
+		gTuning = {};
+		CHECK(Near(PulseAt(kPulseSeconds / 2.0f), 1.1f) && Near(ShownAt(Kind::kGrand, false, false, set).fade, grandBefore));
+	}
 }
 
 int main()
@@ -890,6 +937,8 @@ int main()
 	LightColorPick();
 	StarLightPick();
 	Permits();
+	Advanced();
+	Po3TweaksChecks::Run(Check);  // powerofthree's Tweaks: a form key's two spellings, its ini switch, the verdict, both paths
 	FloorLightChecks::Run(Check);
 	std::printf("%d passed, %d failed\n", gPassed, gFailed);
 	if (gPassed < kFloor) {

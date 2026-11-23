@@ -15,6 +15,7 @@
 #include "GemMeasuredColors.h"
 #include "GemPermissions.h"
 #include "GemSeenColors.h"
+#include "AdvancedSettings.h"
 
 #include <algorithm>
 #include <array>
@@ -162,12 +163,66 @@ namespace Gems
 		return (2.0f * u3 - 3.0f * u2 + 1.0f) * v0 + (-2.0f * u3 + 3.0f * u2) * v1;
 	}
 
-	// the soft pulse: the light breathes 10% either side of its strength over 4.5 s, as Illuminated's soul gem rows did
-	inline constexpr float     kPulseSeconds = 4.5f;
+	// the soft pulse: the light breathes 10% either side of its strength over 4.5 s, as Illuminated's soul gem rows did. These and the values
+	// below are the Advanced Settings file's defaults
+	inline constexpr float       kPulseSeconds = 4.5f;
+	inline constexpr float       kPulseSwing = 0.1f;
+	inline constexpr std::size_t kMaxLitGems = 24;  // the most gem lights at once - the nearest gems
+	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
+	inline constexpr float kVanillaBoost = 1.25f;
+
+	// the Advanced Settings file's values (AdvancedSettings.h), read once when the game starts (Settings.cpp LoadAdvanced) before any light
+	// is made, and only read after; strength is a brightness per gem kind (Kind order) on top of the menu's Brightness
+	struct Tuning
+	{
+		std::size_t          maxLit{ kMaxLitGems };
+		float                pulseSwing{ kPulseSwing };
+		float                pulseSeconds{ kPulseSeconds };
+		float                vanillaBoost{ kVanillaBoost };
+		std::array<float, 9> strength{ 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	};
+	inline Tuning gTuning{};
+
+	// "<title> - Advanced Settings.ini" (shipped) and "... - Custom.ini" (the player's) in the mod's SKSE folder
+	inline constexpr std::string_view kAdvancedTitle = "Illuminated - Soul Gem Hub";
+
+	// in Tuning's order
+	inline constexpr std::array<AdvancedSettings::Knob, 13> kAdvancedKnobs{ {
+		{ "Performance", "MaxLitGems", "How many soul gems nearest you get a light at once.", 24.0f, 1.0f, 64.0f, true, true },
+		{ "Flicker", "PulseSwing", "How much a gem's light breathes either side of its strength: 0.1 is 10 percent, 0 steady.", 0.1f, 0.0f,
+			0.5f, false, true },
+		{ "Flicker", "PulseSeconds", "How many seconds one breath of the soft pulse takes.", 4.5f, 1.0f, 20.0f, false, false },
+		{ "Vanilla and ENB", "VanillaBoost", "How much brighter every gem's light is drawn on Vanilla lighting, where it reads darker.", 1.25f, 0.5f, 3.0f,
+			false, false },
+		{ "Brightness and Reach", "PettyBrightness", "Brightness of petty soul gems' lights, on top of the menu's Brightness: 1 as made.", 1.0f, 0.25f, 4.0f,
+			false, false },
+		{ "Brightness and Reach", "LesserBrightness", "Brightness of lesser soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "CommonBrightness", "Brightness of common soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "GreaterBrightness", "Brightness of greater soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "GrandBrightness", "Brightness of grand soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "BlackBrightness", "Brightness of black soul gems' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "NamedGemBrightness", "Brightness of the named quest gems' and the Paragons' lights: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+		{ "Brightness and Reach", "StarBrightness", "Brightness of Azura's Star and the Black Star, on top of the menu's Stars slider: 1 as made.", 1.0f, 0.25f,
+			4.0f, false, true },
+		{ "Brightness and Reach", "SoulCairnBrightness", "Brightness of the Soul Cairn's gem bowl and chunks: 1 as made.", 1.0f, 0.25f, 4.0f, false, false },
+	} };
+
+	// the file's values (one per knob, in its order) as the tuning they set
+	[[nodiscard]] inline Tuning TuningOf(std::span<const float> a_values) noexcept
+	{
+		const auto at = [&](std::size_t a_i) { return a_i < a_values.size() ? a_values[a_i] : kAdvancedKnobs[a_i].def; };
+		Tuning     t{ static_cast<std::size_t>(std::lround((std::max)(at(0), 1.0f))), at(1), at(2), at(3), {} };
+		for (std::size_t i = 0; i < t.strength.size(); ++i) {
+			t.strength[i] = at(4 + i);
+		}
+		return t;
+	}
+
 	[[nodiscard]] inline float PulseAt(float a_seconds) noexcept
 	{
-		constexpr std::array<std::pair<float, float>, 3> keys{ { { 0.0f, 0.9f }, { kPulseSeconds / 2.0f, 1.1f }, { kPulseSeconds, 0.9f } } };
-		const float                                      t = std::fmod(std::fabs(a_seconds), kPulseSeconds);
+		const float                                  seconds = gTuning.pulseSeconds, swing = gTuning.pulseSwing;
+		const std::array<std::pair<float, float>, 3> keys{ { { 0.0f, 1.0f - swing }, { seconds / 2.0f, 1.0f + swing }, { seconds, 1.0f - swing } } };
+		const float                                  t = std::fmod(std::fabs(a_seconds), seconds);
 		return KeyAt(keys, 2, t);
 	}
 
@@ -187,6 +242,7 @@ namespace Gems
 		kCairn,
 	};
 	inline constexpr std::size_t kKinds = 9;
+	static_assert(std::tuple_size_v<decltype(Tuning::strength)> == kKinds, "a brightness for every gem kind");
 
 	struct Strength
 	{
@@ -215,6 +271,7 @@ namespace Gems
 		kNamed,      // a quest gem with a model of its own
 		kStar,       // Azura's Star, the Black Star
 		kSoulCairn,  // the Soul Cairn's gem bowl, chunks and portal bowl
+		kParagon,    // Dawnguard's five Paragons, the Forgotten Vale's portal gems
 	};
 
 	using Rgb = std::array<std::uint8_t, 3>;
@@ -280,7 +337,9 @@ namespace Gems
 
 	// the gems and pieces known by their own model, each in its own textures' color: the named gems' models are Praedy's Soul Gems'
 	// files (soulgemdb = the full Soul Essence Gem), sky blue like its filled gems; the Soul Cairn's bowl and chunk his pink
-	inline constexpr std::array<NamedModel, 7> kNamedModels{ {
+	// The Paragons' colors are CS Light's set made by eye for these models until a still of each is read: their effect shells' own colors
+	// (red, yellow, teal) sit over a body glowing blue, so neither part alone is what the gem shows
+	inline constexpr std::array<NamedModel, 12> kNamedModels{ {
 		{ "clutter\\soulgem\\soulgemarniel.nif", Family::kNamed, Kind::kNamed, { 133, 194, 255 } },      // Arniel's warped gems
 		{ "clutter\\soulgem\\soulgemmalyn.nif", Family::kNamed, Kind::kNamed, { 131, 200, 255 } },       // Malyn's Black Soul Gem
 		{ "clutter\\soulgem\\soulgemwylandriah.nif", Family::kNamed, Kind::kNamed, { 134, 201, 255 } },  // Wylandriah's Soul Gem
@@ -288,6 +347,11 @@ namespace Gems
 		{ "dlc01\\clutter\\dlc01soulgembowlfull.nif", Family::kSoulCairn, Kind::kCairn, { 255, 135, 210 } },
 		{ "dlc01\\clutter\\dlc01soulgemchunk01.nif", Family::kSoulCairn, Kind::kCairn, { 255, 135, 210 } },
 		{ "dlc01\\dungeons\\castle\\animated\\scportalbowl\\casscportalbowl01.nif", Family::kSoulCairn, Kind::kNamed, { 170, 90, 255 } },  // the portal's bowl
+		{ "dlc01\\clutter\\animated\\portalgem01\\portalgemwhite01.nif", Family::kParagon, Kind::kNamed, { 211, 209, 234 } },              // Diamond
+		{ "dlc01\\clutter\\animated\\portalgem01\\portalgempurple01.nif", Family::kParagon, Kind::kNamed, { 126, 0, 150 } },               // Amethyst
+		{ "dlc01\\clutter\\animated\\portalgem01\\portalgemorange01.nif", Family::kParagon, Kind::kNamed, { 216, 96, 70 } },               // Ruby
+		{ "dlc01\\clutter\\animated\\portalgem01\\portalgemgreen01.nif", Family::kParagon, Kind::kNamed, { 217, 224, 45 } },               // Emerald
+		{ "dlc01\\clutter\\animated\\portalgem01\\portalgemblue01.nif", Family::kParagon, Kind::kNamed, { 70, 125, 216 } },                // Sapphire
 	} };
 
 	// each star wears its body's color, not its glowing stripes' (his 393 answer): the game's own textures read as a whole
@@ -554,9 +618,10 @@ namespace Gems
 	}
 
 	// the gems this mod's RE::Light configs light (SKSE\Plugins\ReLight\Configs\Illuminated - Soul Gem Hub\): Praedy's
-	// filled gems, the named quest gems and the Soul Cairn's pieces - each keyed by its own model (the Soul Essence Gem by its
-	// record). With RE::Light loaded the plugin leaves these to it; the gems that share the game's model (or are Emissive Soul
-	// Gems' models) have no config, so the plugin lights them itself
+	// filled gems, the named quest gems and the Soul Cairn's pieces - each keyed by its own model (the Soul Essence Gem by its record).
+	// With RE::Light loaded the plugin leaves these to it; the gems that share the game's model (or are Emissive Soul Gems' models) have
+	// no config, so the plugin lights them itself. The Paragons have no config: their own switch must reach their light, and RE::Light
+	// reads its configs once at game start, so the plugin lights them on every setup
 	[[nodiscard]] inline bool ReLightCovers(Family a_family) noexcept
 	{
 		return a_family == Family::kPraedys || a_family == Family::kNamed || a_family == Family::kSoulCairn;
@@ -978,6 +1043,8 @@ namespace Gems
 			return "stars";
 		case Family::kSoulCairn:
 			return "Soul Cairn";
+		case Family::kParagon:
+			return "Paragons";
 		default:
 			return "the game's own gems";
 		}
@@ -1014,13 +1081,10 @@ namespace Gems
 	// "Stars": Azura's Star and the Black Star on top of Brightness and Reach - their big pools can drown every gem near them
 	inline constexpr int kStarsMin = 10, kStarsMax = 100;
 
-	// on Vanilla lighting a gem's light read too dark at the default, so it is drawn this much brighter there
-	inline constexpr float kVanillaBoost = 1.25f;
-
 	// the Brightness slider's percent as the factor a light is drawn with
 	[[nodiscard]] inline float BrightnessFor(int a_percent, bool a_vanilla) noexcept
 	{
-		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? kVanillaBoost : 1.0f);
+		return static_cast<float>(a_percent) / 100.0f * (a_vanilla ? gTuning.vanillaBoost : 1.0f);
 	}
 
 	// the menu's light switch per gem, in menu order: the six sizes and the named quest gems in Kind order
@@ -1036,15 +1100,19 @@ namespace Gems
 		kAzurasStar,
 		kBlackStar,
 		kSoulCairn,
+		kParagon,
 	};
-	inline constexpr std::size_t kGemSwitches = 10;
+	inline constexpr std::size_t kGemSwitches = 11;
 
 	// each switch's key in Settings.ini and DevBench (the menu's labels are in Menu.cpp, for its translation)
 	inline constexpr std::array<std::string_view, kGemSwitches> kGemSwitchKeys{ "LightPetty", "LightLesser", "LightCommon", "LightGreater",
-		"LightGrand", "LightBlack", "LightNamed", "LightAzurasStar", "LightBlackStar", "LightSoulCairn" };
+		"LightGrand", "LightBlack", "LightNamed", "LightAzurasStar", "LightBlackStar", "LightSoulCairn", "LightParagons" };
 
 	[[nodiscard]] inline GemSwitch SwitchOf(const Look& a_look) noexcept
 	{
+		if (a_look.family == Family::kParagon) {
+			return GemSwitch::kParagon;
+		}
 		if (a_look.family == Family::kSoulCairn || a_look.kind == Kind::kCairn) {
 			return GemSwitch::kSoulCairn;  // the portal's bowl is a named kind of the Soul Cairn's family
 		}
@@ -1071,20 +1139,20 @@ namespace Gems
 
 	struct Settings
 	{
-		bool                                    on{ true };                                                          // every soul gem light
-		int                                     brightness{ 100 };                                                   // percent
-		int                                     reach{ 100 };                                                        // percent
-		bool                                    sameReach{ false };                                                  // every gem's light carries as far as a common gem's, the two stars aside
-		int                                     stars{ 50 };                                                         // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
-		bool                                    pulse{ true };                                                       // the soft pulse
-		WhoLights                               who{ WhoLights::kOurs };                                             // whose light a gem wears
-		std::vector<std::string>                handBack{};                                                          // on our lights: the mods whose gems keep their own light, ours off them (each as the menu names it)
-		bool                                    modelLights{ false };                                                // on our lights: a gem model's own particle or ENB light stays, ours off that gem
-		std::array<std::uint8_t, kColorChoices> side{};                                                              // each color choice's side: 0 the first, 1 the second, 2 the third (ColorChoice order, kNone left out)
-		bool                                    authorPick{ false };                                                 // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
-		bool                                    starGem{ true };                                                     // "Star light": true = the gem it holds, false = a star's metal (its body)
-		std::uint8_t                            pink{ 0 };                                                           // New Filled Soul Gems' pink look: 0 where its installed file puts it, 1 on the filled gems, 2 on the empty gems
-		std::array<bool, kGemSwitches>          gems{ true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
+		bool                                    on{ true };                                                                // every soul gem light
+		int                                     brightness{ 100 };                                                         // percent
+		int                                     reach{ 100 };                                                              // percent
+		bool                                    sameReach{ false };                                                        // every gem's light carries as far as a common gem's, the two stars aside
+		int                                     stars{ 50 };                                                               // percent of Brightness and of Reach for the two stars, so every gem reads about as bright
+		bool                                    pulse{ true };                                                             // the soft pulse
+		WhoLights                               who{ WhoLights::kOurs };                                                   // whose light a gem wears
+		std::vector<std::string>                handBack{};                                                                // on our lights: the mods whose gems keep their own light, ours off them (each as the menu names it)
+		bool                                    modelLights{ false };                                                      // on our lights: a gem model's own particle or ENB light stays, ours off that gem
+		std::array<std::uint8_t, kColorChoices> side{};                                                                    // each color choice's side: 0 the first, 1 the second, 2 the third (ColorChoice order, kNone left out)
+		bool                                    authorPick{ false };                                                       // "Light color": false = a gem's own glow where it differs from its light, true = Author pick
+		bool                                    starGem{ true };                                                           // "Star light": true = the gem it holds, false = a star's metal (its body)
+		std::uint8_t                            pink{ 0 };                                                                 // New Filled Soul Gems' pink look: 0 where its installed file puts it, 1 on the filled gems, 2 on the empty gems
+		std::array<bool, kGemSwitches>          gems{ true, true, true, true, true, true, true, true, true, true, true };  // GemSwitch order
 	};
 
 	// whether this gem gets our light: the gems switch and its own (a gem switched off keeps any other mod's light on it)
@@ -1219,7 +1287,8 @@ namespace Gems
 	[[nodiscard]] inline Shown ShownAt(Kind a_kind, bool a_inverseSquare, bool a_vanilla, const Settings& a_s, float a_pulse = 1.0f) noexcept
 	{
 		const float stars = a_kind == Kind::kStar ? static_cast<float>(a_s.stars) / 100.0f : 1.0f;
-		return ShownFor(StrengthAt(a_kind, a_s.sameReach), a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla),
+		const float kind = gTuning.strength[static_cast<std::size_t>(a_kind)];
+		return ShownFor(StrengthAt(a_kind, a_s.sameReach), a_inverseSquare, BrightnessFor(a_s.brightness, a_vanilla) * kind,
 			static_cast<float>(a_s.reach) / 100.0f * stars, a_pulse, stars);
 	}
 
