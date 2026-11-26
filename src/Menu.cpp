@@ -172,7 +172,7 @@ namespace Plugin
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.starGem = v == 1; });
 				Changed();
 			}
-			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
+			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem each holds."));
 		}
 
 		// whose light a gem wears: one choice, always shown; by default ours is on every gem and any other light on it is put out
@@ -212,7 +212,7 @@ namespace Plugin
 				return;
 			}
 			Header(Icon::kGem, T("Hand Gems Back"));
-			const char* tip = T("Ticked, another mod's light stays on these gems and this mod's comes off them.");
+			const char* tip = T("Ticked, another mod's light stays on these gems and this mod's light comes off.");
 			for (const auto& [mod, n] : mods) {
 				HandBackSwitch(s, mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
 			}
@@ -307,14 +307,14 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out: {}"), std::to_string(own)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby whose other light is put out: {}"), std::to_string(own)).c_str());
 			}
 			const auto nearYou = GemsLeftNear();
 			for (const auto& [mod, n] : nearYou.byMod) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you lit by {}: {}"), mod, std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby lit by {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			for (const auto& [look, n] : nearYou.byModel) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you keeping their model's light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby keeping their model's light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
@@ -364,7 +364,7 @@ namespace Plugin
 				WhoLightsChoice();
 				HandBackSwitches();
 			}
-			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
+			TextColored(kMuted, "%s", Fill(T("Gems lit nearby: {}"), std::to_string(GemLightCount())).c_str());
 		}
 	}
 
