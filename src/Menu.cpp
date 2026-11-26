@@ -370,12 +370,13 @@ namespace Plugin
 
 	void RegisterMenu()
 	{
-		if (!SKSEMenuFramework::IsInstalled()) {
-			SKSE::log::warn("SKSE Menu Framework is not installed, so there is no settings page; the settings file still applies");
+		// its file on the drive is not enough: a framework that did not load takes every page and shows none
+		if (!SKSEMenuFramework::IsInstalled() || !GetMenuFrameworkModule()) {
+			SKSE::log::warn("SKSE Menu Framework is not installed or did not load, so there is no settings page; the settings file still applies");
 			return;
 		}
-		SKSEMenuFramework::SetSection(T("Illuminated - Soul Gem Hub"));
-		SKSEMenuFramework::AddSectionItem(T("Settings"), RenderSettings);
+		SKSEMenuFramework::SetSection(Translation::MenuName("Illuminated - Soul Gem Hub"));
+		SKSEMenuFramework::AddSectionItem(Translation::MenuName("Settings"), RenderSettings);
 		SKSE::log::info("settings page added to SKSE Menu Framework {}", SKSEMenuFramework::GetMenuFrameworkVersion());
 	}
 }
