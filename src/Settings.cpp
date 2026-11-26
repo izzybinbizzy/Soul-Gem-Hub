@@ -30,6 +30,7 @@ namespace Plugin
 		Gems::gTuning = Gems::TuningOf(r.values);
 		SKSE::log::info("advanced settings: {} value(s) of {} read in {}{}", r.read, Gems::kAdvancedKnobs.size(), folder.string(),
 			wrote ? "; the file was missing a value and was written whole" : "");
+		SKSE::log::info("advanced settings: {}", AdvancedSettings::Changed(Gems::kAdvancedKnobs, r.values));
 	}
 
 	void LoadSettings()

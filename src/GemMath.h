@@ -188,7 +188,7 @@ namespace Gems
 
 	// in Tuning's order
 	inline constexpr std::array<AdvancedSettings::Knob, 13> kAdvancedKnobs{ {
-		{ "Performance", "MaxLitGems", "How many soul gems nearest you get a light at once.", 24.0f, 1.0f, 64.0f, true, true },
+		{ "Performance", "MaxLitGems", "How many soul gems nearest the player get a light at once.", 24.0f, 1.0f, 64.0f, true, true },
 		{ "Flicker", "PulseSwing", "How much a gem's light breathes either side of its strength: 0.1 is 10 percent, 0 steady.", 0.1f, 0.0f,
 			0.5f, false, true },
 		{ "Flicker", "PulseSeconds", "How many seconds one breath of the soft pulse takes.", 4.5f, 1.0f, 20.0f, false, false },

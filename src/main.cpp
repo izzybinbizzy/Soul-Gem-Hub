@@ -94,11 +94,12 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
-	// the trampoline holds only the shared Floor Light Fix's two call hooks (every hook of ours is a vtable slot); a new call hook
-	// adds its own 14 bytes here (trampoline check.py counts them)
+	// the trampoline holds only the shared Floor Light Fix's two call hooks (every hook of ours is a vtable slot), which write only on
+	// Skyrim 1.6.1170, so any other game asks for none; a new call hook adds its own 14 bytes here (trampoline check.py counts them)
 	SKSE::InitInfo info{};
-	info.trampoline = true;
-	info.trampolineSize = FloorLightFix::kTrampolineBytes;
+	const bool     ae1170 = !REL::Module::IsVR() && REL::Module::get().version() == REL::Version{ 1, 6, 1170, 0 };
+	info.trampoline = ae1170;
+	info.trampolineSize = ae1170 ? FloorLightFix::kTrampolineBytes : 0;
 	SKSE::Init(a_skse, info);
 	// the wrong game: loaded but idle - a false here makes SKSE add its own "exit game?" box over the guard's
 	if (!RuntimeGuard::RightGame("Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub", "Illuminated - Soul Gem Hub - VR")) {

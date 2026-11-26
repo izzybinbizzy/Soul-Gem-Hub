@@ -151,14 +151,14 @@ namespace Plugin
 		{
 			auto                             s = SettingsNow();
 			int                              v = s.authorPick ? 1 : 0;
-			const std::array<const char*, 2> items{ T("Gem's own glow"), T("My pick") };
+			const std::array<const char*, 2> items{ T("Gem's own glow"), T("Picked color") };
 			SetNextItemWidth(260.0f);
 			if (Combo(T("Light color"), &v, items.data(), static_cast<int>(items.size())) && (v == 1) != s.authorPick) {
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.authorPick = v == 1; });
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Lights a gem in the color it glows, or in the color I picked."));
+				"Lights a gem in the color it glows, or in the color picked for it."));
 		}
 
 		// "Star light": Azura's Star and the Black Star lit in the color of their metal or of the gem they hold
@@ -172,7 +172,7 @@ namespace Plugin
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.starGem = v == 1; });
 				Changed();
 			}
-			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem they hold."));
+			MenuStyle::Tip(T("Azura's Star and the Black Star light up in the color of their metal, or of the gem each holds."));
 		}
 
 		// whose light a gem wears: one choice, always shown; by default ours is on every gem and any other light on it is put out
@@ -180,14 +180,14 @@ namespace Plugin
 		{
 			const auto                       s = SettingsNow();
 			int                              v = static_cast<int>(s.who);
-			const std::array<const char*, 3> items{ T("Use my lights"), T("Use the game's own lights"), T("Use another mod's lights") };
+			const std::array<const char*, 3> items{ T("Use this mod's lights"), T("Use the game's own lights"), T("Use another mod's lights") };
 			SetNextItemWidth(260.0f);
 			if (Combo(T("Whose light"), &v, items.data(), static_cast<int>(items.size())) && v != static_cast<int>(s.who)) {
 				UpdateSettings([&](Gems::Settings& a_s) { a_s.who = static_cast<Gems::WhoLights>(std::clamp(v, 0, 2)); });
 				Changed();
 			}
 			MenuStyle::Tip(T(
-				"Whose light a gem wears: mine, the game's own, or another mod's where one lights it."));
+				"Whose light a gem wears: this mod's, the game's own, or another mod's where one lights it."));
 		}
 
 		// a mod's gems handed back to its own light, or taken again
@@ -212,7 +212,7 @@ namespace Plugin
 				return;
 			}
 			Header(Icon::kGem, T("Hand Gems Back"));
-			const char* tip = T("Ticked, another mod's light stays on these gems and mine comes off them.");
+			const char* tip = T("Ticked, another mod's light stays on these gems and this mod's light comes off.");
 			for (const auto& [mod, n] : mods) {
 				HandBackSwitch(s, mod, Fill(T("{} lights its own gems ({})"), mod, std::to_string(n)).c_str(), tip);
 			}
@@ -249,7 +249,7 @@ namespace Plugin
 				bool       v = SettingsNow().gems[i];
 				const bool changed = Checkbox(T(kLabels[i]), &v);
 				// a hover tip belongs to the item just drawn, so each switch carries its own
-				MenuStyle::Tip(T("A gem switched off gets none of my light; another mod's light on it stays."));
+				MenuStyle::Tip(T("A gem switched off gets no light from this mod; another mod's light on it stays."));
 				if (changed) {
 					UpdateSettings([&](Gems::Settings& a_s) { a_s.gems[i] = v; });
 					Changed();
@@ -301,20 +301,20 @@ namespace Plugin
 				TextColored(kMuted, "%s", Fill(line, mod, std::to_string(n)).c_str());
 			}
 			if (left[3]) {
-				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (my RE::Light files): {}"), std::to_string(left[3])).c_str());
+				TextColored(kMuted, "%s", Fill(T("Left to RE::Light (this mod's RE::Light files): {}"), std::to_string(left[3])).c_str());
 			}
 			for (const auto& [mod, n] : GemsBlocked()) {
 				TextColored(kMuted, "%s", Fill(T("Not lit, at its author's request - {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			if (const auto own = GemsOtherLightsPutOut(); own) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you whose other light is put out: {}"), std::to_string(own)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby whose other light is put out: {}"), std::to_string(own)).c_str());
 			}
 			const auto nearYou = GemsLeftNear();
 			for (const auto& [mod, n] : nearYou.byMod) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you lit by {}: {}"), mod, std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby lit by {}: {}"), mod, std::to_string(n)).c_str());
 			}
 			for (const auto& [look, n] : nearYou.byModel) {
-				TextColored(kMuted, "%s", Fill(T("Gems near you keeping their model's light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
+				TextColored(kMuted, "%s", Fill(T("Gems nearby keeping their model's light ({}): {}"), T(look.c_str()), std::to_string(n)).c_str());
 			}
 
 			Header(Icon::kBulb, T("Lights"));
@@ -364,18 +364,19 @@ namespace Plugin
 				WhoLightsChoice();
 				HandBackSwitches();
 			}
-			TextColored(kMuted, "%s", Fill(T("Gems lit near you: {}"), std::to_string(GemLightCount())).c_str());
+			TextColored(kMuted, "%s", Fill(T("Gems lit nearby: {}"), std::to_string(GemLightCount())).c_str());
 		}
 	}
 
 	void RegisterMenu()
 	{
-		if (!SKSEMenuFramework::IsInstalled()) {
-			SKSE::log::warn("SKSE Menu Framework is not installed, so there is no settings page; the settings file still applies");
+		// its file on the drive is not enough: a framework that did not load takes every page and shows none
+		if (!SKSEMenuFramework::IsInstalled() || !GetMenuFrameworkModule()) {
+			SKSE::log::warn("SKSE Menu Framework is not installed or did not load, so there is no settings page; the settings file still applies");
 			return;
 		}
-		SKSEMenuFramework::SetSection(T("Illuminated - Soul Gem Hub"));
-		SKSEMenuFramework::AddSectionItem(T("Settings"), RenderSettings);
+		SKSEMenuFramework::SetSection(Translation::MenuName("Illuminated - Soul Gem Hub"));
+		SKSEMenuFramework::AddSectionItem(Translation::MenuName("Settings"), RenderSettings);
 		SKSE::log::info("settings page added to SKSE Menu Framework {}", SKSEMenuFramework::GetMenuFrameworkVersion());
 	}
 }
